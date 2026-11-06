@@ -1,0 +1,69 @@
+[project]
+name = "electricity-contracts"
+version = "0.0.0"
+description = "Home Assistant integration: cost Linky consumption under several electricity contracts"
+requires-python = ">=3.14"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+source = ["custom_components.electricity_contracts"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.mypy]
+strict = true
+python_version = "3.14"
+files = ["custom_components", "tests"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["pytest_homeassistant_custom_component.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Asserting a state, acting, then asserting another state looks unreachable to mypy.
+module = ["tests.*"]
+disable_error_code = ["comparison-overlap"]
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "ANN401",  # Any is needed for flow data
+    "ARG001",  # Home Assistant calls entry points with arguments they may not use
+    "COM812",  # incompatible with the formatter
+    "CPY001",  # the license is in LICENSE
+    "D203",    # incompatible with D211
+    "D213",    # incompatible with D212
+    "ISC001",  # incompatible with the formatter
+    "S101",    # asserts narrow types, as in Home Assistant core
+    "TC",      # annotations are lazy since Python 3.14, no TYPE_CHECKING blocks
+]
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["INP001"]  # standalone scripts
+"tests/**" = [
+    "S101",     # pytest asserts
+    "PLR2004",  # magic values are the expected results
+    "D103",     # test names say what they check
+    "SLF001",   # tests read private state on purpose
+    "PLR0913",  # test helpers build configurations with many options
+    "FBT001",   # parametrized expectations are booleans
+]

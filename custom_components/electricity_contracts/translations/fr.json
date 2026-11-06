@@ -1,0 +1,205 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Source de consommation",
+        "description": "Choisissez la consommation horaire à valoriser. Ajoutez ensuite les contrats depuis le menu de l'entrée.",
+        "data": {
+          "statistic_id": "Statistique de consommation"
+        },
+        "data_description": {
+          "statistic_id": "Statistique horaire d'énergie du compteur, comme la statistique linky:… importée par l'App Linky (nommée d'après le numéro du compteur)."
+        }
+      },
+      "reconfigure": {
+        "title": "Changer la source de consommation",
+        "description": "Par exemple après un changement de compteur. Tous les contrats sont recalculés sur la nouvelle statistique.",
+        "data": {
+          "statistic_id": "Statistique de consommation"
+        },
+        "data_description": {
+          "statistic_id": "Statistique horaire d'énergie du compteur, comme la statistique linky:… importée par l'App Linky (nommée d'après le numéro du compteur)."
+        }
+      }
+    },
+    "error": {
+      "statistic_not_found": "Cette statistique n'existe pas.",
+      "statistic_not_energy": "Cette statistique n'est pas une énergie (Wh, kWh…).",
+      "statistic_no_sum": "Cette statistique n'a pas de total cumulé : choisissez une statistique de consommation, comme celle qu'importe l'App Linky.",
+      "statistic_no_data": "Cette statistique n'a encore aucune donnée."
+    },
+    "abort": {
+      "already_configured": "Cette statistique est déjà configurée."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Compte RTE (facultatif)",
+        "description": "Les couleurs Tempo viennent du calendrier public de RTE, sans compte. S'il ne fonctionne plus, l'intégration peut utiliser l'API officielle de RTE : créez une application gratuite pour l'API « Tempo Like Supply Contract » sur data.rte-france.com et saisissez ses identifiants. Laissez les deux champs vides pour n'utiliser que le calendrier public.",
+        "data": {
+          "rte_client_id": "ID client",
+          "rte_client_secret": "Secret client"
+        }
+      }
+    },
+    "error": {
+      "incomplete_credentials": "Saisissez l'ID client et le secret, ou aucun des deux.",
+      "invalid_auth": "RTE a refusé ces identifiants.",
+      "cannot_connect": "Impossible de joindre RTE. Réessayez plus tard."
+    }
+  },
+  "config_subentries": {
+    "contract": {
+      "entry_type": "Contrat",
+      "initiate_flow": {
+        "user": "Ajouter un contrat",
+        "reconfigure": "Modifier le contrat"
+      },
+      "step": {
+        "user": {
+          "title": "Nouveau contrat",
+          "data": {
+            "name": "Nom",
+            "kind": "Type",
+            "pricing": "Prix"
+          },
+          "data_description": {
+            "name": "Par exemple « Tempo » ou « Offre X ».",
+            "pricing": "Les tarifs réglementés sont téléchargés avec leur historique. Les prix que vous fixez vous-même s'ajoutent ensuite comme périodes de prix."
+          }
+        },
+        "reconfigure": {
+          "title": "Modifier le contrat",
+          "data": {
+            "name": "Nom",
+            "pricing": "Prix"
+          }
+        },
+        "details": {
+          "title": "Détails du contrat",
+          "data": {
+            "kva": "Puissance souscrite (kVA)",
+            "off_peak": "Heures creuses",
+            "weekend_off_peak": "Week-end en heures creuses",
+            "active_from": "En vigueur du",
+            "active_to": "En vigueur jusqu'au"
+          },
+          "data_description": {
+            "kva": "Les tarifs réglementés en dépendent.",
+            "off_peak": "Une plage par ligne, à l'heure ou à la demi-heure, comme 22:00-06:00 ou 12:30-14:00.",
+            "weekend_off_peak": "Les samedis et dimanches sont facturés au prix des heures creuses toute la journée.",
+            "active_from": "Premier jour facturé avec ce contrat. Laissez vide pour un contrat qui sert seulement à comparer.",
+            "active_to": "Dernier jour du contrat. Laissez vide s'il est toujours en vigueur."
+          }
+        }
+      },
+      "error": {
+        "empty_name": "Saisissez un nom.",
+        "invalid_off_peak": "Saisissez au moins une plage comme 22:00-06:00, à l'heure ou à la demi-heure.",
+        "active_to_without_from": "Saisissez aussi le premier jour.",
+        "end_before_start": "Le dernier jour est avant le premier.",
+        "overlapping_active_period": "Un autre contrat était en vigueur pendant une partie de ces jours."
+      }
+    },
+    "price_period": {
+      "entry_type": "Période de prix",
+      "initiate_flow": {
+        "user": "Ajouter une période de prix",
+        "reconfigure": "Modifier la période de prix"
+      },
+      "step": {
+        "user": {
+          "title": "Nouvelle période de prix",
+          "description": "Prix d'un contrat saisi à la main, d'un jour à un autre.",
+          "data": {
+            "contract": "Contrat",
+            "start": "Premier jour",
+            "end": "Dernier jour",
+            "fixed_per_year": "Abonnement par an, TTC"
+          },
+          "data_description": {
+            "start": "Jour d'entrée en vigueur des prix.",
+            "end": "Laissez vide si les prix sont toujours en vigueur.",
+            "fixed_per_year": "Part fixe annuelle, répartie sur chaque heure de l'année."
+          }
+        },
+        "reconfigure": {
+          "title": "Modifier la période de prix",
+          "description": "Prix de {contract}.",
+          "data": {
+            "start": "Premier jour",
+            "end": "Dernier jour",
+            "fixed_per_year": "Abonnement par an, TTC"
+          },
+          "data_description": {
+            "start": "Jour d'entrée en vigueur des prix.",
+            "end": "Laissez vide si les prix sont toujours en vigueur.",
+            "fixed_per_year": "Part fixe annuelle, répartie sur chaque heure de l'année."
+          }
+        },
+        "prices": {
+          "title": "Prix au kWh",
+          "description": "Prix de {contract} au kWh, TTC.",
+          "data": {
+            "base": "Base",
+            "hc": "Heures creuses",
+            "hp": "Heures pleines",
+            "blue_hc": "Jour bleu, heures creuses",
+            "blue_hp": "Jour bleu, heures pleines",
+            "white_hc": "Jour blanc, heures creuses",
+            "white_hp": "Jour blanc, heures pleines",
+            "red_hc": "Jour rouge, heures creuses",
+            "red_hp": "Jour rouge, heures pleines"
+          }
+        }
+      },
+      "error": {
+        "end_before_start": "Le dernier jour est avant le premier.",
+        "overlapping_price_period": "Une autre période de prix de ce contrat couvre une partie de ces jours."
+      },
+      "abort": {
+        "no_manual_contracts": "Ajoutez d'abord un contrat dont vous fixez les prix vous-même.",
+        "contract_not_found": "Le contrat de cette période de prix n'existe plus, ou utilise maintenant les tarifs réglementés."
+      }
+    }
+  },
+  "selector": {
+    "kind": {
+      "options": {
+        "base": "Base (un seul prix)",
+        "hphc": "Heures creuses (HP/HC)",
+        "tempo": "Tempo"
+      }
+    },
+    "pricing": {
+      "options": {
+        "official": "Tarifs réglementés (Tarif Bleu)",
+        "manual": "Prix que je fixe moi-même"
+      }
+    }
+  },
+  "exceptions": {
+    "sources_unavailable": {
+      "message": "Impossible de télécharger les données dont les contrats ont besoin : {missing}."
+    }
+  },
+  "issues": {
+    "tempo_unavailable": {
+      "title": "Les couleurs Tempo ne se mettent plus à jour",
+      "description": "Le calendrier Tempo public de RTE ne répond plus correctement depuis le {since} ({error}) : les heures de {title} depuis cette date attendent d'être valorisées.\n\nSi RTE a modifié ce calendrier, l'API officielle prend le relais : créez une application gratuite pour l'API « Tempo Like Supply Contract » sur data.rte-france.com, puis saisissez ses identifiants dans les options de {title}. Les heures en attente sont valorisées dès que les couleurs reviennent."
+    },
+    "tempo_unavailable_official": {
+      "title": "Les couleurs Tempo ne se mettent plus à jour",
+      "description": "Ni le calendrier Tempo public de RTE ni son API officielle ne répondent correctement depuis le {since} ({error}) : les heures de {title} depuis cette date attendent d'être valorisées. Elles le seront dès que les couleurs reviennent ; rien à faire si RTE est seulement indisponible un moment."
+    },
+    "prices_unavailable": {
+      "title": "Les tarifs réglementés ne se mettent plus à jour",
+      "description": "Les tarifs réglementés n'ont pas pu être téléchargés depuis data.gouv.fr depuis le {since} ({error}). {title} garde les prix déjà connus ; un changement de prix publié depuis n'est pas appliqué tant que le téléchargement ne fonctionne pas."
+    },
+    "rte_credentials_refused": {
+      "title": "RTE refuse les identifiants",
+      "description": "L'API officielle de RTE refuse l'ID client et le secret saisis dans les options de {title}. Vérifiez l'application sur data.rte-france.com et saisissez à nouveau ses identifiants, ou videz les deux champs pour n'utiliser que le calendrier public."
+    }
+  }
+}

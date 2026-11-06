@@ -1,0 +1,205 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Consumption source",
+        "description": "Choose the hourly consumption to cost. Add the contracts afterwards, from the entry's menu.",
+        "data": {
+          "statistic_id": "Consumption statistic"
+        },
+        "data_description": {
+          "statistic_id": "Hourly energy statistic of the meter, like the linky:… statistic the Linky app imports (named after the meter number)."
+        }
+      },
+      "reconfigure": {
+        "title": "Change the consumption source",
+        "description": "For example after a meter change. Every contract is costed again on the new statistic.",
+        "data": {
+          "statistic_id": "Consumption statistic"
+        },
+        "data_description": {
+          "statistic_id": "Hourly energy statistic of the meter, like the linky:… statistic the Linky app imports (named after the meter number)."
+        }
+      }
+    },
+    "error": {
+      "statistic_not_found": "This statistic doesn't exist.",
+      "statistic_not_energy": "This statistic isn't an energy (Wh, kWh…).",
+      "statistic_no_sum": "This statistic has no running total: choose a consumption statistic, like the one the Linky app imports.",
+      "statistic_no_data": "This statistic has no data yet."
+    },
+    "abort": {
+      "already_configured": "This statistic is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "RTE account (optional)",
+        "description": "Tempo colors come from RTE's public calendar, which needs no account. If it stops working, the integration can use RTE's official API instead: create a free application for the \"Tempo Like Supply Contract\" API on data.rte-france.com and enter its credentials. Leave both fields empty to use the public calendar only.",
+        "data": {
+          "rte_client_id": "Client ID",
+          "rte_client_secret": "Client secret"
+        }
+      }
+    },
+    "error": {
+      "incomplete_credentials": "Enter both the client ID and the secret, or neither.",
+      "invalid_auth": "RTE refused these credentials.",
+      "cannot_connect": "Could not reach RTE. Try again later."
+    }
+  },
+  "config_subentries": {
+    "contract": {
+      "entry_type": "Contract",
+      "initiate_flow": {
+        "user": "Add contract",
+        "reconfigure": "Change contract"
+      },
+      "step": {
+        "user": {
+          "title": "New contract",
+          "data": {
+            "name": "Name",
+            "kind": "Kind",
+            "pricing": "Prices"
+          },
+          "data_description": {
+            "name": "For example \"Tempo\" or \"Offer X\".",
+            "pricing": "Regulated prices are downloaded with their history. Prices you set yourself are added afterwards as price periods."
+          }
+        },
+        "reconfigure": {
+          "title": "Change contract",
+          "data": {
+            "name": "Name",
+            "pricing": "Prices"
+          }
+        },
+        "details": {
+          "title": "Contract details",
+          "data": {
+            "kva": "Subscribed power (kVA)",
+            "off_peak": "Off-peak hours",
+            "weekend_off_peak": "Weekends are off-peak",
+            "active_from": "In force from",
+            "active_to": "In force until"
+          },
+          "data_description": {
+            "kva": "The regulated prices depend on it.",
+            "off_peak": "One range per line, on whole or half hours, like 22:00-06:00 or 12:30-14:00.",
+            "weekend_off_peak": "Saturdays and Sundays are billed at the off-peak price all day.",
+            "active_from": "First day you were billed under this contract. Leave empty for a contract you only want to compare.",
+            "active_to": "Last day of the contract. Leave empty if it is still in force."
+          }
+        }
+      },
+      "error": {
+        "empty_name": "Enter a name.",
+        "invalid_off_peak": "Enter at least one range like 22:00-06:00, on whole or half hours.",
+        "active_to_without_from": "Enter the first day too.",
+        "end_before_start": "The last day is before the first day.",
+        "overlapping_active_period": "Another contract was in force during part of these days."
+      }
+    },
+    "price_period": {
+      "entry_type": "Price period",
+      "initiate_flow": {
+        "user": "Add price period",
+        "reconfigure": "Change price period"
+      },
+      "step": {
+        "user": {
+          "title": "New price period",
+          "description": "Prices of a contract priced by hand, from one day to another.",
+          "data": {
+            "contract": "Contract",
+            "start": "First day",
+            "end": "Last day",
+            "fixed_per_year": "Subscription per year, taxes included"
+          },
+          "data_description": {
+            "start": "Day the prices took effect.",
+            "end": "Leave empty if the prices are still in force.",
+            "fixed_per_year": "Yearly fixed part, spread over every hour of the year."
+          }
+        },
+        "reconfigure": {
+          "title": "Change price period",
+          "description": "Prices of {contract}.",
+          "data": {
+            "start": "First day",
+            "end": "Last day",
+            "fixed_per_year": "Subscription per year, taxes included"
+          },
+          "data_description": {
+            "start": "Day the prices took effect.",
+            "end": "Leave empty if the prices are still in force.",
+            "fixed_per_year": "Yearly fixed part, spread over every hour of the year."
+          }
+        },
+        "prices": {
+          "title": "Prices per kWh",
+          "description": "Prices of {contract} per kWh, taxes included.",
+          "data": {
+            "base": "Base",
+            "hc": "Off-peak",
+            "hp": "Peak",
+            "blue_hc": "Blue day off-peak",
+            "blue_hp": "Blue day peak",
+            "white_hc": "White day off-peak",
+            "white_hp": "White day peak",
+            "red_hc": "Red day off-peak",
+            "red_hp": "Red day peak"
+          }
+        }
+      },
+      "error": {
+        "end_before_start": "The last day is before the first day.",
+        "overlapping_price_period": "Another price period of this contract covers part of these days."
+      },
+      "abort": {
+        "no_manual_contracts": "Add a contract with prices you set yourself first.",
+        "contract_not_found": "The contract of this price period no longer exists, or now uses regulated prices."
+      }
+    }
+  },
+  "selector": {
+    "kind": {
+      "options": {
+        "base": "Base (one price)",
+        "hphc": "Off-peak hours (HP/HC)",
+        "tempo": "Tempo"
+      }
+    },
+    "pricing": {
+      "options": {
+        "official": "Regulated prices (Tarif Bleu)",
+        "manual": "Prices I set myself"
+      }
+    }
+  },
+  "exceptions": {
+    "sources_unavailable": {
+      "message": "Could not download the data the contracts need: {missing}."
+    }
+  },
+  "issues": {
+    "tempo_unavailable": {
+      "title": "Tempo colors can't be updated",
+      "description": "RTE's public Tempo calendar hasn't answered properly since {since} ({error}), so the hours of {title} after that wait to be costed.\n\nIf RTE changed this calendar, the official API takes over: create a free application for the \"Tempo Like Supply Contract\" API on data.rte-france.com, then enter its credentials in the options of {title}. The waiting hours are costed as soon as colors arrive again."
+    },
+    "tempo_unavailable_official": {
+      "title": "Tempo colors can't be updated",
+      "description": "Neither RTE's public Tempo calendar nor its official API has answered properly since {since} ({error}), so the hours of {title} after that wait to be costed. They are costed as soon as colors arrive again; nothing needs to be done if RTE is only down for a while."
+    },
+    "prices_unavailable": {
+      "title": "Regulated prices can't be updated",
+      "description": "The regulated prices couldn't be downloaded from data.gouv.fr since {since} ({error}). {title} keeps the prices it already has; a price change published since then isn't applied until the download works again."
+    },
+    "rte_credentials_refused": {
+      "title": "RTE refuses the credentials",
+      "description": "RTE's official API refused the client ID and secret set in the options of {title}. Check the application on data.rte-france.com and enter its credentials again, or clear both fields to use the public calendar only."
+    }
+  }
+}

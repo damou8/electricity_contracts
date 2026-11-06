@@ -1,0 +1,12 @@
+# Throwaway Home Assistant for scripts/develop.
+default_config:
+
+homeassistant:
+  debug: true
+  time_zone: Europe/Paris
+
+logger:
+  default: info
+  logs:
+    custom_components.electricity_contracts: debug
+    elec_tariffs: debug
