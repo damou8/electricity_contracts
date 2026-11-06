@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest a contract kind, a comparison or anything else.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you would like to do
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: For a new offer, a link to its price sheet helps.

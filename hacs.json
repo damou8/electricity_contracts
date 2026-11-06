@@ -1,0 +1,7 @@
+{
+  "name": "Electricity Contracts",
+  "homeassistant": "2026.10.0",
+  "zip_release": true,
+  "filename": "electricity_contracts.zip",
+  "hide_default_branch": true
+}

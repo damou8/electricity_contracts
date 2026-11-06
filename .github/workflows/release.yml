@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  zip:
+    name: Attach the integration zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Write the version of the tag in the manifest
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag $TAG is not vX.Y.Z" >&2
+            exit 1
+          fi
+          python3 scripts/set_version.py "${TAG#v}"
+      - name: Zip
+        working-directory: custom_components/electricity_contracts
+        run: zip -r "$GITHUB_WORKSPACE/electricity_contracts.zip" . -x "__pycache__/*"
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" electricity_contracts.zip --repo "$GITHUB_REPOSITORY"
