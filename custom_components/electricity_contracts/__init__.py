@@ -2,8 +2,15 @@
 
 import logging
 
-from homeassistant.core import HomeAssistant, callback
+import probatio as vol
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import ATTR_CONFIG_ENTRY_ID
+from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.typing import ConfigType
 
+from .const import DOMAIN, SERVICE_RECOMPUTE
 from .coordinator import (
     ElectricityContractsConfigEntry,
     ElectricityContractsCoordinator,
@@ -11,8 +18,37 @@ from .coordinator import (
     cache_store,
 )
 from .data import contracts, manual_prices
+from .statistics import async_remove_statistics
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+RECOMPUTE_SCHEMA = vol.Schema({vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string})
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the actions."""
+
+    async def async_recompute(call: ServiceCall) -> None:
+        entry = hass.config_entries.async_get_entry(call.data[ATTR_CONFIG_ENTRY_ID])
+        if entry is None or entry.domain != DOMAIN:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="entry_not_found"
+            )
+        if entry.state is not ConfigEntryState.LOADED:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="entry_not_loaded",
+                translation_placeholders={"title": entry.title},
+            )
+        coordinator: ElectricityContractsCoordinator = entry.runtime_data
+        await coordinator.async_recompute()
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_RECOMPUTE, async_recompute, schema=RECOMPUTE_SCHEMA
+    )
+    return True
 
 
 async def async_setup_entry(
@@ -41,7 +77,8 @@ async def async_unload_entry(
 async def async_remove_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> None:
-    """Delete the cache and the repair issues of a removed entry."""
+    """Delete the statistics, the cache and the repair issues of a removed entry."""
+    await async_remove_statistics(hass, entry.entry_id)
     await cache_store(hass, entry.entry_id).async_remove()
     async_delete_issues(hass, entry.entry_id)
 

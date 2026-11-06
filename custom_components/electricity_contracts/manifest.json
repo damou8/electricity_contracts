@@ -1,15 +1,25 @@
 {
   "domain": "electricity_contracts",
   "name": "Electricity Contracts",
-  "categories": ["energy.energy_prices"],
-  "codeowners": ["@damou8"],
+  "categories": [
+    "energy.energy_prices"
+  ],
+  "codeowners": [
+    "@damou8"
+  ],
   "config_flow": true,
-  "dependencies": ["recorder"],
+  "dependencies": [
+    "recorder"
+  ],
   "documentation": "https://github.com/damou8/electricity_contracts",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/damou8/electricity_contracts/issues",
-  "loggers": ["elec_tariffs"],
-  "requirements": ["elec-tariffs==0.1.0"],
+  "loggers": [
+    "elec_tariffs"
+  ],
+  "requirements": [
+    "elec-tariffs==0.2.0"
+  ],
   "version": "0.0.0"
 }
