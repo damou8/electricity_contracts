@@ -6,7 +6,10 @@ from unittest.mock import patch
 
 import pytest
 from elec_tariffs import ContractKind, PricePeriod, Tranche
-from homeassistant.components.recorder.statistics import statistic_during_period
+from homeassistant.components.recorder.statistics import (
+    async_list_statistic_ids,
+    statistic_during_period,
+)
 from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID, CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -44,6 +47,7 @@ from .conftest import (
     MANUAL_CONTRACT,
     TEMPO_CONTRACT,
     Sources,
+    busy_recorder,
     comparison_subentry,
     contract_subentry,
     make_entry,
@@ -498,16 +502,44 @@ async def test_missing_regulated_price_repair(
     assert not ir.async_get(hass).issues
 
 
-async def test_waiting_for_a_busy_recorder(
-    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+async def test_waiting_for_a_busy_recorder(hass: HomeAssistant) -> None:
+    recorder = get_instance(hass)
+    with patch.object(recorder, "async_get_commit_future", return_value=None):
+        assert await async_wait_for_recorder(hass)
+    with patch.object(
+        recorder, "async_get_commit_future", return_value=busy_recorder(hass)
+    ):
+        assert not await async_wait_for_recorder(hass)
+
+
+@pytest.mark.parametrize(
+    ("idle_waits", "written"),
+    [
+        # Nothing is queued while earlier imports may still be pending.
+        pytest.param(0, False, id="before_costing"),
+        # The totals aren't read before the new rows are written.
+        pytest.param(1, True, id="after_costing"),
+    ],
+)
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_setup_retries_while_the_recorder_is_busy(
+    hass: HomeAssistant, idle_waits: int, written: bool
 ) -> None:
-    caplog.set_level("DEBUG")
-    busy = hass.loop.create_future()
-    # Time is frozen in tests: let the wait end as the timeout would.
-    busy.set_exception(TimeoutError())
-    with patch.object(get_instance(hass), "async_get_commit_future", return_value=busy):
-        await async_wait_for_recorder(hass)
-    assert "still busy" in caplog.text
+    entry = make_entry([TEMPO_CONTRACT])
+    entry.add_to_hass(hass)
+    futures = iter([None] * idle_waits)
+    busy = busy_recorder(hass)
+    with patch.object(
+        get_instance(hass),
+        "async_get_commit_future",
+        side_effect=lambda: next(futures, busy),
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    await async_wait_recording_done(hass)
+    ids = await async_list_statistic_ids(hass)
+    assert any(item["source"] == DOMAIN for item in ids) is written
 
 
 async def start_flow(hass: HomeAssistant, entry: MockConfigEntry) -> Any:
