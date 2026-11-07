@@ -14,6 +14,7 @@ from elec_tariffs import (
     TempoError,
 )
 from homeassistant.components.recorder.statistics import (
+    async_list_statistic_ids,
     get_last_statistics,
     get_metadata,
 )
@@ -149,6 +150,31 @@ async def async_validate_statistic(hass: HomeAssistant, statistic_id: str) -> st
     return meta["name"] or statistic_id
 
 
+async def async_energy_statistics(
+    hass: HomeAssistant, *, configured: set[str | None]
+) -> list[str]:
+    """Return the energy totals that could be costed, the most likely first.
+
+    Linky statistics come first, then the others; those already configured come
+    last. The integration's own statistics are left out.
+    """
+    found = await async_list_statistic_ids(hass, statistic_type="sum")
+    ids = [
+        item["statistic_id"]
+        for item in found
+        if item["source"] != DOMAIN
+        and item["statistics_unit_of_measurement"] in EnergyConverter.VALID_UNITS
+    ]
+    return sorted(
+        ids,
+        key=lambda statistic_id: (
+            statistic_id in configured,
+            not statistic_id.startswith("linky:"),
+            statistic_id,
+        ),
+    )
+
+
 class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
     """Add a consumption source."""
 
@@ -161,6 +187,11 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Choose the hourly energy statistic to cost."""
         errors: dict[str, str] = {}
+        candidates = await async_energy_statistics(
+            self.hass, configured=set(self._async_current_ids())
+        )
+        if not candidates:
+            return self.async_abort(reason="no_statistic")
         if user_input is not None:
             statistic_id = user_input[CONF_STATISTIC_ID]
             await self.async_set_unique_id(statistic_id)
@@ -173,10 +204,11 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title=title, data={CONF_STATISTIC_ID: statistic_id}
                 )
+        # The frontend can't show a required statistic selector without a value.
         return self.async_show_form(
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(
-                STATISTIC_SCHEMA, user_input
+                STATISTIC_SCHEMA, user_input or {CONF_STATISTIC_ID: candidates[0]}
             ),
             errors=errors,
         )

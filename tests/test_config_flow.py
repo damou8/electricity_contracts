@@ -10,6 +10,9 @@ from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
+from custom_components.electricity_contracts.config_flow import (
+    async_energy_statistics,
+)
 from custom_components.electricity_contracts.const import (
     CONF_ACTIVE_FROM,
     CONF_ACTIVE_TO,
@@ -63,6 +66,36 @@ async def test_user_flow(hass: HomeAssistant) -> None:
     assert result["title"] == "Linky 00000000000000"
     assert result["data"] == {CONF_STATISTIC_ID: STATISTIC_ID}
     assert result["result"].unique_id == STATISTIC_ID
+
+
+@pytest.mark.usefixtures("statistic")
+async def test_user_flow_suggests_a_linky_statistic(hass: HomeAssistant) -> None:
+    await add_statistic(hass, "meter:energy")
+    await add_statistic(hass, OTHER_STATISTIC_ID)
+    await add_statistic(hass, "linky:temperature", unit="°C")
+    await add_statistic(hass, f"{DOMAIN}:linky_00000000000000_actual_energy")
+    make_entry().add_to_hass(hass)
+    assert await async_energy_statistics(hass, configured={STATISTIC_ID}) == [
+        OTHER_STATISTIC_ID,
+        "meter:energy",
+        STATISTIC_ID,
+    ]
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    # The frontend can't show a required statistic selector without a value.
+    schema = result["data_schema"]
+    assert schema is not None
+    (field,) = schema.schema
+    assert field.description == {"suggested_value": OTHER_STATISTIC_ID}
+
+
+async def test_user_flow_without_statistic(hass: HomeAssistant) -> None:
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_statistic"
 
 
 async def add_bad_statistics(hass: HomeAssistant) -> None:

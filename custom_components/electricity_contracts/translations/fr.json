@@ -30,7 +30,8 @@
       "statistic_daily": "Cette statistique n'a que des valeurs quotidiennes : elles ne peuvent pas être réparties entre heures creuses et heures pleines. Activez la courbe de charge (consommation horaire) dans votre espace Enedis et dans l'App Linky."
     },
     "abort": {
-      "already_configured": "Cette statistique est déjà configurée."
+      "already_configured": "Cette statistique est déjà configurée.",
+      "no_statistic": "Aucun total d'énergie n'existe encore. Importez d'abord la consommation, par exemple avec l'App Linky."
     }
   },
   "options": {

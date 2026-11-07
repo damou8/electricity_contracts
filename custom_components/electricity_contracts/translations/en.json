@@ -30,7 +30,8 @@
       "statistic_daily": "This statistic only has daily values: they can't be split between off-peak and peak hours. Enable the load curve (hourly consumption) in your Enedis account and in the Linky app."
     },
     "abort": {
-      "already_configured": "This statistic is already configured."
+      "already_configured": "This statistic is already configured.",
+      "no_statistic": "No energy total exists yet. Import the consumption first, for example with the Linky app."
     }
   },
   "options": {
