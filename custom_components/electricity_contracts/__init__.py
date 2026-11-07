@@ -1,16 +1,24 @@
 """Cost the hourly consumption of a Linky meter under several electricity contracts."""
 
 import logging
+from datetime import timedelta
 
 import probatio as vol
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import ATTR_CONFIG_ENTRY_ID
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import ATTR_CONFIG_ENTRY_ID, Platform
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, SERVICE_RECOMPUTE
+from .comparison import async_compare, comparison_response, day_start
+from .const import DOMAIN, SERVICE_COMPARE, SERVICE_RECOMPUTE
 from .coordinator import (
     ElectricityContractsConfigEntry,
     ElectricityContractsCoordinator,
@@ -24,29 +32,87 @@ _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+PLATFORMS = [Platform.SENSOR]
+
+ATTR_START = "start"
+ATTR_END = "end"
+ATTR_CONTRACTS = "contracts"
+
 RECOMPUTE_SCHEMA = vol.Schema({vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string})
+COMPARE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_START): cv.date,
+        vol.Required(ATTR_END): cv.date,
+        vol.Optional(ATTR_CONTRACTS): vol.All(cv.ensure_list, [cv.string]),
+    }
+)
+
+
+@callback
+def _async_loaded_entry(hass: HomeAssistant, call: ServiceCall) -> ConfigEntry:
+    """Return the loaded entry an action targets, or raise."""
+    entry = hass.config_entries.async_get_entry(call.data[ATTR_CONFIG_ENTRY_ID])
+    if entry is None or entry.domain != DOMAIN:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="entry_not_found"
+        )
+    if entry.state is not ConfigEntryState.LOADED:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="entry_not_loaded",
+            translation_placeholders={"title": entry.title},
+        )
+    return entry
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the actions."""
 
     async def async_recompute(call: ServiceCall) -> None:
-        entry = hass.config_entries.async_get_entry(call.data[ATTR_CONFIG_ENTRY_ID])
-        if entry is None or entry.domain != DOMAIN:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="entry_not_found"
-            )
-        if entry.state is not ConfigEntryState.LOADED:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="entry_not_loaded",
-                translation_placeholders={"title": entry.title},
-            )
-        coordinator: ElectricityContractsCoordinator = entry.runtime_data
+        coordinator: ElectricityContractsCoordinator = _async_loaded_entry(
+            hass, call
+        ).runtime_data
         await coordinator.async_recompute()
+
+    async def async_compare_contracts(call: ServiceCall) -> ServiceResponse:
+        entry = _async_loaded_entry(hass, call)
+        coordinator: ElectricityContractsCoordinator = entry.runtime_data
+        start, end = call.data[ATTR_START], call.data[ATTR_END]
+        if end < start:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="end_before_start"
+            )
+        selected = contracts(entry)
+        if names := list(dict.fromkeys(call.data.get(ATTR_CONTRACTS, []))):
+            known = {contract.name: contract for contract in selected}
+            if unknown := [name for name in names if name not in known]:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="unknown_contracts",
+                    translation_placeholders={"names": ", ".join(unknown)},
+                )
+            selected = [known[name] for name in names]
+        comparison = await async_compare(
+            hass,
+            writer=coordinator.costing,
+            status=coordinator.data.costing,
+            contracts=selected,
+            start=day_start(start),
+            end=day_start(end + timedelta(days=1)),
+            details=True,
+        )
+        return comparison_response(comparison)
 
     hass.services.async_register(
         DOMAIN, SERVICE_RECOMPUTE, async_recompute, schema=RECOMPUTE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_COMPARE,
+        async_compare_contracts,
+        schema=COMPARE_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
     )
     return True
 
@@ -64,6 +130,7 @@ async def async_setup_entry(
     # Contracts, price periods and options change through subentry and options
     # flows; reloading applies them.
     entry.async_on_unload(entry.add_update_listener(_async_reload))
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
@@ -71,7 +138,7 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> bool:
     """Unload a config entry."""
-    return True
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_remove_entry(

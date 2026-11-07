@@ -79,6 +79,18 @@ class Waiting:
     day: date
 
 
+def in_force(day: date, active_from: date | None, active_to: date | None) -> bool:
+    """Tell whether a contract in force from `active_from` to `active_to` was on `day`.
+
+    Without `active_from`, the contract is only compared.
+    """
+    return (
+        active_from is not None
+        and active_from <= day
+        and (active_to is None or day <= active_to)
+    )
+
+
 @dataclass(frozen=True, kw_only=True)
 class ContractInput:
     """What costing a contract needs."""
@@ -91,11 +103,7 @@ class ContractInput:
 
     def active_on(self, day: date) -> bool:
         """Tell whether the contract was in force on `day`."""
-        return (
-            self.active_from is not None
-            and self.active_from <= day
-            and (self.active_to is None or day <= self.active_to)
-        )
+        return in_force(day, self.active_from, self.active_to)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -112,6 +120,7 @@ class ActualCost:
 
     variable: float
     fixed: float
+    energy: float
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -153,13 +162,15 @@ def cost_actual(
             (contract for contract in contracts if contract.active_on(day)), None
         )
         if active is None:
-            costs[hour.start] = ActualCost(variable=0.0, fixed=0.0)
+            costs[hour.start] = ActualCost(variable=0.0, fixed=0.0, energy=0.0)
             continue
         result = costed[active.uid]
         cost = result.costs.get(hour.start)
         if cost is None:
             return ActualCosted(costs=costs, waiting=result.waiting)
         costs[hour.start] = ActualCost(
-            variable=sum(cost.variable.values()), fixed=cost.fixed
+            variable=sum(cost.variable.values()),
+            fixed=cost.fixed,
+            energy=sum(cost.energy.values()),
         )
     return ActualCosted(costs=costs)

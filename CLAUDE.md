@@ -28,6 +28,8 @@ To test against an unreleased library, `pip install -e ../../elec-tariffs --no-d
 
 - `costing.py` is pure (runs in the executor): it keeps the source rows that hold one hour and costs them. Daily Linky rows (no load curve) are never costed and missing hours never filled: the user doesn't want estimated consumption.
 - `statistics.py` reads where each series stopped, clears what is out of date (fingerprints in the `<entry_id>.statistics` store) and appends rows. Bump `COSTING_VERSION` when the way costs are computed changes, so every statistic is written again.
+- Comparisons and sensors read the statistics back (`comparison.py`): the coordinator first waits until the recorder has committed what was queued (`async_wait_for_recorder`, built on `async_get_commit_future`). Every compared contract is narrowed to the same hours.
+- Scheduled coordinator refreshes run as background tasks: tests driven by `async_fire_time_changed` need `hass.async_block_till_done(wait_background_tasks=True)`.
 - Recorder jobs run on the recorder's own executor: in tests, `await async_wait_recording_done(hass)` before reading statistics or asserting on a refresh triggered by time.
 
 ## Privacy

@@ -96,6 +96,7 @@
         }
       },
       "error": {
+        "duplicate_name": "Another contract already has this name.",
         "empty_name": "Enter a name.",
         "invalid_off_peak": "Enter at least one range like 22:00-06:00, on whole or half hours.",
         "active_to_without_from": "Enter the first day too.",
@@ -163,6 +164,54 @@
         "no_manual_contracts": "Add a contract with prices you set yourself first.",
         "contract_not_found": "The contract of this price period no longer exists, or now uses regulated prices."
       }
+    },
+    "comparison": {
+      "entry_type": "Comparison",
+      "initiate_flow": {
+        "user": "Add comparison",
+        "reconfigure": "Change comparison"
+      },
+      "step": {
+        "user": {
+          "title": "New comparison",
+          "description": "Compare what the contracts cost over the same hours. Rolling windows move every day.",
+          "data": {
+            "name": "Name",
+            "window": "Window",
+            "contracts": "Contracts"
+          },
+          "data_description": {
+            "name": "For example \"Last 12 months\".",
+            "contracts": "Leave empty to compare every contract, including the ones added later."
+          }
+        },
+        "reconfigure": {
+          "title": "Change comparison",
+          "data": {
+            "name": "Name",
+            "window": "Window",
+            "contracts": "Contracts"
+          },
+          "data_description": {
+            "name": "For example \"Last 12 months\".",
+            "contracts": "Leave empty to compare every contract, including the ones added later."
+          }
+        },
+        "dates": {
+          "title": "Days compared",
+          "data": {
+            "start": "First day",
+            "end": "Last day"
+          }
+        }
+      },
+      "error": {
+        "empty_name": "Enter a name.",
+        "end_before_start": "The last day is before the first day."
+      },
+      "abort": {
+        "no_contracts": "Add a contract first."
+      }
     }
   },
   "selector": {
@@ -178,6 +227,15 @@
         "official": "Regulated prices (Tarif Bleu)",
         "manual": "Prices I set myself"
       }
+    },
+    "window": {
+      "options": {
+        "last_12_months": "Last 12 months",
+        "current_year": "Current year",
+        "current_month": "Current month",
+        "tempo_season": "Tempo season (September to August)",
+        "fixed": "From one day to another"
+      }
     }
   },
   "exceptions": {
@@ -189,6 +247,12 @@
     },
     "entry_not_loaded": {
       "message": "{title} isn't loaded."
+    },
+    "end_before_start": {
+      "message": "The last day is before the first day."
+    },
+    "unknown_contracts": {
+      "message": "Unknown contracts: {names}."
     }
   },
   "issues": {
@@ -207,6 +271,14 @@
     "rte_credentials_refused": {
       "title": "RTE refuses the credentials",
       "description": "RTE's official API refused the client ID and secret set in the options of {title}. Check the application on data.rte-france.com and enter its credentials again, or clear both fields to use the public calendar only."
+    },
+    "missing_price": {
+      "title": "{contract} has no price for {day}",
+      "description": "{contract} is priced by hand, and no price period covers {day}: its costs stop on that day, and comparisons with it stop there too.\n\nAdd a price period covering {day} to {contract}. To compare an offer over past days, its first price period can start before the offer existed. Costs resume as soon as the period is saved."
+    },
+    "missing_price_official": {
+      "title": "{contract} has no regulated price for {day}",
+      "description": "The regulated prices have no price for this kind of contract at {kva} kVA on {day}: the costs of {contract} stop on that day. Check the subscribed power of {contract}, or price it by hand."
     }
   },
   "services": {
@@ -217,6 +289,102 @@
         "config_entry_id": {
           "name": "Consumption source",
           "description": "The Electricity Contracts entry to recompute."
+        }
+      }
+    },
+    "compare": {
+      "name": "Compare contracts",
+      "description": "Returns what each contract cost between two days, tranche by tranche, with the actual cost and the best contract.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Consumption source",
+          "description": "The Electricity Contracts entry whose contracts to compare."
+        },
+        "start": {
+          "name": "First day",
+          "description": "First day compared."
+        },
+        "end": {
+          "name": "Last day",
+          "description": "Last day compared, included."
+        },
+        "contracts": {
+          "name": "Contracts",
+          "description": "Names of the contracts to compare; every contract if empty."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_day_cost": {
+        "name": "Actual cost of the last day",
+        "state_attributes": {
+          "day": {
+            "name": "Day"
+          }
+        }
+      },
+      "month_average_price": {
+        "name": "Actual price this month"
+      },
+      "current_contract": {
+        "name": "Current contract"
+      },
+      "last_hour": {
+        "name": "Last hour of data"
+      },
+      "best_contract": {
+        "name": "Best contract",
+        "state_attributes": {
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          }
+        }
+      },
+      "saving": {
+        "name": "Possible saving",
+        "state_attributes": {
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          }
+        }
+      },
+      "contract_cost": {
+        "name": "{contract} cost",
+        "state_attributes": {
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          },
+          "energy": {
+            "name": "Energy"
+          },
+          "variable_cost": {
+            "name": "Energy cost"
+          },
+          "fixed_cost": {
+            "name": "Subscription"
+          }
+        }
+      },
+      "contract_price": {
+        "name": "{contract} price per kWh",
+        "state_attributes": {
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          }
         }
       }
     }

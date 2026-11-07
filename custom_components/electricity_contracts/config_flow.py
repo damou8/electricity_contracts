@@ -47,10 +47,12 @@ from homeassistant.helpers.selector import (
 )
 from homeassistant.util.unit_conversion import EnergyConverter
 
+from .comparison import WINDOW_FIXED, WINDOW_LAST_12_MONTHS, WINDOWS
 from .const import (
     CONF_ACTIVE_FROM,
     CONF_ACTIVE_TO,
     CONF_CONTRACT,
+    CONF_CONTRACTS,
     CONF_END,
     CONF_FIXED_PER_YEAR,
     CONF_KIND,
@@ -64,11 +66,13 @@ from .const import (
     CONF_STATISTIC_ID,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
+    CONF_WINDOW,
     DEFAULT_OFF_PEAK,
     DOMAIN,
     OFFERED_KVA,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
+    SUBENTRY_COMPARISON,
     SUBENTRY_CONTRACT,
     SUBENTRY_PRICE_PERIOD,
 )
@@ -224,6 +228,7 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
         return {
             SUBENTRY_CONTRACT: ContractSubentryFlow,
             SUBENTRY_PRICE_PERIOD: PricePeriodSubentryFlow,
+            SUBENTRY_COMPARISON: ComparisonSubentryFlow,
         }
 
 
@@ -280,6 +285,18 @@ class ContractSubentryFlow(ConfigSubentryFlow):
         self._title = ""
         self._data: dict[str, Any] = {}
 
+    def _name_error(self, uid: str | None) -> str | None:
+        """Return why the name can't be used: the compare action selects by name."""
+        if not self._title:
+            return "empty_name"
+        name = self._title.casefold()
+        if any(
+            contract.name.casefold() == name and contract.uid != uid
+            for contract in contracts(self._get_entry())
+        ):
+            return "duplicate_name"
+        return None
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
@@ -287,14 +304,14 @@ class ContractSubentryFlow(ConfigSubentryFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             self._title = user_input[CONF_NAME].strip()
-            if self._title:
+            if not (error := self._name_error(None)):
                 self._data = {
                     CONF_UID: self._new_uid(),
                     CONF_KIND: user_input[CONF_KIND],
                     CONF_PRICING: user_input[CONF_PRICING],
                 }
                 return await self.async_step_details()
-            errors[CONF_NAME] = "empty_name"
+            errors[CONF_NAME] = error
         schema = vol.Schema(
             {
                 # pylint: disable-next=home-assistant-config-flow-name-field
@@ -323,10 +340,10 @@ class ContractSubentryFlow(ConfigSubentryFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             self._title = user_input[CONF_NAME].strip()
-            if self._title:
+            if not (error := self._name_error(subentry.data[CONF_UID])):
                 self._data = {**subentry.data, CONF_PRICING: user_input[CONF_PRICING]}
                 return await self.async_step_details()
-            errors[CONF_NAME] = "empty_name"
+            errors[CONF_NAME] = error
         schema = vol.Schema(
             {
                 # pylint: disable-next=home-assistant-config-flow-name-field
@@ -609,3 +626,118 @@ class PricePeriodSubentryFlow(ConfigSubentryFlow):
             CONF_FIXED_PER_YEAR: user_input[CONF_FIXED_PER_YEAR],
         }
         return True
+
+
+class ComparisonSubentryFlow(ConfigSubentryFlow):
+    """Add or change a comparison of contracts over a window."""
+
+    def __init__(self) -> None:
+        """Start with an empty comparison."""
+        self._title = ""
+        self._data: dict[str, Any] = {}
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Name the comparison, choose its window and its contracts."""
+        if not contracts(self._get_entry()):
+            return self.async_abort(reason="no_contracts")
+        return await self._async_step_settings("user", user_input, {})
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Change the window or the contracts of a comparison."""
+        subentry = self._get_reconfigure_subentry()
+        return await self._async_step_settings(
+            "reconfigure", user_input, {CONF_NAME: subentry.title, **subentry.data}
+        )
+
+    async def _async_step_settings(
+        self, step_id: str, user_input: dict[str, Any] | None, current: dict[str, Any]
+    ) -> SubentryFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            self._title = user_input[CONF_NAME].strip()
+            if self._title:
+                self._data = {
+                    CONF_WINDOW: user_input[CONF_WINDOW],
+                    CONF_CONTRACTS: list(user_input.get(CONF_CONTRACTS, [])),
+                    CONF_START: current.get(CONF_START),
+                    CONF_END: current.get(CONF_END),
+                }
+                if user_input[CONF_WINDOW] == WINDOW_FIXED:
+                    return await self.async_step_dates()
+                self._data[CONF_START] = self._data[CONF_END] = None
+                return self._async_finish()
+            errors[CONF_NAME] = "empty_name"
+        schema = vol.Schema(
+            {
+                # pylint: disable-next=home-assistant-config-flow-name-field
+                vol.Required(CONF_NAME): str,
+                vol.Required(
+                    CONF_WINDOW, default=WINDOW_LAST_12_MONTHS
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(WINDOWS),
+                        translation_key=CONF_WINDOW,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+                vol.Optional(CONF_CONTRACTS): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=contract.uid, label=contract.name)
+                            for contract in contracts(self._get_entry())
+                        ],
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or current
+            ),
+            errors=errors,
+        )
+
+    async def async_step_dates(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Set the first and last day of a fixed window."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            start = date.fromisoformat(user_input[CONF_START])
+            end = date.fromisoformat(user_input[CONF_END])
+            if end < start:
+                errors[CONF_END] = "end_before_start"
+            else:
+                self._data[CONF_START] = start.isoformat()
+                self._data[CONF_END] = end.isoformat()
+                return self._async_finish()
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_START): DateSelector(),
+                vol.Required(CONF_END): DateSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="dates",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or self._data
+            ),
+            errors=errors,
+        )
+
+    def _async_finish(self) -> SubentryFlowResult:
+        if self.source == SOURCE_USER:
+            return self.async_create_entry(title=self._title, data=self._data)
+        return self.async_update_and_abort(
+            self._get_entry(),
+            self._get_reconfigure_subentry(),
+            title=self._title,
+            data=self._data,
+        )

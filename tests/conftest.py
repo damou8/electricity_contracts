@@ -33,6 +33,7 @@ from custom_components.electricity_contracts.const import (
     CONF_ACTIVE_FROM,
     CONF_ACTIVE_TO,
     CONF_CONTRACT,
+    CONF_CONTRACTS,
     CONF_END,
     CONF_FIXED_PER_YEAR,
     CONF_KIND,
@@ -44,9 +45,11 @@ from custom_components.electricity_contracts.const import (
     CONF_STATISTIC_ID,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
+    CONF_WINDOW,
     DOMAIN,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
+    SUBENTRY_COMPARISON,
     SUBENTRY_CONTRACT,
     SUBENTRY_PRICE_PERIOD,
 )
@@ -219,6 +222,28 @@ def price_period_subentry(
         },
         subentry_type=SUBENTRY_PRICE_PERIOD,
         title=f"Offer · {start} → {end or '…'}",
+        unique_id=None,
+    )
+
+
+def comparison_subentry(
+    title: str,
+    window: str = "fixed",
+    *,
+    start: str | None = "2026-03-01",
+    end: str | None = "2026-03-31",
+    contracts: list[str] | None = None,
+) -> ConfigSubentryData:
+    """Build the subentry of a comparison."""
+    return ConfigSubentryData(
+        data={
+            CONF_WINDOW: window,
+            CONF_START: start if window == "fixed" else None,
+            CONF_END: end if window == "fixed" else None,
+            CONF_CONTRACTS: contracts or [],
+        },
+        subentry_type=SUBENTRY_COMPARISON,
+        title=title,
         unique_id=None,
     )
 
