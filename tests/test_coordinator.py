@@ -13,12 +13,15 @@ from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
+from pytest_homeassistant_custom_component.components.recorder.common import (
+    async_wait_recording_done,
+)
 
 from custom_components.electricity_contracts.const import (
     CONF_RTE_CLIENT_ID,
     CONF_RTE_CLIENT_SECRET,
     DOMAIN,
-    TEMPO_TIME_ZONE,
+    FRANCE_TIME_ZONE,
 )
 from custom_components.electricity_contracts.coordinator import (
     ElectricityContractsCoordinator,
@@ -61,22 +64,22 @@ def calls(sources: Sources) -> list[tuple[date, date]]:
 
 
 def at_paris(day: date, hour: int, minute: int = 0) -> datetime:
-    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=TEMPO_TIME_ZONE)
+    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=FRANCE_TIME_ZONE)
 
 
 async def test_first_setup_downloads_the_seasons_since_the_first_day(
     hass: HomeAssistant, sources: Sources, hass_storage: dict[str, Any]
 ) -> None:
     entry = await setup_entry(hass)
-    # Consumption starts on 1 March 2026; it is 10:00 in Paris, before tomorrow's
-    # color is published.
+    # Consumption starts on 1 March 2026 at 1:00, in the 28 February Tempo day;
+    # it is 10:00 in Paris, before tomorrow's color is published.
     assert calls(sources) == [
-        (date(2026, 3, 1), date(2026, 8, 31)),
+        (date(2026, 2, 28), date(2026, 8, 31)),
         (date(2026, 9, 1), TOMORROW),
     ]
-    data = coordinator(entry).data
+    data = coordinator(entry).data.sources
     assert data.first_day == date(2026, 3, 1)
-    assert min(data.calendar) == date(2026, 3, 1)
+    assert min(data.calendar) == date(2026, 2, 28)
     assert max(data.calendar) == TODAY
     assert data.calendar[date(2026, 3, 4)] is color_of(date(2026, 3, 4))
     stored = hass_storage[f"{DOMAIN}.{entry.entry_id}"]["data"]
@@ -89,7 +92,7 @@ async def test_restart_uses_the_cache(hass: HomeAssistant, sources: Sources) -> 
     sources.public.async_calendar.reset_mock()
     assert await hass.config_entries.async_reload(entry.entry_id)
     assert calls(sources) == []
-    assert max(coordinator(entry).data.calendar) == TODAY
+    assert max(coordinator(entry).data.sources.calendar) == TODAY
 
 
 async def test_tomorrow_is_asked_after_publication(
@@ -115,7 +118,7 @@ async def test_tomorrow_is_asked_after_publication(
     freezer.tick(timedelta(minutes=30))
     await coordinator(entry).async_refresh()
     assert len(calls(sources)) == 2
-    assert coordinator(entry).data.calendar[TOMORROW] is color_of(TOMORROW)
+    assert coordinator(entry).data.sources.calendar[TOMORROW] is color_of(TOMORROW)
 
     # Once known, neither tomorrow nor, after midnight, today is asked again.
     freezer.move_to(at_paris(TOMORROW, 1))
@@ -131,6 +134,8 @@ async def test_hourly_schedule(
     for _ in range(3):
         freezer.tick(timedelta(hours=1))
         async_fire_time_changed(hass)
+        # Costing waits for the recorder's own executor.
+        await async_wait_recording_done(hass)
         await hass.async_block_till_done()
     # 13:00 in Paris: tomorrow's color has been fetched by the hourly update.
     assert calls(sources)[-1] == (TODAY, TOMORROW)
@@ -150,7 +155,7 @@ async def test_missing_days_of_the_current_season(
         "data": {
             "calendar": {
                 day.isoformat(): color.value
-                for day, color in calendar(date(2026, 3, 1), date(2026, 11, 1)).items()
+                for day, color in calendar(date(2026, 2, 28), date(2026, 11, 1)).items()
             },
             "season_checked": {
                 "2025-2026": "2026-09-02T00:00:00+00:00",
@@ -176,21 +181,24 @@ async def test_missing_days_of_the_current_season(
     freezer.tick(timedelta(hours=1))
     await coordinator(entry).async_refresh()
     assert [call for call in calls(sources) if call[0] != TODAY] == season_calls * 2
-    assert max(coordinator(entry).data.calendar) == TODAY
+    assert max(coordinator(entry).data.sources.calendar) == TODAY
 
 
-async def test_past_season_checked_after_its_end_is_not_asked_again(
-    hass: HomeAssistant, sources: Sources, hass_storage: dict[str, Any]
+async def test_missing_days_of_a_past_season(
+    hass: HomeAssistant,
+    sources: Sources,
+    hass_storage: dict[str, Any],
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     entry = make_entry([TEMPO_CONTRACT])
-    calendar = published_calendar(TODAY)(date(2026, 3, 1), TODAY)
+    calendar = published_calendar(TODAY)(date(2026, 2, 28), TODAY)
     del calendar[date(2026, 4, 1)]
     hass_storage[f"{DOMAIN}.{entry.entry_id}"] = {
         "version": 1,
         "key": f"{DOMAIN}.{entry.entry_id}",
         "data": {
             "calendar": {day.isoformat(): c.value for day, c in calendar.items()},
-            "season_checked": {"2025-2026": "2026-09-02T00:00:00+00:00"},
+            "season_checked": {"2025-2026": NOW.isoformat()},
             "tomorrow_checked": None,
             "prices": {},
             "prices_fetched": {},
@@ -199,6 +207,10 @@ async def test_past_season_checked_after_its_end_is_not_asked_again(
     }
     await setup_entry(hass, entry)
     assert calls(sources) == []
+    freezer.tick(timedelta(hours=6))
+    await coordinator(entry).async_refresh()
+    assert calls(sources)[0] == (date(2026, 2, 28), date(2026, 8, 31))
+    assert date(2026, 4, 1) in coordinator(entry).data.sources.calendar
 
 
 async def test_unreadable_cache_is_ignored(
@@ -223,7 +235,7 @@ async def test_prices_are_refreshed_daily(
 ) -> None:
     entry = await setup_entry(hass, make_entry([TEMPO_CONTRACT, BASE_CONTRACT]))
     assert sources.trv.async_price_periods.await_count == 2
-    data = coordinator(entry).data
+    data = coordinator(entry).data.sources
     assert set(data.official_prices) == {("tempo", 6), ("base", 6)}
     freezer.tick(timedelta(hours=23))
     await coordinator(entry).async_refresh()
@@ -314,7 +326,7 @@ async def test_refused_credentials(
     await coordinator(entry).async_refresh()
     assert issue(hass, "rte_credentials_refused", entry) is None
     assert issue(hass, "tempo_unavailable", entry) is None
-    assert coordinator(entry).data.calendar[date(2026, 11, 10)] is TempoColor(
+    assert coordinator(entry).data.sources.calendar[date(2026, 11, 10)] is TempoColor(
         color_of(date(2026, 11, 10))
     )
 
@@ -325,8 +337,8 @@ async def test_statistic_without_rows(hass: HomeAssistant, sources: Sources) -> 
         hass, make_entry([TEMPO_CONTRACT], statistic_id="linky:empty")
     )
     assert entry.state is ConfigEntryState.LOADED
-    assert coordinator(entry).data.first_day == TODAY
-    assert calls(sources) == [(TODAY, TOMORROW)]
+    assert coordinator(entry).data.sources.first_day == TODAY
+    assert calls(sources) == [(TODAY - timedelta(days=1), TOMORROW)]
 
 
 async def test_now_is_frozen() -> None:

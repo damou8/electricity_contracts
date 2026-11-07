@@ -37,16 +37,17 @@ from .const import (
     CONF_RTE_CLIENT_SECRET,
     CONF_STATISTIC_ID,
     DOMAIN,
+    FRANCE_TIME_ZONE,
     PRICES_MAX_AGE_HOURS,
     SEASON_RETRY_HOURS,
     SOURCE_ISSUE_AFTER_HOURS,
     STORAGE_VERSION,
-    TEMPO_TIME_ZONE,
     TOMORROW_JITTER_MINUTES,
     TOMORROW_PUBLISHED,
     TOMORROW_RETRY_MINUTES,
 )
 from .data import contracts
+from .statistics import CostingStatus, SeriesStatus, StatisticsWriter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,6 +65,14 @@ class SourcesData:
     first_day: date
     calendar: dict[date, TempoColor]
     official_prices: dict[PricesKey, list[PricePeriod]]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ElectricityContractsData:
+    """The sources and how far the statistics were written."""
+
+    sources: SourcesData
+    costing: CostingStatus
 
 
 def _prices_key(kind: ContractKind, kva: int) -> str:
@@ -167,8 +176,8 @@ def cache_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, Any]]:
     return Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}")
 
 
-class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
-    """Fetch what the contracts of one consumption source need, once."""
+class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContractsData]):
+    """Keep the sources of one consumption source and write its cost statistics."""
 
     config_entry: ElectricityContractsConfigEntry
 
@@ -207,11 +216,13 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
         self._cache = _Cache()
         self._first_day: date | None = None
         self.last_errors: dict[str, str] = {}
+        self.costing = StatisticsWriter(hass, config_entry)
 
     async def _async_setup(self) -> None:
         """Load the cache and find the first day of consumption."""
         self._cache = _Cache.from_store(await self._store.async_load())
         self._first_day = await self._async_first_day()
+        await self.costing.async_load()
 
     async def _async_first_day(self) -> date:
         """Return the day of the first hour of consumption, or today if none."""
@@ -227,7 +238,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
             {"sum"},
         )
         if not months.get(self.statistic_id):
-            return dt_util.now(TEMPO_TIME_ZONE).date()
+            return dt_util.now(FRANCE_TIME_ZONE).date()
         # Months follow the server's time zone: look for the first hour in the
         # first month only.
         month_start = datetime.fromtimestamp(months[self.statistic_id][0]["start"], UTC)
@@ -242,12 +253,12 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
             {"sum"},
         )
         first = datetime.fromtimestamp(
-            hours[self.statistic_id][0]["start"], TEMPO_TIME_ZONE
+            hours[self.statistic_id][0]["start"], FRANCE_TIME_ZONE
         )
         return first.date()
 
-    async def _async_update_data(self) -> SourcesData:
-        """Fetch what is missing and return everything the contracts need."""
+    async def _async_update_data(self) -> ElectricityContractsData:
+        """Fetch what is missing, then cost the hours not costed yet."""
         assert self._first_day is not None
         now = dt_util.utcnow()
         entry_contracts = contracts(self.config_entry)
@@ -265,7 +276,10 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
         if needed_prices:
             changed |= await self._async_refresh_prices(needed_prices, now)
         if needs_tempo:
-            changed |= await self._async_refresh_tempo(self._first_day, now)
+            # Hours before 6:00 on the first day belong to the day before's color.
+            changed |= await self._async_refresh_tempo(
+                self._first_day - timedelta(days=1), now
+            )
         if changed:
             await self._store.async_save(self._cache.to_store())
         self._update_issues(
@@ -285,7 +299,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
                 translation_key="sources_unavailable",
                 translation_placeholders={"missing": ", ".join(missing)},
             )
-        return SourcesData(
+        sources = SourcesData(
             first_day=self._first_day,
             calendar=dict(self._cache.calendar),
             official_prices={
@@ -293,6 +307,15 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
                 for kind, kva in needed_prices
             },
         )
+        costing = await self.costing.async_update(
+            sources.official_prices, sources.calendar
+        )
+        return ElectricityContractsData(sources=sources, costing=costing)
+
+    async def async_recompute(self) -> None:
+        """Clear and write every statistic again."""
+        self.costing.request_recompute()
+        await self.async_refresh()
 
     async def _async_refresh_prices(
         self, needed: list[PricesKey], now: datetime
@@ -316,7 +339,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
         return changed
 
     async def _async_refresh_tempo(self, first_day: date, now: datetime) -> bool:
-        today = now.astimezone(TEMPO_TIME_ZONE).date()
+        today = now.astimezone(FRANCE_TIME_ZONE).date()
         tomorrow = today + timedelta(days=1)
         changed = False
         try:
@@ -357,20 +380,14 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
         else:
             return False
         checked = self._cache.season_checked.get(season)
-        if checked is None:
-            return True
-        _, season_end = season_bounds(season)
-        if season_end < checked.astimezone(TEMPO_TIME_ZONE).date():
-            # Checked after it ended: RTE has nothing more to publish.
-            return False
-        return now - checked >= timedelta(hours=SEASON_RETRY_HOURS)
+        return checked is None or now - checked >= timedelta(hours=SEASON_RETRY_HOURS)
 
     def _tomorrow_needs_fetch(self, tomorrow: date, now: datetime) -> bool:
         if tomorrow in self._cache.calendar:
             return False
-        local = now.astimezone(TEMPO_TIME_ZONE)
+        local = now.astimezone(FRANCE_TIME_ZONE)
         published = (
-            datetime.combine(local.date(), TOMORROW_PUBLISHED, TEMPO_TIME_ZONE)
+            datetime.combine(local.date(), TOMORROW_PUBLISHED, FRANCE_TIME_ZONE)
             + self._tomorrow_delay
         )
         if local < published:
@@ -479,7 +496,33 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[SourcesData]):
                 for source, when in self._cache.failing_since.items()
             },
             "last_errors": self.last_errors,
+            "costing": _costing_diagnostics(self.data.costing),
         }
+
+
+def _series_diagnostics(status: SeriesStatus | None) -> dict[str, Any] | None:
+    if status is None:
+        return None
+    return {
+        "last_hour": status.last_hour.isoformat() if status.last_hour else None,
+        "waiting": (
+            {"reason": status.waiting.reason, "day": status.waiting.day.isoformat()}
+            if status.waiting
+            else None
+        ),
+    }
+
+
+def _costing_diagnostics(status: CostingStatus) -> dict[str, Any]:
+    return {
+        "last_source_hour": (
+            status.last_source_hour.isoformat() if status.last_source_hour else None
+        ),
+        "contracts": {
+            uid: _series_diagnostics(item) for uid, item in status.contracts.items()
+        },
+        "actual": _series_diagnostics(status.actual),
+    }
 
 
 @callback

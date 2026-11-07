@@ -12,6 +12,8 @@ CONF_STATISTIC_ID: Final = "statistic_id"
 CONF_RTE_CLIENT_ID: Final = "rte_client_id"
 CONF_RTE_CLIENT_SECRET: Final = "rte_client_secret"  # noqa: S105 - a key
 
+SERVICE_RECOMPUTE: Final = "recompute"
+
 SUBENTRY_CONTRACT: Final = "contract"
 SUBENTRY_PRICE_PERIOD: Final = "price_period"
 
@@ -42,9 +44,9 @@ OFFERED_KVA: Final[dict[ContractKind, tuple[int, ...]]] = {
     ContractKind.TEMPO: (6, 9, 12, 15, 18, 24, 30, 36),
 }
 
-# Tempo days and RTE's publication times are French local time, whatever the
-# server's time zone.
-TEMPO_TIME_ZONE: Final = ZoneInfo("Europe/Paris")
+# Off-peak hours, Tempo days, price changes and RTE's publication times are French
+# local time, whatever the server's time zone.
+FRANCE_TIME_ZONE: Final = ZoneInfo("Europe/Paris")
 # RTE publishes tomorrow's color around 10:40; ask a little later.
 TOMORROW_PUBLISHED: Final = time(11)
 TOMORROW_JITTER_MINUTES: Final = 20

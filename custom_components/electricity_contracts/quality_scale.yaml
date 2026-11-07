@@ -1,17 +1,13 @@
 rules:
   # Bronze
-  action-setup:
-    status: exempt
-    comment: No actions yet; recompute and compare come with the statistics.
+  action-setup: done
   appropriate-polling: done
   brands: done
   common-modules: done
   config-flow: done
   config-flow-test-coverage: done
   dependency-transparency: done
-  docs-actions:
-    status: exempt
-    comment: No actions yet.
+  docs-actions: done
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done
@@ -30,9 +26,7 @@ rules:
   unique-config-entry: done
 
   # Silver
-  action-exceptions:
-    status: exempt
-    comment: No actions yet.
+  action-exceptions: done
   config-entry-unloading: done
   docs-configuration-parameters: done
   docs-installation-parameters: done
@@ -64,7 +58,7 @@ rules:
     status: exempt
     comment: No discovery.
   docs-data-update: done
-  docs-examples: todo
+  docs-examples: done
   docs-known-limitations: done
   docs-supported-devices:
     status: exempt
