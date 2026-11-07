@@ -26,7 +26,7 @@ To test against an unreleased library, `pip install -e ../../elec-tariffs --no-d
 
 ## Statistics
 
-- `costing.py` is pure (runs in the executor): it turns source rows into hours (daily Linky rows are spread with the library's `DayShape`, gaps evenly) and costs them.
+- `costing.py` is pure (runs in the executor): it keeps the source rows that hold one hour and costs them. Daily Linky rows (no load curve) are never costed and missing hours never filled: the user doesn't want estimated consumption.
 - `statistics.py` reads where each series stopped, clears what is out of date (fingerprints in the `<entry_id>.statistics` store) and appends rows. Bump `COSTING_VERSION` when the way costs are computed changes, so every statistic is written again.
 - Recorder jobs run on the recorder's own executor: in tests, `await async_wait_recording_done(hass)` before reading statistics or asserting on a refresh triggered by time.
 

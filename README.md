@@ -137,18 +137,11 @@ Les heures sont valorisées à chaque vérification, donc au plus une heure apr�
 
 ## Historique quotidien
 
-Sans courbe de charge, le Linky ne remonte qu'une consommation par jour. L'App Linky l'enregistre en une ligne à minuit, et c'est souvent le cas de l'historique plus ancien que l'activation de la courbe de charge.
+Sans courbe de charge, le Linky ne remonte qu'une consommation par jour. L'App Linky l'enregistre en une ligne à minuit, et c'est souvent le cas de l'historique antérieur à l'activation de la courbe de charge.
 
-L'intégration répartit chaque total quotidien sur les heures de sa journée :
-- la consommation de nuit (22 h – 6 h) est estimée par une droite du total du jour ;
-- la droite et le profil horaire moyen sont appris sur les jours où les heures sont connues ;
-- sans au moins 14 jours horaires complets, la répartition est uniforme.
+Ces totaux quotidiens ne sont pas valorisés : on ne sait pas comment ils se répartissent entre heures creuses et heures pleines, et l'intégration ne fait pas d'estimation. Les statistiques commencent à la première heure mesurée. Une heure qui manque dans la source reste vide.
 
-Le total et la couleur Tempo de chaque jour sont exacts ; le partage heures creuses / heures pleines de ces jours est une estimation. Par exemple, elle ne sait pas que la consommation se reporte sur la nuit les jours rouges.
-
-Sur un compteur réel, avec sept mois d'historique quotidien sur douze, l'année facturée est retrouvée à 0,1 % près en kWh. Les jours bleus sont à quelques pourcents près, les jours blancs et rouges beaucoup moins.
-
-Après l'activation de la courbe de charge, l'action **Recalculer** répartit à nouveau l'historique quotidien avec le profil appris.
+Une statistique qui n'a que des valeurs quotidiennes est refusée à la configuration. Activez la courbe de charge (consommation horaire) dans votre espace Enedis et dans l'App Linky.
 
 ## Limites connues
 
@@ -266,16 +259,9 @@ Hours are costed at each check, at most an hour after the Linky import.
 
 Without a load curve, a Linky meter only reports one value a day. The Linky app writes it as one row at midnight, which is often the case for the history older than the load curve.
 
-The integration spreads each daily total over the hours of its day:
-- the night consumption (22:00 to 6:00) is estimated as a straight line of the daily total;
-- the line and the average hourly profile are learned from the days whose hours are known;
-- with fewer than 14 complete hourly days, the spread is even.
+Daily totals aren't costed: how they split between off-peak and peak hours isn't known, and the integration doesn't estimate it. Statistics start at the first measured hour. An hour missing from the source stays empty.
 
-Daily totals and Tempo colors are exact; the off-peak split of those days is an estimate. For example, it can't know that consumption moves to the night on red days.
-
-On a real meter with seven months of daily history out of twelve, the billed year comes out within 0.1 % in kWh. Blue days are within a few percent, white and red days much less.
-
-After the load curve is enabled, the **Recompute** action spreads the daily history again with the learned profile.
+A statistic with only daily values is refused at setup: enable the load curve (hourly consumption) in your Enedis account and in the Linky app.
 
 ### Privacy, limitations, troubleshooting, removal
 

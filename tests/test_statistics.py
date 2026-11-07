@@ -292,6 +292,38 @@ async def test_removing_an_entry_without_statistics(hass: HomeAssistant) -> None
     await settle(hass)
 
 
+async def test_daily_rows_are_not_costed(hass: HomeAssistant) -> None:
+    source = "linky:22222222222222"
+    first_hour = datetime(2026, 3, 22, tzinfo=FRANCE_TIME_ZONE).astimezone(UTC)
+    starts = [first_hour - timedelta(days=days) for days in (3, 2, 1)]
+    starts += [first_hour + timedelta(hours=hour) for hour in range(24)]
+    values = [12000.0] * 3 + [500.0] * 24
+    sums = [sum(values[: index + 1]) for index in range(len(values))]
+    async_add_external_statistics(
+        hass,
+        {
+            "mean_type": StatisticMeanType.NONE,
+            "has_sum": True,
+            "name": "Linky",
+            "source": "linky",
+            "statistic_id": source,
+            "unit_class": "energy",
+            "unit_of_measurement": "Wh",
+        },
+        [
+            StatisticData(start=start, state=value, sum=total)
+            for start, value, total in zip(starts, values, sums, strict=True)
+        ],
+    )
+    await settle(hass)
+    await setup_entry(hass, make_entry([BASE_CONTRACT], statistic_id=source))
+    energy = "electricity_contracts:linky_22222222222222_base0001_energy_base"
+    found = (await rows(hass, energy))[energy]
+    assert found[0]["start"] == first_hour.timestamp()
+    assert len(found) == 24
+    assert found[-1]["sum"] == pytest.approx(12.0)
+
+
 async def test_manual_price_change_rewrites_the_contract(hass: HomeAssistant) -> None:
     entry = await setup_entry(
         hass,

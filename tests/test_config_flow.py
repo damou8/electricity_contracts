@@ -1,5 +1,6 @@
 """Tests of the config, options and subentry flows."""
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -68,6 +69,7 @@ async def add_bad_statistics(hass: HomeAssistant) -> None:
     await add_statistic(hass, "linky:temperature", unit="°C")
     await add_statistic(hass, "linky:no_sum", has_sum=False)
     await add_statistic(hass, "linky:empty", hours=0)
+    await add_statistic(hass, "linky:daily", hours=3, step=timedelta(days=1))
 
 
 @pytest.mark.parametrize(
@@ -77,6 +79,7 @@ async def add_bad_statistics(hass: HomeAssistant) -> None:
         pytest.param("linky:temperature", "statistic_not_energy", id="not_energy"),
         pytest.param("linky:no_sum", "statistic_no_sum", id="no_sum"),
         pytest.param("linky:empty", "statistic_no_data", id="no_rows"),
+        pytest.param("linky:daily", "statistic_daily", id="daily"),
     ],
 )
 @pytest.mark.usefixtures("statistic")
