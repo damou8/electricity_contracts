@@ -2,7 +2,6 @@
 
 import asyncio
 import calendar
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -16,8 +15,6 @@ from homeassistant.helpers.recorder import get_instance
 from .const import FRANCE_TIME_ZONE
 from .data import Contract
 from .statistics import CostingStatus, StatisticsWriter
-
-_LOGGER = logging.getLogger(__name__)
 
 WINDOW_FIXED: Final = "fixed"
 WINDOW_LAST_12_MONTHS: Final = "last_12_months"
@@ -141,21 +138,24 @@ def window_days(
     return year_ago + timedelta(days=1), today
 
 
-async def async_wait_for_recorder(hass: HomeAssistant) -> None:
+async def async_wait_for_recorder(hass: HomeAssistant) -> bool:
     """Wait until the recorder has written what was queued, at most a minute.
 
     Statistics are imported by the recorder's thread; reading them right after
     queuing an import would miss the new rows. The recorder runs its queue in
     order, so one commit after the imports is enough: waiting until nothing is
     pending would never end while events keep coming.
+
+    Return False if the recorder is still busy.
     """
     if (future := get_instance(hass).async_get_commit_future()) is None:
-        return
+        return True
     try:
         async with asyncio.timeout(_RECORDER_TIMEOUT):
             await future
     except TimeoutError:
-        _LOGGER.debug("The recorder is still busy; totals may lag behind")
+        return False
+    return True
 
 
 def _changes(

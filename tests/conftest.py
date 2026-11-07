@@ -1,5 +1,6 @@
 """Fixtures for the Electricity Contracts tests."""
 
+import asyncio
 from collections.abc import Callable, Generator
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -177,6 +178,16 @@ async def statistic(hass: HomeAssistant) -> str:
     """Import the Linky statistic of the tests."""
     await add_statistic(hass)
     return STATISTIC_ID
+
+
+def busy_recorder(hass: HomeAssistant) -> asyncio.Future[None]:
+    """Return a commit future that ends as the timeout would.
+
+    Time is frozen in tests, so the real timeout never fires.
+    """
+    busy: asyncio.Future[None] = hass.loop.create_future()
+    busy.set_exception(TimeoutError())
+    return busy
 
 
 def contract_subentry(

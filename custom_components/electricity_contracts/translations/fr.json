@@ -239,6 +239,9 @@
     }
   },
   "exceptions": {
+    "recorder_busy": {
+      "message": "L'enregistreur écrit encore des statistiques précédentes. Nouvel essai plus tard."
+    },
     "sources_unavailable": {
       "message": "Impossible de télécharger les données dont les contrats ont besoin : {missing}."
     },

@@ -328,10 +328,15 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
                 for kind, kva in needed_prices
             },
         )
+        # Where each series stopped is read back from the statistics, and so
+        # are the totals: both need the imports queued before to be written.
+        # A first import takes minutes, and a reload meanwhile would queue it
+        # again.
+        await self._async_wait_for_recorder()
         costing = await self.costing.async_update(
             sources.official_prices, sources.calendar
         )
-        await async_wait_for_recorder(self.hass)
+        await self._async_wait_for_recorder()
         entry_contracts = contracts(self.config_entry)
         self._update_price_issues(costing, entry_contracts)
         today = dt_util.now(FRANCE_TIME_ZONE).date()
@@ -352,6 +357,12 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             summary=await self._async_summary(costing, entry_contracts, today),
             comparisons=compared,
         )
+
+    async def _async_wait_for_recorder(self) -> None:
+        if not await async_wait_for_recorder(self.hass):
+            raise UpdateFailed(
+                translation_domain=DOMAIN, translation_key="recorder_busy"
+            )
 
     async def _async_summary(
         self, costing: CostingStatus, entry_contracts: list[Contract], today: date
