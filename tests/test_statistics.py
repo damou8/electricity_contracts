@@ -388,6 +388,16 @@ async def test_inconsistent_series_is_rewritten(hass: HomeAssistant) -> None:
     assert found[f"{BASE}_energy_base"][-1]["sum"] == pytest.approx(24.0)
 
 
+async def test_series_without_its_last_statistic(hass: HomeAssistant) -> None:
+    entry = await setup_entry(hass, make_entry([BASE_CONTRACT]))
+    get_instance(hass).async_clear_statistics([f"{BASE}_cost"])
+    await settle(hass)
+    await refresh(hass, entry)
+    found = await rows(hass, f"{BASE}_cost", f"{BASE}_energy_base")
+    assert len(found[f"{BASE}_cost"]) == 48
+    assert found[f"{BASE}_energy_base"][-1]["sum"] == pytest.approx(24.0)
+
+
 async def test_recompute_action(hass: HomeAssistant) -> None:
     entry = await setup_entry(hass, make_entry([BASE_CONTRACT]))
     # Damage the last row; recomputing writes it again from the first hour.

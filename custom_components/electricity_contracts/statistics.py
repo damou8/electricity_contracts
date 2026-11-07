@@ -62,7 +62,7 @@ from .data import Contract, contracts, format_time_range, manual_prices
 _LOGGER = logging.getLogger(__name__)
 
 # Bump to rewrite every statistic after a change in how costs are computed.
-COSTING_VERSION = 2
+COSTING_VERSION = 3
 STATE_VERSION = 1
 ACTUAL = "actual"
 _HOUR = timedelta(hours=1)
@@ -77,16 +77,20 @@ _NAMES: Mapping[str, Mapping[str, str]] = {
         "cost": "{contract} cost {tranche}",
         "fixed": "{contract} subscription",
         "total": "{contract} total cost",
+        "energy_total": "{contract} total energy",
         "actual": "Actual cost",
         "actual_fixed": "Actual subscription",
+        "actual_energy": "Actual energy",
     },
     "fr": {
         "energy": "{contract} énergie {tranche}",
         "cost": "{contract} coût {tranche}",
         "fixed": "{contract} abonnement",
         "total": "{contract} coût total",
+        "energy_total": "{contract} énergie totale",
         "actual": "Coût réel",
         "actual_fixed": "Abonnement réel",
+        "actual_energy": "Énergie réelle",
     },
 }
 _TRANCHE_NAMES: Mapping[str, Mapping[Tranche, str]] = {
@@ -130,6 +134,28 @@ class CostingStatus:
     contracts: dict[str, SeriesStatus] = field(default_factory=dict)
     actual: SeriesStatus | None = None
     last_source_hour: datetime | None = None
+    first_hour: datetime | None = None
+    """First hour costed: hours before it only have daily totals, or nothing."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContractStatistics:
+    """IDs of the statistics of a contract."""
+
+    total: str
+    fixed: str
+    energy: str
+    tranche_energy: dict[Tranche, str]
+    tranche_cost: dict[Tranche, str]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActualStatistics:
+    """IDs of the actual cost statistics."""
+
+    variable: str
+    fixed: str
+    energy: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -160,6 +186,7 @@ class _State:
     source_object: str | None = None
     source_start: float | None = None
     source_sum: float | None = None
+    first_hour: float | None = None
     series: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
@@ -178,6 +205,7 @@ class _State:
                 source_object=data["source_object"],
                 source_start=data["source_start"],
                 source_sum=data["source_sum"],
+                first_hour=data.get("first_hour"),
                 series=series,
             )
         except KeyError, TypeError, AttributeError:
@@ -189,6 +217,7 @@ class _State:
             "source_object": self.source_object,
             "source_start": self.source_start,
             "source_sum": self.source_sum,
+            "first_hour": self.first_hour,
             "series": self.series,
         }
 
@@ -199,6 +228,10 @@ class _State:
 def statistics_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, Any]]:
     """Return the store that records which statistics an entry wrote."""
     return Store(hass, STATE_VERSION, f"{DOMAIN}.{entry_id}.statistics")
+
+
+def _time(timestamp: float | None) -> datetime | None:
+    return datetime.fromtimestamp(timestamp, UTC) if timestamp is not None else None
 
 
 def _fingerprint(value: Any) -> str:
@@ -238,6 +271,25 @@ class StatisticsWriter:
     async def async_load(self) -> None:
         """Load what was written before."""
         self._state = _State.from_store(await self._store.async_load())
+
+    def contract_statistics(self, uid: str, kind: ContractKind) -> ContractStatistics:
+        """Return the statistic IDs of a contract."""
+        base = f"{self.prefix}_{uid}"
+        return ContractStatistics(
+            total=f"{base}_cost",
+            fixed=f"{base}_cost_fixed",
+            energy=f"{base}_energy",
+            tranche_energy={t: f"{base}_energy_{t}" for t in TRANCHES[kind]},
+            tranche_cost={t: f"{base}_cost_{t}" for t in TRANCHES[kind]},
+        )
+
+    def actual_statistics(self) -> ActualStatistics:
+        """Return the statistic IDs of the actual cost."""
+        return ActualStatistics(
+            variable=f"{self.prefix}_actual_cost",
+            fixed=f"{self.prefix}_actual_cost_fixed",
+            energy=f"{self.prefix}_actual_energy",
+        )
 
     def request_recompute(self) -> None:
         """Clear and write every statistic again at the next update."""
@@ -282,6 +334,10 @@ class StatisticsWriter:
             costs = actual if key == ACTUAL else costed[key]
             assert costs is not None
             written = self._write(item, costs, last_start, sums)
+            if last_start is None and written is not None and costs.costs:
+                first = min(costs.costs).timestamp()
+                if self._state.first_hour is None or first < self._state.first_hour:
+                    self._state.first_hour = first
             status[key] = SeriesStatus(
                 last_hour=written or last_start, waiting=costs.waiting
             )
@@ -294,11 +350,8 @@ class StatisticsWriter:
         return CostingStatus(
             contracts={key: value for key, value in status.items() if key != ACTUAL},
             actual=status.get(ACTUAL),
-            last_source_hour=(
-                datetime.fromtimestamp(self._state.source_start, UTC)
-                if self._state.source_start is not None
-                else None
-            ),
+            last_source_hour=_time(self._state.source_start),
+            first_hour=_time(self._state.first_hour),
         )
 
     def _wanted(
@@ -346,21 +399,28 @@ class StatisticsWriter:
                     ],
                 }
             )
+            ids = self.actual_statistics()
             series[ACTUAL] = _Series(
                 key=ACTUAL,
                 fingerprint=fingerprint,
                 statistics=(
                     _Statistic(
-                        statistic_id=f"{self.prefix}_actual_cost",
+                        statistic_id=ids.variable,
                         name=self._names["actual"],
                         energy=False,
                         value=lambda cost: cost.variable,
                     ),
                     _Statistic(
-                        statistic_id=f"{self.prefix}_actual_cost_fixed",
+                        statistic_id=ids.fixed,
                         name=self._names["actual_fixed"],
                         energy=False,
                         value=lambda cost: cost.fixed,
+                    ),
+                    _Statistic(
+                        statistic_id=ids.energy,
+                        name=self._names["actual_energy"],
+                        energy=True,
+                        value=lambda cost: cost.energy,
                     ),
                 ),
             )
@@ -383,15 +443,16 @@ class StatisticsWriter:
         )
 
     def _contract_series(self, contract: Contract, fingerprint: str) -> _Series:
-        base = f"{self.prefix}_{contract.uid}"
+        ids = self.contract_statistics(contract.uid, contract.kind)
+        name = contract.name
         statistics: list[_Statistic] = []
         for tranche in TRANCHES[contract.kind]:
             tranche_name = self._tranche_names[tranche]
             statistics.append(
                 _Statistic(
-                    statistic_id=f"{base}_energy_{tranche}",
+                    statistic_id=ids.tranche_energy[tranche],
                     name=self._names["energy"].format(
-                        contract=contract.name, tranche=tranche_name
+                        contract=name, tranche=tranche_name
                     ),
                     energy=True,
                     value=partial(_tranche_value, "energy", tranche),
@@ -399,28 +460,35 @@ class StatisticsWriter:
             )
             statistics.append(
                 _Statistic(
-                    statistic_id=f"{base}_cost_{tranche}",
+                    statistic_id=ids.tranche_cost[tranche],
                     name=self._names["cost"].format(
-                        contract=contract.name, tranche=tranche_name
+                        contract=name, tranche=tranche_name
                     ),
                     energy=False,
                     value=partial(_tranche_value, "variable", tranche),
                 )
             )
-        statistics.append(
-            _Statistic(
-                statistic_id=f"{base}_cost_fixed",
-                name=self._names["fixed"].format(contract=contract.name),
-                energy=False,
-                value=lambda cost: cost.fixed,
-            )
-        )
-        statistics.append(
-            _Statistic(
-                statistic_id=f"{base}_cost",
-                name=self._names["total"].format(contract=contract.name),
-                energy=False,
-                value=lambda cost: cost.total,
+        statistics.extend(
+            (
+                _Statistic(
+                    statistic_id=ids.energy,
+                    name=self._names["energy_total"].format(contract=name),
+                    energy=True,
+                    value=lambda cost: sum(cost.energy.values()),
+                ),
+                _Statistic(
+                    statistic_id=ids.fixed,
+                    name=self._names["fixed"].format(contract=name),
+                    energy=False,
+                    value=lambda cost: cost.fixed,
+                ),
+                # Last: where the series stopped is read from it.
+                _Statistic(
+                    statistic_id=ids.total,
+                    name=self._names["total"].format(contract=name),
+                    energy=False,
+                    value=lambda cost: cost.total,
+                ),
             )
         )
         return _Series(
@@ -439,7 +507,7 @@ class StatisticsWriter:
                 _LOGGER.info("Writing every statistic of %s again", self.entry.title)
             to_clear.extend(state.all_ids())
             state.series = {}
-            state.source_start = state.source_sum = None
+            state.source_start = state.source_sum = state.first_hour = None
             self._recompute_all = False
         for key in list(state.series):
             wanted = series.get(key)

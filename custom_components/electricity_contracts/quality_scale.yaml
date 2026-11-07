@@ -13,13 +13,9 @@ rules:
   docs-removal-instructions: done
   entity-event-setup:
     status: exempt
-    comment: No entities yet.
-  entity-unique-id:
-    status: exempt
-    comment: No entities yet.
-  has-entity-name:
-    status: exempt
-    comment: No entities yet.
+    comment: Entities only read the coordinator; they subscribe to no event.
+  entity-unique-id: done
+  has-entity-name: done
   runtime-data: done
   test-before-configure: done
   test-before-setup: done
@@ -30,14 +26,10 @@ rules:
   config-entry-unloading: done
   docs-configuration-parameters: done
   docs-installation-parameters: done
-  entity-unavailable:
-    status: exempt
-    comment: No entities yet.
+  entity-unavailable: done
   integration-owner: done
   log-when-unavailable: done
-  parallel-updates:
-    status: exempt
-    comment: No platforms yet.
+  parallel-updates: done
   reauthentication-flow:
     status: exempt
     comment: >-
@@ -47,9 +39,7 @@ rules:
   test-coverage: done
 
   # Gold
-  devices:
-    status: exempt
-    comment: No entities yet.
+  devices: done
   diagnostics: done
   discovery:
     status: exempt
@@ -63,33 +53,21 @@ rules:
   docs-supported-devices:
     status: exempt
     comment: A service, not a device integration.
-  docs-supported-functions: todo
+  docs-supported-functions: done
   docs-troubleshooting: done
   docs-use-cases: done
-  dynamic-devices:
-    status: exempt
-    comment: No devices yet.
-  entity-category:
-    status: exempt
-    comment: No entities yet.
-  entity-device-class:
-    status: exempt
-    comment: No entities yet.
+  dynamic-devices: done
+  entity-category: done
+  entity-device-class: done
   entity-disabled-by-default:
     status: exempt
-    comment: No entities yet.
-  entity-translations:
-    status: exempt
-    comment: No entities yet.
+    comment: Every sensor answers a question users set up on purpose.
+  entity-translations: done
   exception-translations: done
-  icon-translations:
-    status: exempt
-    comment: No entities yet.
+  icon-translations: done
   reconfiguration-flow: done
   repair-issues: done
-  stale-devices:
-    status: exempt
-    comment: No devices yet.
+  stale-devices: done
 
   # Platinum
   async-dependency: done

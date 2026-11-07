@@ -112,6 +112,7 @@ class ActualCost:
 
     variable: float
     fixed: float
+    energy: float
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -153,13 +154,15 @@ def cost_actual(
             (contract for contract in contracts if contract.active_on(day)), None
         )
         if active is None:
-            costs[hour.start] = ActualCost(variable=0.0, fixed=0.0)
+            costs[hour.start] = ActualCost(variable=0.0, fixed=0.0, energy=0.0)
             continue
         result = costed[active.uid]
         cost = result.costs.get(hour.start)
         if cost is None:
             return ActualCosted(costs=costs, waiting=result.waiting)
         costs[hour.start] = ActualCost(
-            variable=sum(cost.variable.values()), fixed=cost.fixed
+            variable=sum(cost.variable.values()),
+            fixed=cost.fixed,
+            energy=sum(cost.energy.values()),
         )
     return ActualCosted(costs=costs)

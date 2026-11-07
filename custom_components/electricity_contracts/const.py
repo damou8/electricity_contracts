@@ -13,9 +13,11 @@ CONF_RTE_CLIENT_ID: Final = "rte_client_id"
 CONF_RTE_CLIENT_SECRET: Final = "rte_client_secret"  # noqa: S105 - a key
 
 SERVICE_RECOMPUTE: Final = "recompute"
+SERVICE_COMPARE: Final = "compare"
 
 SUBENTRY_CONTRACT: Final = "contract"
 SUBENTRY_PRICE_PERIOD: Final = "price_period"
+SUBENTRY_COMPARISON: Final = "comparison"
 
 CONF_UID: Final = "uid"
 CONF_KIND: Final = "kind"
@@ -31,6 +33,9 @@ CONF_START: Final = "start"
 CONF_END: Final = "end"
 CONF_FIXED_PER_YEAR: Final = "fixed_per_year"
 CONF_PRICES: Final = "prices"
+
+CONF_WINDOW: Final = "window"
+CONF_CONTRACTS: Final = "contracts"
 
 PRICING_OFFICIAL: Final = "official"
 PRICING_MANUAL: Final = "manual"

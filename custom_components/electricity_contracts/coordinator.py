@@ -32,6 +32,13 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from .comparison import (
+    Comparison,
+    async_compare,
+    async_wait_for_recorder,
+    day_start,
+    window_days,
+)
 from .const import (
     CONF_RTE_CLIENT_ID,
     CONF_RTE_CLIENT_SECRET,
@@ -46,7 +53,7 @@ from .const import (
     TOMORROW_PUBLISHED,
     TOMORROW_RETRY_MINUTES,
 )
-from .data import contracts
+from .data import Contract, active_contract, comparisons, contracts
 from .statistics import CostingStatus, SeriesStatus, StatisticsWriter
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,11 +75,25 @@ class SourcesData:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Summary:
+    """The actual cost at a glance."""
+
+    last_day: date | None
+    """Last day costed whole under the contracts in force."""
+    last_day_cost: float | None
+    month_price: float | None
+    """Actual cost per kWh over the month of the last day."""
+    current_contract: str | None
+
+
+@dataclass(frozen=True, kw_only=True)
 class ElectricityContractsData:
-    """The sources and how far the statistics were written."""
+    """The sources, how far the statistics were written, and their totals."""
 
     sources: SourcesData
     costing: CostingStatus
+    summary: Summary
+    comparisons: dict[str, Comparison]
 
 
 def _prices_key(kind: ContractKind, kva: int) -> str:
@@ -310,7 +331,105 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         costing = await self.costing.async_update(
             sources.official_prices, sources.calendar
         )
-        return ElectricityContractsData(sources=sources, costing=costing)
+        await async_wait_for_recorder(self.hass)
+        entry_contracts = contracts(self.config_entry)
+        self._update_price_issues(costing, entry_contracts)
+        today = dt_util.now(FRANCE_TIME_ZONE).date()
+        compared: dict[str, Comparison] = {}
+        for config in comparisons(self.config_entry):
+            first, last = window_days(config.window, today, config.start, config.end)
+            compared[config.subentry_id] = await async_compare(
+                self.hass,
+                writer=self.costing,
+                status=costing,
+                contracts=config.select(entry_contracts),
+                start=day_start(first),
+                end=day_start(last + timedelta(days=1)),
+            )
+        return ElectricityContractsData(
+            sources=sources,
+            costing=costing,
+            summary=await self._async_summary(costing, entry_contracts, today),
+            comparisons=compared,
+        )
+
+    async def _async_summary(
+        self, costing: CostingStatus, entry_contracts: list[Contract], today: date
+    ) -> Summary:
+        current = active_contract(entry_contracts, today)
+        actual = costing.actual
+        last_day = None
+        if actual is not None and actual.last_hour is not None:
+            end = (actual.last_hour + timedelta(hours=1)).astimezone(FRANCE_TIME_ZONE)
+            last_day = end.date() - timedelta(days=1)
+            if costing.first_hour is None or day_start(last_day) < costing.first_hour:
+                last_day = None
+        if last_day is None:
+            return Summary(
+                last_day=None,
+                last_day_cost=None,
+                month_price=None,
+                current_contract=current.name if current else None,
+            )
+        day = await async_compare(
+            self.hass,
+            writer=self.costing,
+            status=costing,
+            contracts=[],
+            start=day_start(last_day),
+            end=day_start(last_day + timedelta(days=1)),
+        )
+        month = await async_compare(
+            self.hass,
+            writer=self.costing,
+            status=costing,
+            contracts=[],
+            start=day_start(last_day.replace(day=1)),
+            end=day_start(last_day + timedelta(days=1)),
+        )
+        assert day.actual is not None
+        assert month.actual is not None
+        return Summary(
+            last_day=last_day,
+            last_day_cost=day.actual.total,
+            month_price=month.actual.average_price,
+            current_contract=current.name if current else None,
+        )
+
+    def _update_price_issues(
+        self, costing: CostingStatus, entry_contracts: list[Contract]
+    ) -> None:
+        """Raise an issue for each contract waiting for a price, clear the others."""
+        prefix = f"missing_price_{self.config_entry.entry_id}_"
+        wanted: dict[str, tuple[Contract, date]] = {}
+        for contract in entry_contracts:
+            status = costing.contracts.get(contract.uid)
+            if status and status.waiting and status.waiting.reason == "price":
+                wanted[f"{prefix}{contract.uid}"] = (contract, status.waiting.day)
+        registry = ir.async_get(self.hass)
+        for domain, issue_id in list(registry.issues):
+            if (
+                domain == DOMAIN
+                and issue_id.startswith(prefix)
+                and issue_id not in wanted
+            ):
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        for issue_id, (contract, day) in wanted.items():
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=(
+                    "missing_price_official" if contract.official else "missing_price"
+                ),
+                translation_placeholders={
+                    "contract": contract.name,
+                    "day": day.isoformat(),
+                    "kva": str(contract.kva or ""),
+                },
+            )
 
     async def async_recompute(self) -> None:
         """Clear and write every statistic again."""
@@ -534,3 +653,7 @@ def async_delete_issues(hass: HomeAssistant, entry_id: str) -> None:
         f"{SOURCE_PRICES}_unavailable",
     ):
         ir.async_delete_issue(hass, DOMAIN, f"{prefix}_{entry_id}")
+    prefix = f"missing_price_{entry_id}_"
+    for domain, issue_id in list(ir.async_get(hass).issues):
+        if domain == DOMAIN and issue_id.startswith(prefix):
+            ir.async_delete_issue(hass, DOMAIN, issue_id)

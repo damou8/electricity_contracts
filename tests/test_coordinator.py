@@ -134,9 +134,10 @@ async def test_hourly_schedule(
     for _ in range(3):
         freezer.tick(timedelta(hours=1))
         async_fire_time_changed(hass)
-        # Costing waits for the recorder's own executor.
+        # Scheduled refreshes run as background tasks, and wait for the recorder.
+        await hass.async_block_till_done(wait_background_tasks=True)
         await async_wait_recording_done(hass)
-        await hass.async_block_till_done()
+        await hass.async_block_till_done(wait_background_tasks=True)
     # 13:00 in Paris: tomorrow's color has been fetched by the hourly update.
     assert calls(sources)[-1] == (TODAY, TOMORROW)
 

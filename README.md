@@ -12,7 +12,7 @@ Elle lit la consommation horaire déjà présente dans Home Assistant, par exemp
 
 Le calcul est fait par la bibliothèque [elec-tariffs](https://github.com/damou8/elec-tariffs).
 
-> **État : en développement.** Les statistiques de coût sont écrites. Les capteurs, les comparaisons sur une période et la projection arrivent dans les prochaines versions.
+> **État : en développement.** Les statistiques de coût, les comparaisons et leurs capteurs sont en place. La projection en fin de période et le compteur des jours Tempo restants arrivent dans la prochaine version.
 
 ## Installation
 
@@ -62,6 +62,35 @@ Les couleurs Tempo viennent du calendrier public de RTE, sans compte. S'il ne fo
 3. Copiez son ID client et son secret.
 
 Les identifiants sont vérifiés à l'enregistrement. Laissez les deux champs vides pour n'utiliser que le calendrier public.
+
+### Comparaisons
+
+Depuis le menu de l'entrée, ajoutez une **comparaison** :
+- un nom ;
+- une période : 12 derniers mois, année en cours, mois en cours, saison Tempo (septembre à août), ou d'un jour à un autre ;
+- les contrats comparés (tous si vous n'en choisissez aucun).
+
+Les contrats sont comparés sur les mêmes heures : la période s'arrête à la dernière heure valorisée pour tous, et commence au plus tôt à la première heure mesurée.
+
+Chaque comparaison a son appareil, avec :
+
+| Capteur | Valeur |
+| --- | --- |
+| Coût *contrat* | Ce qu'aurait coûté le contrat sur la période (énergie et abonnement). Les attributs donnent les kWh, la part énergie, l'abonnement et les heures comparées. |
+| Prix au kWh *contrat* | Coût total divisé par l'énergie. |
+| Meilleur contrat | Le contrat le moins cher. |
+| Économie possible | Ce que le meilleur contrat aurait économisé sur votre coût réel. |
+
+## Capteurs de la source
+
+| Capteur | Valeur |
+| --- | --- |
+| Coût réel du dernier jour | Coût du dernier jour valorisé en entier selon le contrat en vigueur (attribut `day`). |
+| Prix réel du mois | Coût réel par kWh sur le mois de ce dernier jour. |
+| Contrat actuel | Le contrat en vigueur aujourd'hui. |
+| Dernière heure de données | La dernière heure lue dans la source (diagnostic). |
+
+Les capteurs de coût réel n'ont de valeur que si un contrat a une période de vigueur.
 
 ## Statistiques
 
@@ -115,6 +144,22 @@ Le coût réel est recalculé quand une période de vigueur change. Tout est rec
 Une heure dont la couleur Tempo ou le prix n'est pas encore connu attend : le calcul reprend dès qu'ils arrivent.
 
 L'action **Electricity Contracts : Recalculer** (`electricity_contracts.recompute`, champ `config_entry_id`) efface et recalcule toutes les statistiques d'une source.
+
+### Action Comparer
+
+L'action `electricity_contracts.compare` renvoie le détail d'une période quelconque, tranche par tranche. Par exemple, dans un script :
+
+```yaml
+- action: electricity_contracts.compare
+  data:
+    config_entry_id: <id de l'entrée>
+    start: "2026-04-01"
+    end: "2026-04-30"
+    contracts: [Tempo, Base]  # facultatif : tous par défaut
+  response_variable: comparaison
+```
+
+La réponse contient, pour chaque contrat, les kWh et le coût de chaque tranche, la part énergie, l'abonnement, le total et le prix au kWh. Elle donne aussi le coût réel, le meilleur contrat et l'économie possible.
 
 ## Mise à jour des données
 
@@ -180,7 +225,7 @@ It reads the hourly consumption already in Home Assistant, for example the `link
 
 The calculation is done by the [elec-tariffs](https://github.com/damou8/elec-tariffs) library.
 
-> **Status: in development.** The cost statistics are written. Sensors, comparisons over a period and the projection come in the next versions.
+> **Status: in development.** Cost statistics, comparisons and their sensors are in place. The end-of-period projection and the count of remaining Tempo days come in the next version.
 
 ### Installation
 
@@ -219,6 +264,29 @@ Periods of one contract can't overlap. Deleting a contract deletes its price per
 3. Copy its client ID and secret.
 
 The credentials are checked when saved.
+
+### Comparisons
+
+From the entry's menu, add a **comparison**:
+- a name;
+- a window: last 12 months, current year, current month, Tempo season (September to August), or from one day to another;
+- the contracts to compare (all if none is chosen).
+
+Contracts are compared over the same hours: the window stops at the last hour costed for all of them, and starts at the earliest at the first measured hour.
+
+Each comparison has its own device, with:
+- the cost of each contract over the window;
+- the price per kWh of each contract;
+- the best contract;
+- the possible saving on your actual cost.
+
+The source's own device has:
+- the actual cost of the last full day;
+- the actual price per kWh this month;
+- the current contract;
+- the last hour of data.
+
+The action `electricity_contracts.compare` (`config_entry_id`, `start`, `end`, optional `contracts`) returns the same comparison for any period, tranche by tranche, as a response.
 
 ### Statistics
 

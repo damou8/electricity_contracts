@@ -5,3 +5,24 @@ recompute:
       selector:
         config_entry:
           integration: electricity_contracts
+compare:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: electricity_contracts
+    start:
+      required: true
+      selector:
+        date:
+    end:
+      required: true
+      selector:
+        date:
+    contracts:
+      required: false
+      example: '["Tempo", "Base"]'
+      selector:
+        text:
+          multiple: true
