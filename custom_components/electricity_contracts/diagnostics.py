@@ -3,6 +3,7 @@
 from typing import Any
 
 from homeassistant.components.diagnostics import REDACTED, async_redact_data
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_RTE_CLIENT_ID, CONF_RTE_CLIENT_SECRET, CONF_STATISTIC_ID
@@ -31,5 +32,10 @@ async def async_get_config_entry_diagnostics(
                 for subentry in entry.subentries.values()
             ],
         },
-        "sources": entry.runtime_data.diagnostics(),
+        # Asked for while the entry is still setting up, or failed to.
+        "sources": (
+            entry.runtime_data.diagnostics()
+            if entry.state is ConfigEntryState.LOADED
+            else None
+        ),
     }

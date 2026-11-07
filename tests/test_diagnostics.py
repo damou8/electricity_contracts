@@ -1,10 +1,13 @@
 """Tests of the diagnostics."""
 
 import json
+from unittest.mock import patch
 
 import pytest
 from homeassistant.components.diagnostics import REDACTED
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.recorder import get_instance
 from pytest_homeassistant_custom_component.components.diagnostics import (
     get_diagnostics_for_config_entry,
 )
@@ -15,7 +18,7 @@ from custom_components.electricity_contracts.const import (
     CONF_RTE_CLIENT_SECRET,
 )
 
-from .conftest import MANUAL_CONTRACT, TEMPO_CONTRACT, make_entry
+from .conftest import MANUAL_CONTRACT, TEMPO_CONTRACT, busy_recorder, make_entry
 
 
 @pytest.mark.usefixtures("statistic", "sources")
@@ -63,3 +66,20 @@ async def test_diagnostics_of_a_waiting_contract(
         "waiting": {"reason": "price", "day": "2026-03-01"},
     }
     assert costing["actual"] is None
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_diagnostics_of_an_entry_not_loaded(
+    hass: HomeAssistant, hass_client: ClientSessionGenerator
+) -> None:
+    entry = make_entry([TEMPO_CONTRACT])
+    entry.add_to_hass(hass)
+    with patch.object(
+        get_instance(hass), "async_get_commit_future", return_value=busy_recorder(hass)
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    result = await get_diagnostics_for_config_entry(hass, hass_client, entry)
+    assert result["sources"] is None
+    assert result["entry"]["title"] == REDACTED
