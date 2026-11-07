@@ -55,21 +55,21 @@ from .costing import (
     Waiting,
     cost_actual,
     cost_contract,
-    expand_rows,
+    hourly_rows,
 )
 from .data import Contract, contracts, format_time_range, manual_prices
 
 _LOGGER = logging.getLogger(__name__)
 
 # Bump to rewrite every statistic after a change in how costs are computed.
-COSTING_VERSION = 1
+COSTING_VERSION = 2
 STATE_VERSION = 1
 ACTUAL = "actual"
 _HOUR = timedelta(hours=1)
 _EPOCH = datetime(2000, 1, 1, tzinfo=UTC)
 # How far before the last hour written to read the source again, so that a daily
-# row or a gap spread over earlier hours is read whole.
-_LOOKBACK = timedelta(days=31)
+# row can be told from an hourly one by the rows around it.
+_LOOKBACK = timedelta(days=2)
 
 _NAMES: Mapping[str, Mapping[str, str]] = {
     "en": {
@@ -531,8 +531,8 @@ class StatisticsWriter:
     ) -> tuple[list[tuple[datetime, float]], tuple[float, float] | None]:
         """Return the source rows (start, kWh) and the last row (start, sum).
 
-        Rows start a while before `after` (from the first row if None): a daily
-        row or a gap is spread over hours that may come before it.
+        Rows start a while before `after` (from the first row if None), so that
+        daily rows can be recognised.
         """
         recorder = get_instance(self.hass)
         metadata = await recorder.async_add_executor_job(
@@ -625,7 +625,7 @@ def _cost_all(
     calendar: DayCalendar,
     with_actual: bool,  # noqa: FBT001 - called through partial
 ) -> tuple[dict[str, Costed], ActualCosted | None]:
-    hours = expand_rows(rows)
+    hours = hourly_rows(rows)
     costed = {item.uid: cost_contract(item, hours, calendar) for item in inputs}
     actual = cost_actual(inputs, costed, hours) if with_actual else None
     return costed, actual

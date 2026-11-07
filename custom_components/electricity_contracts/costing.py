@@ -3,7 +3,6 @@
 Pure functions, without Home Assistant: they run in the executor.
 """
 
-from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -12,7 +11,6 @@ from typing import Literal
 from elec_tariffs import (
     ContractRules,
     DayCalendar,
-    DayShape,
     HourCost,
     MissingColorError,
     MissingPriceError,
@@ -29,9 +27,6 @@ class Hour:
 
     start: datetime
     kwh: float
-
-
-_HOUR = timedelta(hours=1)
 
 
 def _next_midnight(start: datetime) -> datetime:
@@ -63,56 +58,17 @@ def _daily_rows(rows: Sequence[tuple[datetime, float]]) -> list[bool]:
     return daily
 
 
-def _day_shape(
-    rows: Sequence[tuple[datetime, float]], daily: Sequence[bool]
-) -> DayShape:
-    """Learn how days split between hours from the days whose hours are known."""
-    days: dict[date, dict[int, float]] = defaultdict(dict)
-    for (start, kwh), is_daily in zip(rows, daily, strict=True):
-        if not is_daily:
-            local = start.astimezone(FRANCE_TIME_ZONE)
-            days[local.date()][local.hour] = kwh
-    return DayShape.learn(
-        {
-            day: [values[hour] for hour in range(24)]
-            for day, values in days.items()
-            if len(values) == 24  # noqa: PLR2004 - hours in a day
-        }
-    )
+def hourly_rows(rows: Sequence[tuple[datetime, float]]) -> list[Hour]:
+    """Keep the rows (start in UTC, kWh) that hold one hour.
 
-
-def expand_rows(rows: Sequence[tuple[datetime, float]]) -> list[Hour]:
-    """Turn statistic rows (start in UTC, kWh since the row before) into hours.
-
-    A daily row is spread over its day with a shape learned from the days whose
-    hours are known. A row after missing hours is spread evenly over them.
+    Daily rows aren't costed: how their consumption splits between off-peak and
+    peak hours isn't known.
     """
-    daily = _daily_rows(rows)
-    shape = _day_shape(rows, daily) if any(daily) else DayShape.flat()
-    hours: list[Hour] = []
-    covered_until: datetime | None = None
-    for (start, kwh), is_daily in zip(rows, daily, strict=True):
-        if is_daily:
-            end = _next_midnight(start)
-            starts = [start + _HOUR * index for index in range((end - start) // _HOUR)]
-            values = shape.spread(
-                [item.astimezone(FRANCE_TIME_ZONE) for item in starts], kwh
-            )
-            hours.extend(
-                Hour(start=item, kwh=value)
-                for item, value in zip(starts, values, strict=True)
-            )
-            covered_until = end
-            continue
-        first = start
-        if covered_until is not None and covered_until < start:
-            first = covered_until
-        count = (start - first) // _HOUR + 1
-        hours.extend(
-            Hour(start=first + _HOUR * index, kwh=kwh / count) for index in range(count)
-        )
-        covered_until = start + _HOUR
-    return hours
+    return [
+        Hour(start=start, kwh=kwh)
+        for (start, kwh), is_daily in zip(rows, _daily_rows(rows), strict=True)
+        if not is_daily
+    ]
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -144,6 +144,7 @@ async def add_statistic(
     has_sum: bool = True,
     first: int = 0,
     wh: float = 500.0,
+    step: timedelta = timedelta(hours=1),
 ) -> None:
     """Import an hourly statistic like the Linky app does."""
     source = statistic_id.split(":", 1)[0]
@@ -158,7 +159,7 @@ async def add_statistic(
     )
     rows = [
         StatisticData(
-            start=FIRST_HOUR + timedelta(hours=hour),
+            start=FIRST_HOUR + step * hour,
             state=wh,
             sum=wh * (hour + 1),
         )

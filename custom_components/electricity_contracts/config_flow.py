@@ -83,6 +83,9 @@ from .data import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Rows at least 23 hours apart (a day, or a day when the clocks change).
+_DAILY_SECONDS = 23 * 3600
+
 STATISTIC_SCHEMA = vol.Schema({vol.Required(CONF_STATISTIC_ID): StatisticSelector()})
 
 CREDENTIALS_SCHEMA = vol.Schema(
@@ -130,11 +133,15 @@ async def async_validate_statistic(hass: HomeAssistant, statistic_id: str) -> st
         raise InvalidStatisticError(reason="statistic_no_sum")
     last = await recorder.async_add_executor_job(
         lambda: get_last_statistics(
-            hass, 1, statistic_id, convert_units=False, types={"sum"}
+            hass, 2, statistic_id, convert_units=False, types={"sum"}
         )
     )
-    if not last.get(statistic_id):
+    rows = last.get(statistic_id)
+    if not rows:
         raise InvalidStatisticError(reason="statistic_no_data")
+    if len(rows) == 2 and rows[0]["start"] - rows[1]["start"] >= _DAILY_SECONDS:  # noqa: PLR2004
+        # Only daily values: they can't be split between off-peak and peak hours.
+        raise InvalidStatisticError(reason="statistic_daily")
     return meta["name"] or statistic_id
 
 

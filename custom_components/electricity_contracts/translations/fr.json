@@ -26,7 +26,8 @@
       "statistic_not_found": "Cette statistique n'existe pas.",
       "statistic_not_energy": "Cette statistique n'est pas une énergie (Wh, kWh…).",
       "statistic_no_sum": "Cette statistique n'a pas de total cumulé : choisissez une statistique de consommation, comme celle qu'importe l'App Linky.",
-      "statistic_no_data": "Cette statistique n'a encore aucune donnée."
+      "statistic_no_data": "Cette statistique n'a encore aucune donnée.",
+      "statistic_daily": "Cette statistique n'a que des valeurs quotidiennes : elles ne peuvent pas être réparties entre heures creuses et heures pleines. Activez la courbe de charge (consommation horaire) dans votre espace Enedis et dans l'App Linky."
     },
     "abort": {
       "already_configured": "Cette statistique est déjà configurée."

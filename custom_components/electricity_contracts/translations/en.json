@@ -26,7 +26,8 @@
       "statistic_not_found": "This statistic doesn't exist.",
       "statistic_not_energy": "This statistic isn't an energy (Wh, kWh…).",
       "statistic_no_sum": "This statistic has no running total: choose a consumption statistic, like the one the Linky app imports.",
-      "statistic_no_data": "This statistic has no data yet."
+      "statistic_no_data": "This statistic has no data yet.",
+      "statistic_daily": "This statistic only has daily values: they can't be split between off-peak and peak hours. Enable the load curve (hourly consumption) in your Enedis account and in the Linky app."
     },
     "abort": {
       "already_configured": "This statistic is already configured."
