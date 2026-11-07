@@ -61,22 +61,42 @@ TEMPO_PERIODS = [
         start=date(2026, 2, 1),
         end=date(2026, 7, 31),
         fixed_per_year=187.41,
-        prices={Tranche.BLUE_HC: 0.1325, Tranche.RED_HP: 0.706},
+        prices={
+            Tranche.BLUE_HC: 0.1325,
+            Tranche.BLUE_HP: 0.1612,
+            Tranche.WHITE_HC: 0.1499,
+            Tranche.WHITE_HP: 0.1871,
+            Tranche.RED_HC: 0.1575,
+            Tranche.RED_HP: 0.706,
+        },
     ),
     PricePeriod(
         start=date(2026, 8, 1),
         end=None,
         fixed_per_year=189.98,
-        prices={Tranche.BLUE_HC: 0.1356, Tranche.RED_HP: 0.7295},
+        prices={
+            Tranche.BLUE_HC: 0.1356,
+            Tranche.BLUE_HP: 0.1654,
+            Tranche.WHITE_HC: 0.1536,
+            Tranche.WHITE_HP: 0.1921,
+            Tranche.RED_HC: 0.1615,
+            Tranche.RED_HP: 0.7295,
+        },
     ),
 ]
 BASE_PERIODS = [
+    PricePeriod(
+        start=date(2026, 2, 1),
+        end=date(2026, 7, 31),
+        fixed_per_year=188.5,
+        prices={Tranche.BASE: 0.1952},
+    ),
     PricePeriod(
         start=date(2026, 8, 1),
         end=None,
         fixed_per_year=190.81,
         prices={Tranche.BASE: 0.2001},
-    )
+    ),
 ]
 
 
@@ -122,6 +142,8 @@ async def add_statistic(
     hours: int = 48,
     unit: str = "Wh",
     has_sum: bool = True,
+    first: int = 0,
+    wh: float = 500.0,
 ) -> None:
     """Import an hourly statistic like the Linky app does."""
     source = statistic_id.split(":", 1)[0]
@@ -131,16 +153,16 @@ async def add_statistic(
         name=f"Linky {statistic_id.split(':', 1)[1]}",
         source=source,
         statistic_id=statistic_id,
-        unit_class=None,
+        unit_class="energy" if unit == "Wh" else None,
         unit_of_measurement=unit,
     )
     rows = [
         StatisticData(
             start=FIRST_HOUR + timedelta(hours=hour),
-            state=500.0,
-            sum=500.0 * (hour + 1),
+            state=wh,
+            sum=wh * (hour + 1),
         )
-        for hour in range(hours)
+        for hour in range(first, first + hours)
     ]
     async_add_external_statistics(hass, metadata, rows)
     await async_wait_recording_done(hass)

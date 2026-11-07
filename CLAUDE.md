@@ -24,6 +24,12 @@ To test against an unreleased library, `pip install -e ../../elec-tariffs --no-d
 - Translations: `en.json` and `fr.json` together. French uses "vous". No `<…>` in strings (hassfest reads them as HTML).
 - Tests mock the library classes where the integration imports them (`tests/conftest.py`, `sources` fixture) and run at a frozen time (7 November 2026, 10:00 in Paris; the test time zone is US/Pacific).
 
+## Statistics
+
+- `costing.py` is pure (runs in the executor): it turns source rows into hours (daily Linky rows are spread with the library's `DayShape`, gaps evenly) and costs them.
+- `statistics.py` reads where each series stopped, clears what is out of date (fingerprints in the `<entry_id>.statistics` store) and appends rows. Bump `COSTING_VERSION` when the way costs are computed changes, so every statistic is written again.
+- Recorder jobs run on the recorder's own executor: in tests, `await async_wait_recording_done(hass)` before reading statistics or asserting on a refresh triggered by time.
+
 ## Privacy
 
 The Linky statistic ID and the entry title contain the meter's PRM number. Never commit real statistics or diagnostics; tests use `linky:00000000000000`. Diagnostics redact the statistic ID, the title and the RTE credentials.
