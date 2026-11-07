@@ -36,7 +36,7 @@ Depuis le menu de l'entrée, **Ajouter un contrat** :
 
 | Champ | Signification |
 | --- | --- |
-| Nom | Texte libre, comme « Tempo » ou « Offre X ». |
+| Nom | Texte libre, comme « Tempo » ou « Offre X ». Deux contrats ne peuvent pas porter le même nom. |
 | Type | Base, HP/HC ou Tempo. |
 | Prix | Tarifs réglementés (téléchargés avec leur historique), ou prix que vous fixez vous-même. |
 | Puissance souscrite | Pour les tarifs réglementés : les kVA du contrat. |
@@ -79,7 +79,7 @@ Chaque comparaison a son appareil, avec :
 | Coût *contrat* | Ce qu'aurait coûté le contrat sur la période (énergie et abonnement). Les attributs donnent les kWh, la part énergie, l'abonnement et les heures comparées. |
 | Prix au kWh *contrat* | Coût total divisé par l'énergie. |
 | Meilleur contrat | Le contrat le moins cher. |
-| Économie possible | Ce que le meilleur contrat aurait économisé sur votre coût réel. |
+| Économie possible | Ce que le meilleur contrat aurait économisé sur votre coût réel. Vide si aucun contrat n'était en vigueur pendant une partie de la fenêtre. |
 
 ## Capteurs de la source
 
@@ -243,7 +243,7 @@ Home Assistant 2026.10 or later. The integration needs the recorder.
 
 | Field | Meaning |
 | --- | --- |
-| Name | Free text, like "Tempo" or "Offer X". |
+| Name | Free text, like "Tempo" or "Offer X". Two contracts can't have the same name. |
 | Kind | Base, HP/HC or Tempo. |
 | Prices | Regulated prices (downloaded with their history), or prices you set yourself. |
 | Subscribed power | For regulated prices: the kVA of the contract. |
@@ -278,7 +278,7 @@ Each comparison has its own device, with:
 - the cost of each contract over the window;
 - the price per kWh of each contract;
 - the best contract;
-- the possible saving on your actual cost.
+- the possible saving on your actual cost (empty if no contract was in force during part of the window).
 
 The source's own device has:
 - the actual cost of the last full day;

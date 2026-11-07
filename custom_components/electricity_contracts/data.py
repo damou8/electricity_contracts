@@ -34,6 +34,7 @@ from .const import (
     SUBENTRY_CONTRACT,
     SUBENTRY_PRICE_PERIOD,
 )
+from .costing import in_force
 
 
 def parse_time_range(value: str) -> TimeRange:
@@ -179,9 +180,7 @@ def active_contract(entry_contracts: list[Contract], day: date) -> Contract | No
         (
             contract
             for contract in entry_contracts
-            if contract.active_from is not None
-            and contract.active_from <= day
-            and (contract.active_to is None or day <= contract.active_to)
+            if in_force(day, contract.active_from, contract.active_to)
         ),
         None,
     )

@@ -285,6 +285,18 @@ class ContractSubentryFlow(ConfigSubentryFlow):
         self._title = ""
         self._data: dict[str, Any] = {}
 
+    def _name_error(self, uid: str | None) -> str | None:
+        """Return why the name can't be used: the compare action selects by name."""
+        if not self._title:
+            return "empty_name"
+        name = self._title.casefold()
+        if any(
+            contract.name.casefold() == name and contract.uid != uid
+            for contract in contracts(self._get_entry())
+        ):
+            return "duplicate_name"
+        return None
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
@@ -292,14 +304,14 @@ class ContractSubentryFlow(ConfigSubentryFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             self._title = user_input[CONF_NAME].strip()
-            if self._title:
+            if not (error := self._name_error(None)):
                 self._data = {
                     CONF_UID: self._new_uid(),
                     CONF_KIND: user_input[CONF_KIND],
                     CONF_PRICING: user_input[CONF_PRICING],
                 }
                 return await self.async_step_details()
-            errors[CONF_NAME] = "empty_name"
+            errors[CONF_NAME] = error
         schema = vol.Schema(
             {
                 # pylint: disable-next=home-assistant-config-flow-name-field
@@ -328,10 +340,10 @@ class ContractSubentryFlow(ConfigSubentryFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             self._title = user_input[CONF_NAME].strip()
-            if self._title:
+            if not (error := self._name_error(subentry.data[CONF_UID])):
                 self._data = {**subentry.data, CONF_PRICING: user_input[CONF_PRICING]}
                 return await self.async_step_details()
-            errors[CONF_NAME] = "empty_name"
+            errors[CONF_NAME] = error
         schema = vol.Schema(
             {
                 # pylint: disable-next=home-assistant-config-flow-name-field

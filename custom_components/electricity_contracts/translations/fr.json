@@ -96,6 +96,7 @@
         }
       },
       "error": {
+        "duplicate_name": "Un autre contrat porte déjà ce nom.",
         "empty_name": "Saisissez un nom.",
         "invalid_off_peak": "Saisissez au moins une plage comme 22:00-06:00, à l'heure ou à la demi-heure.",
         "active_to_without_from": "Saisissez aussi le premier jour.",

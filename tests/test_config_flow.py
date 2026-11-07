@@ -439,6 +439,29 @@ async def test_contract_needs_a_name(hass: HomeAssistant) -> None:
     assert result["errors"] == {CONF_NAME: "empty_name"}
 
 
+async def test_contract_names_are_unique(hass: HomeAssistant) -> None:
+    entry = make_entry([BASE_CONTRACT, TEMPO_CONTRACT])
+    entry.add_to_hass(hass)
+    result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_CONTRACT)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {CONF_NAME: " base ", CONF_KIND: "base", CONF_PRICING: PRICING_MANUAL},
+    )
+    assert result["errors"] == {CONF_NAME: "duplicate_name"}
+    base, tempo = entry.subentries.values()
+    result = await entry.start_subentry_reconfigure_flow(hass, tempo.subentry_id)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_NAME: "Base", CONF_PRICING: PRICING_OFFICIAL}
+    )
+    assert result["errors"] == {CONF_NAME: "duplicate_name"}
+    # A contract keeps its own name.
+    result = await entry.start_subentry_reconfigure_flow(hass, base.subentry_id)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_NAME: "Base", CONF_PRICING: PRICING_OFFICIAL}
+    )
+    assert result["step_id"] == "details"
+
+
 async def test_contract_before_another_one(hass: HomeAssistant) -> None:
     entry = make_entry([TEMPO_CONTRACT])
     entry.add_to_hass(hass)

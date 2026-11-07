@@ -34,6 +34,8 @@ WINDOWS: Final = (
 
 _HOUR = timedelta(hours=1)
 _RECORDER_TIMEOUT = 60
+# kWh: the same hours summed through different statistics.
+_ENERGY_TOLERANCE = 0.001
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -95,9 +97,17 @@ class Comparison:
 
     @property
     def saving(self) -> float | None:
-        """What the best contract would have saved on the contracts in force."""
+        """What the best contract would have saved on the contracts in force.
+
+        None unless a contract was in force at every hour: hours without one cost
+        nothing in the actual totals.
+        """
         best = self.best
-        if best is None or self.actual is None or not self.actual.energy:
+        if (
+            best is None
+            or self.actual is None
+            or abs(self.actual.energy - best.energy) > _ENERGY_TOLERANCE
+        ):
             return None
         # To the cent: equal totals must give 0, not a rounding error.
         return round(self.actual.total - best.total, 2) + 0.0
@@ -135,13 +145,15 @@ async def async_wait_for_recorder(hass: HomeAssistant) -> None:
     """Wait until the recorder has written what was queued, at most a minute.
 
     Statistics are imported by the recorder's thread; reading them right after
-    queuing an import would miss the new rows.
+    queuing an import would miss the new rows. The recorder runs its queue in
+    order, so one commit after the imports is enough: waiting until nothing is
+    pending would never end while events keep coming.
     """
-    recorder = get_instance(hass)
+    if (future := get_instance(hass).async_get_commit_future()) is None:
+        return
     try:
         async with asyncio.timeout(_RECORDER_TIMEOUT):
-            while future := recorder.async_get_commit_future():
-                await future
+            await future
     except TimeoutError:
         _LOGGER.debug("The recorder is still busy; totals may lag behind")
 

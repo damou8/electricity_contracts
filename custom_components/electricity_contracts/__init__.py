@@ -84,7 +84,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 translation_domain=DOMAIN, translation_key="end_before_start"
             )
         selected = contracts(entry)
-        if names := call.data.get(ATTR_CONTRACTS):
+        if names := list(dict.fromkeys(call.data.get(ATTR_CONTRACTS, []))):
             known = {contract.name: contract for contract in selected}
             if unknown := [name for name in names if name not in known]:
                 raise ServiceValidationError(

@@ -79,6 +79,18 @@ class Waiting:
     day: date
 
 
+def in_force(day: date, active_from: date | None, active_to: date | None) -> bool:
+    """Tell whether a contract in force from `active_from` to `active_to` was on `day`.
+
+    Without `active_from`, the contract is only compared.
+    """
+    return (
+        active_from is not None
+        and active_from <= day
+        and (active_to is None or day <= active_to)
+    )
+
+
 @dataclass(frozen=True, kw_only=True)
 class ContractInput:
     """What costing a contract needs."""
@@ -91,11 +103,7 @@ class ContractInput:
 
     def active_on(self, day: date) -> bool:
         """Tell whether the contract was in force on `day`."""
-        return (
-            self.active_from is not None
-            and self.active_from <= day
-            and (self.active_to is None or day <= self.active_to)
-        )
+        return in_force(day, self.active_from, self.active_to)
 
 
 @dataclass(frozen=True, kw_only=True)

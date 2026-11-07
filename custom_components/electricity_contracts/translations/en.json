@@ -96,6 +96,7 @@
         }
       },
       "error": {
+        "duplicate_name": "Another contract already has this name.",
         "empty_name": "Enter a name.",
         "invalid_off_peak": "Enter at least one range like 22:00-06:00, on whole or half hours.",
         "active_to_without_from": "Enter the first day too.",

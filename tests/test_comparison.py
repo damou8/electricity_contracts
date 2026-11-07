@@ -195,6 +195,35 @@ async def test_saving_on_the_contract_in_force(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.usefixtures("statistic", "sources")
+async def test_no_saving_without_a_contract_in_force_at_every_hour(
+    hass: HomeAssistant,
+) -> None:
+    # Base is in force from 2 March: 1 March costs nothing in the actual totals.
+    base = contract_subentry(
+        "Base", uid="base0001", kind=ContractKind.BASE, active_from="2026-03-02"
+    )
+    tempo = contract_subentry("Tempo", uid="tempo001", kind=ContractKind.TEMPO)
+    entry = await setup_entry(
+        hass, make_entry([base, tempo, comparison_subentry("March")])
+    )
+    subentry_id = comparison_id(entry)
+    assert state(hass, f"{subentry_id}_best_contract").state != "unknown"
+    assert state(hass, f"{subentry_id}_saving").state == "unknown"
+    second_day: Any = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_COMPARE,
+        {
+            ATTR_CONFIG_ENTRY_ID: entry.entry_id,
+            "start": "2026-03-02",
+            "end": "2026-03-02",
+        },
+        blocking=True,
+        return_response=True,
+    )
+    assert second_day["saving"] is not None
+
+
+@pytest.mark.usefixtures("statistic", "sources")
 async def test_source_sensors(hass: HomeAssistant) -> None:
     entry = await setup_entry(hass, make_entry([TEMPO_CONTRACT]))
     # The last full day in Paris is 2 March: from 1 March 23:00 to 2 March 23:00 UTC.
@@ -229,6 +258,20 @@ async def test_source_sensors_without_contract_in_force(hass: HomeAssistant) -> 
 
 
 @pytest.mark.usefixtures("statistic", "sources")
+async def test_current_contract_after_it_ended(hass: HomeAssistant) -> None:
+    ended = contract_subentry(
+        "Tempo",
+        uid="tempo001",
+        kind=ContractKind.TEMPO,
+        active_from="2024-01-01",
+        active_to="2026-10-31",
+    )
+    entry = await setup_entry(hass, make_entry([ended]))
+    assert state(hass, f"{entry.entry_id}_current_contract").state == "unknown"
+    assert state(hass, f"{entry.entry_id}_last_day_cost").state != "unknown"
+
+
+@pytest.mark.usefixtures("statistic", "sources")
 async def test_window_without_data(hass: HomeAssistant) -> None:
     entry = await setup_entry(
         hass,
@@ -237,7 +280,11 @@ async def test_window_without_data(hass: HomeAssistant) -> None:
         ),
     )
     subentry_id = comparison_id(entry)
-    assert float(state(hass, f"{subentry_id}_tempo001_cost").state) == 0
+    cost = state(hass, f"{subentry_id}_tempo001_cost")
+    assert float(cost.state) == 0
+    # The season starts after the data: the window is empty, not reversed.
+    assert cost.attributes["from"] == cost.attributes["to"]
+    assert cost.attributes["from"] == "2026-09-01T00:00:00+02:00"
     assert state(hass, f"{subentry_id}_tempo001_price").state == "unknown"
     assert state(hass, f"{subentry_id}_best_contract").state == "unknown"
     assert state(hass, f"{subentry_id}_saving").state == "unknown"
@@ -313,7 +360,7 @@ async def test_compare_action(hass: HomeAssistant) -> None:
             ATTR_CONFIG_ENTRY_ID: entry.entry_id,
             "start": "2026-03-01",
             "end": "2026-03-01",
-            "contracts": ["Base"],
+            "contracts": ["Base", "Base"],
         },
         blocking=True,
         return_response=True,
@@ -410,6 +457,18 @@ async def test_missing_manual_price_repair(hass: HomeAssistant) -> None:
     hass.config_entries.async_remove_subentry(entry, contract.subentry_id)
     await hass.async_block_till_done()
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_ignored_repair_stays_ignored(hass: HomeAssistant) -> None:
+    entry = await setup_entry(hass, make_entry([MANUAL_CONTRACT]))
+    issue_id = f"missing_price_{entry.entry_id}_offer001"
+    ir.async_ignore_issue(hass, DOMAIN, issue_id, ignore=True)
+    await entry.runtime_data.async_refresh()
+    await async_wait_recording_done(hass)
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.dismissed_version is not None
 
 
 @pytest.mark.usefixtures("statistic")
