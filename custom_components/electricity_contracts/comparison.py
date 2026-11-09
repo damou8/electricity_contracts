@@ -4,12 +4,16 @@ import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from elec_tariffs import Tranche
-from homeassistant.components.recorder.statistics import statistic_during_period
+from homeassistant.components.recorder.statistics import (
+    statistic_during_period,
+    statistics_during_period,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.recorder import get_instance
+from homeassistant.util import dt as dt_util
 
 from .const import FRANCE_TIME_ZONE
 from .data import Contract
@@ -86,14 +90,16 @@ class Comparison:
         nothing in the actual totals.
         """
         best = self.best
-        if (
-            best is None
-            or self.actual is None
-            or abs(self.actual.energy - best.energy) > _ENERGY_TOLERANCE
-        ):
+        if best is None or not covers(self.actual, best.energy):
             return None
+        assert self.actual is not None
         # To the cent: equal totals must give 0, not a rounding error.
         return round(self.actual.total - best.total, 2) + 0.0
+
+
+def covers(actual: ActualTotals | None, energy: float) -> bool:
+    """Tell whether a contract was in force at every hour that consumed `energy`."""
+    return actual is not None and abs(actual.energy - energy) <= _ENERGY_TOLERANCE
 
 
 def day_start(day: date) -> datetime:
@@ -121,9 +127,13 @@ async def async_wait_for_recorder(hass: HomeAssistant) -> bool:
     return True
 
 
-def _changes(
+def read_changes(
     hass: HomeAssistant, start: datetime, end: datetime, ids: list[str]
 ) -> dict[str, float]:
+    """Read how much each statistic grew between `start` and `end` (UTC).
+
+    Run it in the recorder's executor.
+    """
     changes: dict[str, float] = {}
     for statistic_id in ids:
         result = statistic_during_period(
@@ -146,6 +156,20 @@ def data_end(status: CostingStatus, contracts: Sequence[Contract]) -> datetime |
     return min(last for last in lasts if last is not None) + _HOUR
 
 
+def narrow_window(
+    status: CostingStatus,
+    contracts: Sequence[Contract],
+    start: datetime,
+    end: datetime,
+) -> tuple[datetime, datetime]:
+    """Narrow a window to the hours every contract has been costed for."""
+    available = data_end(status, contracts)
+    if status.first_hour is not None:
+        start = max(start, status.first_hour)
+    end = min(end, available) if available is not None else start
+    return start, max(end, start)
+
+
 async def async_compare(  # noqa: PLR0913 - the window, the contracts and where to read
     hass: HomeAssistant,
     *,
@@ -161,12 +185,7 @@ async def async_compare(  # noqa: PLR0913 - the window, the contracts and where 
     The window is narrowed to the hours every contract has been costed for, so
     the contracts are compared over the same consumption.
     """
-    available = data_end(status, contracts)
-    if status.first_hour is not None:
-        start = max(start, status.first_hour)
-    end = min(end, available) if available is not None else start
-    end = max(end, start)
-
+    start, end = narrow_window(status, contracts, start, end)
     ids: list[str] = []
     contract_ids = {
         contract.uid: writer.contract_statistics(contract.uid, contract.kind)
@@ -181,7 +200,9 @@ async def async_compare(  # noqa: PLR0913 - the window, the contracts and where 
     if actual_ids is not None:
         ids.extend((actual_ids.variable, actual_ids.fixed, actual_ids.energy))
     changes = (
-        await get_instance(hass).async_add_executor_job(_changes, hass, start, end, ids)
+        await get_instance(hass).async_add_executor_job(
+            read_changes, hass, start, end, ids
+        )
         if end > start
         else dict.fromkeys(ids, 0.0)
     )
@@ -222,11 +243,110 @@ async def async_compare(  # noqa: PLR0913 - the window, the contracts and where 
     return Comparison(start=start, end=end, contracts=totals, actual=actual)
 
 
+type GroupBy = Literal["day", "month"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class Bucket:
+    """What the contracts cost over a day or a month."""
+
+    start: date
+    energy: float
+    contracts: dict[str, float]
+    """Total cost of each contract, by uid."""
+    actual: float | None
+    """Total cost of the contracts in force, None unless one was in force at every
+    hour."""
+
+
+def _bucket(day: date, group_by: GroupBy) -> date:
+    return day.replace(day=1) if group_by == "month" else day
+
+
+def _hourly_changes(
+    hass: HomeAssistant, start: datetime, end: datetime, ids: list[str]
+) -> dict[str, list[tuple[float, float]]]:
+    rows = statistics_during_period(
+        hass, start, end, set(ids), "hour", None, {"change"}
+    )
+    return {
+        statistic_id: [
+            (row["start"], row.get("change") or 0.0)
+            for row in rows.get(statistic_id, [])
+        ]
+        for statistic_id in ids
+    }
+
+
+async def async_series(
+    hass: HomeAssistant,
+    *,
+    writer: StatisticsWriter,
+    comparison: Comparison,
+    group_by: GroupBy,
+) -> list[Bucket]:
+    """Split a comparison into days or months, French time, with none missing."""
+    contracts = [item.contract for item in comparison.contracts]
+    if not contracts or comparison.end <= comparison.start:
+        return []
+    totals = {
+        contract.uid: writer.contract_statistics(contract.uid, contract.kind).total
+        for contract in contracts
+    }
+    # Every contract costs the same consumption.
+    energy_id = writer.contract_statistics(contracts[0].uid, contracts[0].kind).energy
+    ids = [*totals.values(), energy_id]
+    actual_ids = writer.actual_statistics() if comparison.actual is not None else None
+    if actual_ids is not None:
+        ids.extend((actual_ids.variable, actual_ids.fixed, actual_ids.energy))
+    hourly = await get_instance(hass).async_add_executor_job(
+        _hourly_changes, hass, comparison.start, comparison.end, ids
+    )
+
+    first = comparison.start.astimezone(FRANCE_TIME_ZONE).date()
+    last = (comparison.end - _HOUR).astimezone(FRANCE_TIME_ZONE).date()
+    sums: dict[date, dict[str, float]] = {}
+    for offset in range((last - first).days + 1):
+        sums.setdefault(
+            _bucket(first + timedelta(days=offset), group_by), dict.fromkeys(ids, 0.0)
+        )
+    for statistic_id, rows in hourly.items():
+        for hour, change in rows:
+            day = dt_util.utc_from_timestamp(hour).astimezone(FRANCE_TIME_ZONE).date()
+            sums[_bucket(day, group_by)][statistic_id] += change
+
+    buckets: list[Bucket] = []
+    for bucket_start, values in sums.items():
+        actual = (
+            ActualTotals(
+                energy=values[actual_ids.energy],
+                variable=values[actual_ids.variable],
+                fixed=values[actual_ids.fixed],
+            )
+            if actual_ids is not None
+            else None
+        )
+        buckets.append(
+            Bucket(
+                start=bucket_start,
+                energy=values[energy_id],
+                contracts={uid: values[total] for uid, total in totals.items()},
+                actual=(
+                    actual.total
+                    if actual is not None and covers(actual, values[energy_id])
+                    else None
+                ),
+            )
+        )
+    return buckets
+
+
 def comparison_response(comparison: Comparison) -> dict[str, Any]:
     """Return a comparison as the response of the compare action."""
 
     def contract(item: ContractTotals) -> dict[str, Any]:
         return {
+            "id": item.contract.uid,
             "name": item.contract.name,
             "kind": item.contract.kind.value,
             "energy": round(item.energy, 3),

@@ -1,6 +1,9 @@
 {
   "domain": "electricity_contracts",
   "name": "Electricity Contracts",
+  "after_dependencies": [
+    "frontend"
+  ],
   "categories": [
     "energy.energy_prices"
   ],
@@ -9,7 +12,9 @@
   ],
   "config_flow": true,
   "dependencies": [
-    "recorder"
+    "http",
+    "recorder",
+    "websocket_api"
   ],
   "documentation": "https://github.com/damou8/electricity_contracts",
   "integration_type": "service",

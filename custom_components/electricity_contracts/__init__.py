@@ -28,7 +28,9 @@ from .coordinator import (
     cache_store,
 )
 from .data import contracts, manual_prices
+from .panel import async_register_panel, async_remove_panel, async_setup_frontend
 from .statistics import async_remove_statistics
+from .websocket import async_register_commands
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,7 +69,7 @@ def _async_loaded_entry(hass: HomeAssistant, call: ServiceCall) -> ConfigEntry:
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the actions."""
+    """Register the actions and the Contracts page's commands."""
 
     async def async_recompute(call: ServiceCall) -> None:
         coordinator: ElectricityContractsCoordinator = _async_loaded_entry(
@@ -114,6 +116,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         schema=COMPARE_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
+    async_register_commands(hass)
+    await async_setup_frontend(hass)
     return True
 
 
@@ -130,13 +134,20 @@ async def async_setup_entry(
     # Contracts, price periods and options change through subentry and options
     # flows; reloading applies them.
     entry.async_on_unload(entry.add_update_listener(_async_reload))
+    async_register_panel(hass)
     return True
 
 
 async def async_unload_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> bool:
-    """Unload a config entry."""
+    """Unload a config entry, and the Contracts page with the last one."""
+    if not [
+        other
+        for other in hass.config_entries.async_loaded_entries(DOMAIN)
+        if other.entry_id != entry.entry_id
+    ]:
+        async_remove_panel(hass)
     return True
 
 
