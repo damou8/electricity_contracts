@@ -34,7 +34,6 @@ from custom_components.electricity_contracts.const import (
     CONF_ACTIVE_FROM,
     CONF_ACTIVE_TO,
     CONF_CONTRACT,
-    CONF_CONTRACTS,
     CONF_END,
     CONF_FIXED_PER_YEAR,
     CONF_KIND,
@@ -46,7 +45,6 @@ from custom_components.electricity_contracts.const import (
     CONF_STATISTIC_ID,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
-    CONF_WINDOW,
     DOMAIN,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
@@ -245,13 +243,13 @@ def comparison_subentry(
     end: str | None = "2026-03-31",
     contracts: list[str] | None = None,
 ) -> ConfigSubentryData:
-    """Build the subentry of a comparison."""
+    """Build the subentry of a comparison, as 0.1 stored it."""
     return ConfigSubentryData(
         data={
-            CONF_WINDOW: window,
+            "window": window,
             CONF_START: start if window == "fixed" else None,
             CONF_END: end if window == "fixed" else None,
-            CONF_CONTRACTS: contracts or [],
+            "contracts": contracts or [],
         },
         subentry_type=SUBENTRY_COMPARISON,
         title=title,
@@ -276,6 +274,7 @@ def make_entry(
     """Build the config entry of a consumption source."""
     return MockConfigEntry(
         domain=DOMAIN,
+        minor_version=2,
         title="Linky 00000000000000",
         unique_id=statistic_id,
         data={CONF_STATISTIC_ID: statistic_id},

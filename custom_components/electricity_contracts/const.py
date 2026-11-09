@@ -17,6 +17,7 @@ SERVICE_COMPARE: Final = "compare"
 
 SUBENTRY_CONTRACT: Final = "contract"
 SUBENTRY_PRICE_PERIOD: Final = "price_period"
+# Removed in 0.2: comparisons are made on the Contracts page.
 SUBENTRY_COMPARISON: Final = "comparison"
 
 CONF_UID: Final = "uid"
@@ -34,8 +35,6 @@ CONF_END: Final = "end"
 CONF_FIXED_PER_YEAR: Final = "fixed_per_year"
 CONF_PRICES: Final = "prices"
 
-CONF_WINDOW: Final = "window"
-CONF_CONTRACTS: Final = "contracts"
 
 PRICING_OFFICIAL: Final = "official"
 PRICING_MANUAL: Final = "manual"

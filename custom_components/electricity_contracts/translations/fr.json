@@ -165,54 +165,6 @@
         "no_manual_contracts": "Ajoutez d'abord un contrat dont vous fixez les prix vous-même.",
         "contract_not_found": "Le contrat de cette période de prix n'existe plus, ou utilise maintenant les tarifs réglementés."
       }
-    },
-    "comparison": {
-      "entry_type": "Comparaison",
-      "initiate_flow": {
-        "user": "Ajouter une comparaison",
-        "reconfigure": "Modifier la comparaison"
-      },
-      "step": {
-        "user": {
-          "title": "Nouvelle comparaison",
-          "description": "Compare ce qu'auraient coûté les contrats sur les mêmes heures. Les périodes glissantes avancent chaque jour.",
-          "data": {
-            "name": "Nom",
-            "window": "Période",
-            "contracts": "Contrats"
-          },
-          "data_description": {
-            "name": "Par exemple « 12 derniers mois ».",
-            "contracts": "Laissez vide pour comparer tous les contrats, y compris ceux ajoutés plus tard."
-          }
-        },
-        "reconfigure": {
-          "title": "Modifier la comparaison",
-          "data": {
-            "name": "Nom",
-            "window": "Période",
-            "contracts": "Contrats"
-          },
-          "data_description": {
-            "name": "Par exemple « 12 derniers mois ».",
-            "contracts": "Laissez vide pour comparer tous les contrats, y compris ceux ajoutés plus tard."
-          }
-        },
-        "dates": {
-          "title": "Jours comparés",
-          "data": {
-            "start": "Premier jour",
-            "end": "Dernier jour"
-          }
-        }
-      },
-      "error": {
-        "empty_name": "Saisissez un nom.",
-        "end_before_start": "Le dernier jour est avant le premier."
-      },
-      "abort": {
-        "no_contracts": "Ajoutez d'abord un contrat."
-      }
     }
   },
   "selector": {
@@ -227,15 +179,6 @@
       "options": {
         "official": "Tarifs réglementés (Tarif Bleu)",
         "manual": "Prix que je fixe moi-même"
-      }
-    },
-    "window": {
-      "options": {
-        "last_12_months": "12 derniers mois",
-        "current_year": "Année en cours",
-        "current_month": "Mois en cours",
-        "tempo_season": "Saison Tempo (septembre à août)",
-        "fixed": "D'un jour à un autre"
       }
     }
   },
@@ -315,80 +258,6 @@
         "contracts": {
           "name": "Contrats",
           "description": "Noms des contrats à comparer ; tous si vide."
-        }
-      }
-    }
-  },
-  "entity": {
-    "sensor": {
-      "last_day_cost": {
-        "name": "Coût réel du dernier jour",
-        "state_attributes": {
-          "day": {
-            "name": "Jour"
-          }
-        }
-      },
-      "month_average_price": {
-        "name": "Prix réel du mois"
-      },
-      "current_contract": {
-        "name": "Contrat actuel"
-      },
-      "last_hour": {
-        "name": "Dernière heure de données"
-      },
-      "best_contract": {
-        "name": "Meilleur contrat",
-        "state_attributes": {
-          "from": {
-            "name": "Du"
-          },
-          "to": {
-            "name": "Au"
-          }
-        }
-      },
-      "saving": {
-        "name": "Économie possible",
-        "state_attributes": {
-          "from": {
-            "name": "Du"
-          },
-          "to": {
-            "name": "Au"
-          }
-        }
-      },
-      "contract_cost": {
-        "name": "Coût {contract}",
-        "state_attributes": {
-          "from": {
-            "name": "Du"
-          },
-          "to": {
-            "name": "Au"
-          },
-          "energy": {
-            "name": "Énergie"
-          },
-          "variable_cost": {
-            "name": "Coût de l'énergie"
-          },
-          "fixed_cost": {
-            "name": "Abonnement"
-          }
-        }
-      },
-      "contract_price": {
-        "name": "Prix au kWh {contract}",
-        "state_attributes": {
-          "from": {
-            "name": "Du"
-          },
-          "to": {
-            "name": "Au"
-          }
         }
       }
     }

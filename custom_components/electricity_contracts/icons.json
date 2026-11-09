@@ -1,32 +1,4 @@
 {
-  "entity": {
-    "sensor": {
-      "last_day_cost": {
-        "default": "mdi:cash"
-      },
-      "month_average_price": {
-        "default": "mdi:cash-clock"
-      },
-      "current_contract": {
-        "default": "mdi:file-document-outline"
-      },
-      "last_hour": {
-        "default": "mdi:clock-check-outline"
-      },
-      "best_contract": {
-        "default": "mdi:trophy-outline"
-      },
-      "saving": {
-        "default": "mdi:piggy-bank-outline"
-      },
-      "contract_cost": {
-        "default": "mdi:cash-multiple"
-      },
-      "contract_price": {
-        "default": "mdi:scale-balance"
-      }
-    }
-  },
   "services": {
     "recompute": {
       "service": "mdi:calculator-variant"

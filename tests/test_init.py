@@ -6,12 +6,15 @@ from typing import Any
 import pytest
 from homeassistant.config_entries import ConfigEntryState, ConfigSubentry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from custom_components.electricity_contracts.const import (
     CONF_RTE_CLIENT_ID,
     CONF_RTE_CLIENT_SECRET,
     DOMAIN,
+    SUBENTRY_COMPARISON,
     SUBENTRY_PRICE_PERIOD,
 )
 
@@ -19,6 +22,7 @@ from .conftest import (
     MANUAL_CONTRACT,
     TEMPO_CONTRACT,
     Sources,
+    comparison_subentry,
     make_entry,
     price_period_subentry,
 )
@@ -34,6 +38,49 @@ async def test_setup_and_unload(hass: HomeAssistant, sources: Sources) -> None:
     assert sources.public.async_calendar.await_count > 0
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.state is ConfigEntryState.NOT_LOADED
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_migration_removes_comparisons_and_sensors(hass: HomeAssistant) -> None:
+    entry = make_entry([TEMPO_CONTRACT, comparison_subentry("March")])
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, minor_version=1)
+    comparison_id = next(
+        subentry.subentry_id
+        for subentry in entry.subentries.values()
+        if subentry.subentry_type == SUBENTRY_COMPARISON
+    )
+    devices = dr.async_get(hass)
+    entities = er.async_get(hass)
+    source = devices.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, entry.entry_id)}
+    )
+    comparison = devices.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        config_subentry_id=comparison_id,
+        identifiers={(DOMAIN, comparison_id)},
+    )
+    entities.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_last_day_cost",
+        config_entry=entry,
+        device_id=source.id,
+    )
+    entities.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{comparison_id}_saving",
+        config_entry=entry,
+        config_subentry_id=comparison_id,
+        device_id=comparison.id,
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.minor_version == 2
+    assert [item.subentry_type for item in entry.subentries.values()] == ["contract"]
+    assert not er.async_entries_for_config_entry(entities, entry.entry_id)
+    assert not dr.async_entries_for_config_entry(devices, entry.entry_id)
 
 
 @pytest.mark.usefixtures("statistic")

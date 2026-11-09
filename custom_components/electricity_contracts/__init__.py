@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import probatio as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import ATTR_CONFIG_ENTRY_ID, Platform
+from homeassistant.const import ATTR_CONFIG_ENTRY_ID
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -15,10 +15,12 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 
 from .comparison import async_compare, comparison_response, day_start
-from .const import DOMAIN, SERVICE_COMPARE, SERVICE_RECOMPUTE
+from .const import DOMAIN, SERVICE_COMPARE, SERVICE_RECOMPUTE, SUBENTRY_COMPARISON
 from .coordinator import (
     ElectricityContractsConfigEntry,
     ElectricityContractsCoordinator,
@@ -31,8 +33,6 @@ from .statistics import async_remove_statistics
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-
-PLATFORMS = [Platform.SENSOR]
 
 ATTR_START = "start"
 ATTR_END = "end"
@@ -130,7 +130,6 @@ async def async_setup_entry(
     # Contracts, price periods and options change through subentry and options
     # flows; reloading applies them.
     entry.async_on_unload(entry.add_update_listener(_async_reload))
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
@@ -138,7 +137,20 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return True
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: ElectricityContractsConfigEntry
+) -> bool:
+    """Bring an entry written by an older version up to date.
+
+    Home Assistant refuses newer versions itself, before calling this.
+    """
+    if entry.minor_version < 2:  # noqa: PLR2004
+        _async_remove_comparisons(hass, entry)
+        hass.config_entries.async_update_entry(entry, minor_version=2)
+    return True
 
 
 async def async_remove_entry(
@@ -159,6 +171,22 @@ async def _async_reload(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> None:
     hass.config_entries.async_schedule_reload(entry.entry_id)
+
+
+@callback
+def _async_remove_comparisons(
+    hass: HomeAssistant, entry: ElectricityContractsConfigEntry
+) -> None:
+    """Remove the comparisons and sensors of 0.1, replaced by the Contracts page."""
+    for subentry in list(entry.subentries.values()):
+        if subentry.subentry_type == SUBENTRY_COMPARISON:
+            hass.config_entries.async_remove_subentry(entry, subentry.subentry_id)
+    entities = er.async_get(hass)
+    for item in er.async_entries_for_config_entry(entities, entry.entry_id):
+        entities.async_remove(item.entity_id)
+    devices = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(devices, entry.entry_id):
+        devices.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
 
 
 @callback

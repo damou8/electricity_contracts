@@ -165,54 +165,6 @@
         "no_manual_contracts": "Add a contract with prices you set yourself first.",
         "contract_not_found": "The contract of this price period no longer exists, or now uses regulated prices."
       }
-    },
-    "comparison": {
-      "entry_type": "Comparison",
-      "initiate_flow": {
-        "user": "Add comparison",
-        "reconfigure": "Change comparison"
-      },
-      "step": {
-        "user": {
-          "title": "New comparison",
-          "description": "Compare what the contracts cost over the same hours. Rolling windows move every day.",
-          "data": {
-            "name": "Name",
-            "window": "Window",
-            "contracts": "Contracts"
-          },
-          "data_description": {
-            "name": "For example \"Last 12 months\".",
-            "contracts": "Leave empty to compare every contract, including the ones added later."
-          }
-        },
-        "reconfigure": {
-          "title": "Change comparison",
-          "data": {
-            "name": "Name",
-            "window": "Window",
-            "contracts": "Contracts"
-          },
-          "data_description": {
-            "name": "For example \"Last 12 months\".",
-            "contracts": "Leave empty to compare every contract, including the ones added later."
-          }
-        },
-        "dates": {
-          "title": "Days compared",
-          "data": {
-            "start": "First day",
-            "end": "Last day"
-          }
-        }
-      },
-      "error": {
-        "empty_name": "Enter a name.",
-        "end_before_start": "The last day is before the first day."
-      },
-      "abort": {
-        "no_contracts": "Add a contract first."
-      }
     }
   },
   "selector": {
@@ -227,15 +179,6 @@
       "options": {
         "official": "Regulated prices (Tarif Bleu)",
         "manual": "Prices I set myself"
-      }
-    },
-    "window": {
-      "options": {
-        "last_12_months": "Last 12 months",
-        "current_year": "Current year",
-        "current_month": "Current month",
-        "tempo_season": "Tempo season (September to August)",
-        "fixed": "From one day to another"
       }
     }
   },
@@ -315,80 +258,6 @@
         "contracts": {
           "name": "Contracts",
           "description": "Names of the contracts to compare; every contract if empty."
-        }
-      }
-    }
-  },
-  "entity": {
-    "sensor": {
-      "last_day_cost": {
-        "name": "Actual cost of the last day",
-        "state_attributes": {
-          "day": {
-            "name": "Day"
-          }
-        }
-      },
-      "month_average_price": {
-        "name": "Actual price this month"
-      },
-      "current_contract": {
-        "name": "Current contract"
-      },
-      "last_hour": {
-        "name": "Last hour of data"
-      },
-      "best_contract": {
-        "name": "Best contract",
-        "state_attributes": {
-          "from": {
-            "name": "From"
-          },
-          "to": {
-            "name": "To"
-          }
-        }
-      },
-      "saving": {
-        "name": "Possible saving",
-        "state_attributes": {
-          "from": {
-            "name": "From"
-          },
-          "to": {
-            "name": "To"
-          }
-        }
-      },
-      "contract_cost": {
-        "name": "{contract} cost",
-        "state_attributes": {
-          "from": {
-            "name": "From"
-          },
-          "to": {
-            "name": "To"
-          },
-          "energy": {
-            "name": "Energy"
-          },
-          "variable_cost": {
-            "name": "Energy cost"
-          },
-          "fixed_cost": {
-            "name": "Subscription"
-          }
-        }
-      },
-      "contract_price": {
-        "name": "{contract} price per kWh",
-        "state_attributes": {
-          "from": {
-            "name": "From"
-          },
-          "to": {
-            "name": "To"
-          }
         }
       }
     }

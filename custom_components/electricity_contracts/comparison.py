@@ -1,13 +1,12 @@
 """Compare contracts over a window, from the cost statistics."""
 
 import asyncio
-import calendar
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any, Final
+from typing import Any
 
-from elec_tariffs import Tranche, season_bounds, season_of
+from elec_tariffs import Tranche
 from homeassistant.components.recorder.statistics import statistic_during_period
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.recorder import get_instance
@@ -15,19 +14,6 @@ from homeassistant.helpers.recorder import get_instance
 from .const import FRANCE_TIME_ZONE
 from .data import Contract
 from .statistics import CostingStatus, StatisticsWriter
-
-WINDOW_FIXED: Final = "fixed"
-WINDOW_LAST_12_MONTHS: Final = "last_12_months"
-WINDOW_CURRENT_YEAR: Final = "current_year"
-WINDOW_CURRENT_MONTH: Final = "current_month"
-WINDOW_TEMPO_SEASON: Final = "tempo_season"
-WINDOWS: Final = (
-    WINDOW_LAST_12_MONTHS,
-    WINDOW_CURRENT_YEAR,
-    WINDOW_CURRENT_MONTH,
-    WINDOW_TEMPO_SEASON,
-    WINDOW_FIXED,
-)
 
 _HOUR = timedelta(hours=1)
 _RECORDER_TIMEOUT = 60
@@ -113,29 +99,6 @@ class Comparison:
 def day_start(day: date) -> datetime:
     """Return local midnight of a day, in UTC."""
     return datetime.combine(day, time(), FRANCE_TIME_ZONE).astimezone(UTC)
-
-
-def window_days(
-    window: str, today: date, start: date | None = None, end: date | None = None
-) -> tuple[date, date]:
-    """Return the first and last day of a window (both included)."""
-    if window == WINDOW_FIXED:
-        assert start is not None
-        assert end is not None
-        return start, end
-    if window == WINDOW_CURRENT_YEAR:
-        return date(today.year, 1, 1), date(today.year, 12, 31)
-    if window == WINDOW_CURRENT_MONTH:
-        last = calendar.monthrange(today.year, today.month)[1]
-        return today.replace(day=1), today.replace(day=last)
-    if window == WINDOW_TEMPO_SEASON:
-        return season_bounds(season_of(today))
-    # The last 12 months, today included.
-    try:
-        year_ago = today.replace(year=today.year - 1)
-    except ValueError:  # 29 February
-        year_ago = today.replace(year=today.year - 1, day=28)
-    return year_ago + timedelta(days=1), today
 
 
 async def async_wait_for_recorder(hass: HomeAssistant) -> bool:
