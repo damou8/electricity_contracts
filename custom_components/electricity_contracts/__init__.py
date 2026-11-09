@@ -134,7 +134,7 @@ async def async_setup_entry(
     # Contracts, price periods and options change through subentry and options
     # flows; reloading applies them.
     entry.async_on_unload(entry.add_update_listener(_async_reload))
-    async_register_panel(hass)
+    await async_register_panel(hass)
     return True
 
 

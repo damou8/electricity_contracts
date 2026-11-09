@@ -12,7 +12,7 @@ from homeassistant.components.recorder.statistics import (
 )
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.recorder import get_instance
@@ -301,6 +301,15 @@ async def test_waiting_for_a_busy_recorder(hass: HomeAssistant) -> None:
         recorder, "async_get_commit_future", return_value=busy_recorder(hass)
     ):
         assert not await async_wait_for_recorder(hass)
+
+
+async def test_no_wait_while_home_assistant_starts(hass: HomeAssistant) -> None:
+    # The recorder only commits once started: waiting would hold the startup up.
+    hass.set_state(CoreState.starting)
+    with patch.object(
+        get_instance(hass), "async_get_commit_future", return_value=busy_recorder(hass)
+    ):
+        assert await async_wait_for_recorder(hass)
 
 
 @pytest.mark.parametrize(

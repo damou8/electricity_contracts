@@ -305,7 +305,7 @@ main {
   color: var(--text-primary-color, #ffffff);
 }
 .nav { display: inline-flex; align-items: center; gap: 4px; }
-.nav .label { min-width: 9em; text-align: center; font-weight: 500; text-transform: capitalize; }
+.nav .label { min-width: 9em; text-align: center; font-weight: 500; }
 .icon-button {
   font: inherit;
   width: 36px;
@@ -378,7 +378,7 @@ main {
   color: var(--ec-text-2);
   white-space: nowrap;
 }
-.badge.best { border-color: var(--ec-good); color: var(--ec-good); }
+.badge.best { border-color: var(--ec-good); color: var(--ec-text); }
 .rank-total { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .track { grid-column: 1 / -1; height: 12px; }
 .bar { height: 12px; border-radius: 0 4px 4px 0; min-width: 2px; }
@@ -419,7 +419,8 @@ main {
   min-width: 140px;
   z-index: 1;
 }
-.tooltip .head { color: var(--ec-text-2); margin-bottom: 4px; text-transform: capitalize; }
+.tooltip .head { color: var(--ec-text-2); margin-bottom: 4px; }
+.tooltip .head::first-letter, .nav .label::first-letter { text-transform: uppercase; }
 .tooltip .row { display: flex; align-items: center; gap: 8px; }
 .tooltip .row strong { font-variant-numeric: tabular-nums; }
 .tooltip .row span { color: var(--ec-text-2); }
@@ -429,7 +430,7 @@ table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--divider-color, var(--ec-grid)); white-space: nowrap; font-variant-numeric: tabular-nums; }
 th:first-child, td:first-child { text-align: left; }
 th { color: var(--ec-text-2); font-weight: 500; }
-td.label-cell { display: flex; align-items: center; gap: 6px; }
+td .swatch { display: inline-block; vertical-align: -1px; margin-right: 6px; }
 tfoot td { font-weight: 600; border-bottom: none; }
 .tranche-contract + .tranche-contract { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--divider-color, var(--ec-grid)); }
 .tranche-contract h3 { margin: 0 0 8px; font-size: 14px; font-weight: 500; }
@@ -473,6 +474,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   .card { padding: 14px; }
   .kpi .value { font-size: 24px; }
   .nav .label { min-width: 7em; }
+  .segmented { display: grid; grid-template-columns: 1fr 1fr; width: 100%; border-radius: 16px; }
   dialog { width: 100vw; max-width: 100vw; max-height: 100vh; height: 100%; border-radius: 0; margin: 0; }
   .dialog-body { padding: 0 12px 16px; }
   th, td { padding: 6px 4px; }
@@ -763,7 +765,7 @@ class ElectricityContractsPanel extends HTMLElement {
       // Falls through: a custom window starts as the last 12 months.
       default: {
         const start = addDays(`${year - 1}-${pad(month)}-${pad(Math.min(day, monthEnd(year - 1, month)))}`, 1);
-        return { start, end: last };
+        return { start: entry.first_day && entry.first_day > start ? entry.first_day : start, end: last };
       }
     }
   }
@@ -1072,6 +1074,11 @@ class ElectricityContractsPanel extends HTMLElement {
     return Boolean(contract && contract.active_from && contract.active_from <= last && (!contract.active_to || contract.active_to >= last));
   }
 
+  _kindLabel(contract) {
+    const kind = KINDS[this._language][contract.kind] || contract.kind;
+    return kind.toLowerCase() === contract.name.toLowerCase() ? null : h("span", { class: "kind" }, kind);
+  }
+
   _renderRanking() {
     const data = this._data;
     const ranked = [...data.contracts].sort((first, second) => first.total_cost - second.total_cost);
@@ -1090,7 +1097,7 @@ class ElectricityContractsPanel extends HTMLElement {
             "div",
             { class: "rank-name" },
             h("span", { class: "name" }, contract.name),
-            h("span", { class: "kind" }, KINDS[this._language][contract.kind] || contract.kind),
+            this._kindLabel(contract),
             this._inForce(contract.id) ? h("span", { class: "badge" }, this._t("current")) : null,
             contract.name === data.best ? h("span", { class: "badge best" }, this._t("best")) : null,
           ),
@@ -1177,7 +1184,7 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   _frame(container, values, zero) {
-    const width = Math.max(this._width || container.clientWidth || 320, 240);
+    const width = Math.max(container.clientWidth || 320, 240);
     const height = width < 500 ? 220 : 260;
     const margin = { top: 12, right: 12, bottom: 28, left: 0 };
     let min = Math.min(0, ...values);
@@ -1188,7 +1195,8 @@ class ElectricityContractsPanel extends HTMLElement {
     const ticks = niceTicks(min, max, 4);
     const low = ticks[0];
     const high = ticks[ticks.length - 1];
-    const labels = ticks.map((tick) => this._money(tick, 0));
+    const digits = ticks.length > 1 && ticks[1] - ticks[0] < 1 ? 2 : 0;
+    const labels = ticks.map((tick) => this._money(tick, digits));
     margin.left = Math.max(...labels.map((label) => label.length)) * 7 + 10;
     const plotWidth = width - margin.left - margin.right;
     const plotHeight = height - margin.top - margin.bottom;
@@ -1461,7 +1469,7 @@ class ElectricityContractsPanel extends HTMLElement {
                   {},
                   h(
                     "td",
-                    { class: "label-cell" },
+                    {},
                     h("span", { class: "swatch", style: { background: (TRANCHE_FILLS[tranche] || ["#898781"])[0] } }),
                     names[tranche] || tranche,
                   ),
@@ -1545,7 +1553,7 @@ class ElectricityContractsPanel extends HTMLElement {
                   {},
                   h(
                     "td",
-                    { class: "label-cell" },
+                    {},
                     h("span", { class: "swatch", style: { background: (TRANCHE_FILLS[line.tranche] || ["#898781"])[0] } }),
                     names[line.tranche] || line.tranche,
                   ),
@@ -1583,7 +1591,7 @@ class ElectricityContractsPanel extends HTMLElement {
         h("span", { class: "verdict" }, verdict),
       );
     }
-    return [...parts, h("div", { class: "totals" }, totals)];
+    return [...parts.flat(), h("div", { class: "totals" }, totals)];
   }
 }
 

@@ -72,7 +72,8 @@ class Bill:
         """How much more than the contracts in force it costs, None if unknown."""
         if self.actual is None:
             return None
-        return round(self.total - self.actual.total, 2) + 0.0
+        # From the totals to the cent, so the figures shown add up.
+        return round(round(self.total, 2) - round(self.actual.total, 2), 2) + 0.0
 
 
 async def async_bill(  # noqa: PLR0913 - the contract, its prices, the window, where to read

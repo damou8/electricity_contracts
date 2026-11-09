@@ -6,7 +6,6 @@ from pathlib import Path
 from homeassistant.components import frontend
 from homeassistant.components.http.server import StaticPathConfig
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.util.hass_dict import HassKey
 
 from .const import DOMAIN
 
@@ -17,7 +16,6 @@ _TITLES = {"en": "Contracts", "fr": "Contrats"}
 
 _FRONTEND = Path(__file__).parent / "frontend"
 _STATIC_URL = f"/{DOMAIN}_frontend"
-_MODULE_URL: HassKey[str] = HassKey(f"{DOMAIN}_panel_module")
 
 
 def _module_version() -> str:
@@ -30,13 +28,14 @@ async def async_setup_frontend(hass: HomeAssistant) -> None:
     await hass.http.async_register_static_paths(
         [StaticPathConfig(_STATIC_URL, str(_FRONTEND), cache_headers=False)]
     )
-    version = await hass.async_add_executor_job(_module_version)
-    hass.data[_MODULE_URL] = f"{_STATIC_URL}/panel.js?v={version}"
 
 
-@callback
-def async_register_panel(hass: HomeAssistant) -> None:
+async def async_register_panel(hass: HomeAssistant) -> None:
     """Add the page to the sidebar, unless another source already did."""
+    if frontend.async_panel_exists(hass, PANEL_URL_PATH):
+        return
+    version = await hass.async_add_executor_job(_module_version)
+    # Another source may have added it meanwhile.
     if frontend.async_panel_exists(hass, PANEL_URL_PATH):
         return
     language = hass.config.language.split("-")[0]
@@ -49,7 +48,7 @@ def async_register_panel(hass: HomeAssistant) -> None:
         config={
             "_panel_custom": {
                 "name": PANEL_ELEMENT,
-                "module_url": hass.data[_MODULE_URL],
+                "module_url": f"{_STATIC_URL}/panel.js?v={version}",
                 "embed_iframe": False,
                 "trust_external": False,
             }

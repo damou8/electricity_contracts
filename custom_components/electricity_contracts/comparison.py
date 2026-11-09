@@ -11,7 +11,7 @@ from homeassistant.components.recorder.statistics import (
     statistic_during_period,
     statistics_during_period,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.recorder import get_instance
 from homeassistant.util import dt as dt_util
 
@@ -93,8 +93,9 @@ class Comparison:
         if best is None or not covers(self.actual, best.energy):
             return None
         assert self.actual is not None
-        # To the cent: equal totals must give 0, not a rounding error.
-        return round(self.actual.total - best.total, 2) + 0.0
+        # From the totals to the cent, so the figures shown add up and equal totals
+        # give 0, not a rounding error.
+        return round(round(self.actual.total, 2) - round(best.total, 2), 2) + 0.0
 
 
 def covers(actual: ActualTotals | None, energy: float) -> bool:
@@ -115,8 +116,13 @@ async def async_wait_for_recorder(hass: HomeAssistant) -> bool:
     order, so one commit after the imports is enough: waiting until nothing is
     pending would never end while events keep coming.
 
+    The recorder only commits once Home Assistant has started: waiting during
+    startup would hold it up for nothing, as nothing is queued yet from before.
+
     Return False if the recorder is still busy.
     """
+    if hass.state is not CoreState.running:
+        return True
     if (future := get_instance(hass).async_get_commit_future()) is None:
         return True
     try:
