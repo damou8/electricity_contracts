@@ -13,6 +13,32 @@ const STRINGS = {
     title: "Contracts",
     tabActual: "Actual cost",
     tabBill: "Phantom bill",
+    vsPrevious: "{change} vs the period before",
+    tomorrow: "Tomorrow",
+    today: "Today: {color}",
+    notPublished: "Not published yet",
+    estimate: "About {energy} and {cost}, going by your recent {weekday}s",
+    estimateEnergy: "About {energy}, going by your recent {weekday}s",
+    season: "Tempo season {season}",
+    daysLeft: "{left} left out of {total}",
+    redDaysCard: "Red days",
+    noRedDay: "No red day over this period.",
+    redDaysCount: "Red days",
+    redDaysCost: "What they cost",
+    redDaysPeak: "Peak hours per red day",
+    redDaysPeakHint: "{other} on the other days ({change})",
+    topDays: "Most expensive days",
+    day: "Day",
+    calendar: "Calendar",
+    calendarHint: "One square per day: the darker, the more it cost",
+    calendarHintTempo: "One square per day, in its Tempo color: the darker, the more it cost",
+    profile: "A typical day",
+    profileHint: "Average consumption at each hour",
+    profileOffPeak: "{share} of your consumption falls in off-peak hours",
+    offPeak: "Off-peak hours",
+    peak: "Peak hours",
+    priceRise: "With the same consumption, today's prices cost {amount} more per year than the ones before ({change}).",
+    priceDrop: "With the same consumption, today's prices cost {amount} less per year than the ones before ({change}).",
     currentContract: "Current contract",
     regulated: "regulated prices",
     manualPrices: "prices entered by hand",
@@ -85,6 +111,32 @@ const STRINGS = {
     title: "Contrats",
     tabActual: "Coût réel",
     tabBill: "Facture fantôme",
+    vsPrevious: "{change} vs la période précédente",
+    tomorrow: "Demain",
+    today: "Aujourd'hui : {color}",
+    notPublished: "Pas encore publiée",
+    estimate: "Environ {energy} et {cost}, d'après vos derniers {weekday}s",
+    estimateEnergy: "Environ {energy}, d'après vos derniers {weekday}s",
+    season: "Saison Tempo {season}",
+    daysLeft: "{left} restants sur {total}",
+    redDaysCard: "Jours rouges",
+    noRedDay: "Aucun jour rouge sur cette période.",
+    redDaysCount: "Jours rouges",
+    redDaysCost: "Ce qu'ils ont coûté",
+    redDaysPeak: "Heures pleines par jour rouge",
+    redDaysPeakHint: "{other} les autres jours ({change})",
+    topDays: "Journées les plus chères",
+    day: "Jour",
+    calendar: "Calendrier",
+    calendarHint: "Un carré par jour : plus il est foncé, plus la journée a coûté",
+    calendarHintTempo: "Un carré par jour, à sa couleur Tempo : plus il est foncé, plus la journée a coûté",
+    profile: "Une journée type",
+    profileHint: "Consommation moyenne à chaque heure",
+    profileOffPeak: "{share} de votre consommation tombe en heures creuses",
+    offPeak: "Heures creuses",
+    peak: "Heures pleines",
+    priceRise: "À consommation identique, les prix actuels coûtent {amount} de plus par an que les précédents ({change}).",
+    priceDrop: "À consommation identique, les prix actuels coûtent {amount} de moins par an que les précédents ({change}).",
     currentContract: "Contrat en cours",
     regulated: "tarif réglementé",
     manualPrices: "prix saisis à la main",
@@ -159,6 +211,14 @@ const KINDS = {
   en: { base: "Base", hphc: "Peak / off-peak", tempo: "Tempo" },
   fr: { base: "Base", hphc: "Heures pleines / creuses", tempo: "Tempo" },
 };
+
+const COLORS = {
+  en: { blue: "Blue", white: "White", red: "Red" },
+  fr: { blue: "Bleu", white: "Blanc", red: "Rouge" },
+};
+
+// Tempo day colors, readable on both surfaces.
+const DAY_FILLS = { blue: "#3987e5", white: "#a3a29a", red: "#e34948" };
 
 const TRANCHES = {
   en: {
@@ -375,10 +435,25 @@ main {
 .price-tile .delta { color: var(--ec-text-2); font-size: 12px; }
 .price-tile svg { display: block; margin-top: 8px; overflow: visible; }
 .price-tile rect { fill: transparent; cursor: pointer; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.big { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.big .swatch { width: 14px; height: 14px; border-radius: 3px; }
+.meter { margin-top: 10px; }
+.meter .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ec-text-2); margin-bottom: 4px; }
+.meter .row strong { color: var(--ec-text); font-weight: 500; }
+.meter .track { height: 8px; border-radius: 4px; background: var(--ec-wash); overflow: hidden; }
+.meter .fill { height: 100%; border-radius: 4px; }
+.facts { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; font-size: 14px; }
+.facts .num { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+.facts .hint { grid-column: 1 / -1; margin: -4px 0 0; text-align: right; }
+.scroll { overflow-x: auto; }
+.calendar rect { stroke: var(--ec-surface); stroke-width: 1px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--ec-text-2); }
 .chip strong { color: var(--ec-text); font-weight: 500; font-variant-numeric: tabular-nums; }
 .details { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--divider-color, var(--ec-grid)); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; padding: 0; list-style: none; font-size: 13px; color: var(--ec-text-2); }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
 .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .line-key { width: 14px; height: 2px; border-radius: 1px; flex: none; }
 .chart { position: relative; width: 100%; }
@@ -609,6 +684,7 @@ class ElectricityContractsPanel extends HTMLElement {
     // Which price period each contract card shows, by contract id.
     this._pricePeriods = {};
     this._contractOpen = {};
+    this._insights = null;
     this._loadCount = 0;
     this._width = 0;
   }
@@ -699,6 +775,10 @@ class ElectricityContractsPanel extends HTMLElement {
 
   _kwh(value) {
     return `${new Intl.NumberFormat(this._locale, { maximumFractionDigits: 0 }).format(value)} kWh`;
+  }
+
+  _percent(value) {
+    return new Intl.NumberFormat(this._locale, { style: "percent", maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(value);
   }
 
   _number(value, digits = 0) {
@@ -798,15 +878,16 @@ class ElectricityContractsPanel extends HTMLElement {
     const count = ++this._loadCount;
     this._content.classList.add("loading");
     try {
-      const data = await this._hass.callWS({
-        type: `${DOMAIN}/compare`,
-        entry_id: entry.entry_id,
-        start: window.start,
-        end: window.end,
-      });
+      const request = { entry_id: entry.entry_id, start: window.start, end: window.end };
+      const [data, insights] = await Promise.all([
+        this._hass.callWS({ type: `${DOMAIN}/compare`, ...request }),
+        // The page stands without them.
+        this._hass.callWS({ type: `${DOMAIN}/insights`, ...request }).catch(() => null),
+      ]);
       if (count !== this._loadCount) return;
       this._request = window;
       this._data = data;
+      this._insights = insights;
       this._error = null;
     } catch (error) {
       if (count !== this._loadCount) return;
@@ -1024,6 +1105,8 @@ class ElectricityContractsPanel extends HTMLElement {
     }
     this._timeChart = null;
     this._cumulativeChart = null;
+    this._calendarChart = null;
+    this._profileChart = null;
     if (this._tab === "bill") {
       this._content.replaceChildren(...this._renderBillTab());
     } else if (!this._data.actual) {
@@ -1031,11 +1114,23 @@ class ElectricityContractsPanel extends HTMLElement {
     } else {
       this._timeChart = h("div", { class: "chart" });
       const inForce = this._contractsInForce();
+      const insights = this._insights;
       const cards = [
-        ...this._renderContractCards(),
+        ...this._renderContractCards(inForce),
+        insights && insights.tempo ? this._renderTempo(insights.tempo) : null,
         this._renderKpis(),
         this._card(this._t("costOverTime"), this._t(this._data.group_by === "month" ? "costPerMonth" : "costPerDay"), this._timeChart, this._toggle("time")),
-      ];
+      ].filter(Boolean);
+      if (insights && insights.days.length) {
+        const tempo = insights.days.some((day) => day.color);
+        this._calendarChart = h("div", { class: "scroll" });
+        this._profileChart = h("div", { class: "chart" });
+        cards.push(
+          this._card(this._t("calendar"), this._t(tempo ? "calendarHintTempo" : "calendarHint"), this._calendarChart),
+          h("div", { class: "pair" }, tempo ? this._renderRedDays(insights.days) : null, this._renderTopDays(insights.days)),
+          this._card(this._t("profile"), this._t("profileHint"), this._profileChart),
+        );
+      }
       // The split of a contract covers the whole period: only shown when one was in force.
       if (inForce.length === 1) {
         cards.push(this._card(this._t("tranches"), this._t("tranchesHint"), this._renderTranches(inForce)));
@@ -1064,19 +1159,32 @@ class ElectricityContractsPanel extends HTMLElement {
 
   _renderKpis() {
     const actual = this._data.actual;
-    const tile = (label, value, sub) =>
-      h("section", { class: "card kpi" }, h("div", { class: "label" }, label), h("div", { class: "value" }, value), h("div", { class: "sub" }, sub));
+    const tile = (label, value, ...subs) =>
+      h(
+        "section",
+        { class: "card kpi" },
+        h("div", { class: "label" }, label),
+        h("div", { class: "value" }, value),
+        subs.filter(Boolean).map((sub) => h("div", { class: "sub" }, sub)),
+      );
+    const previous = this._insights && this._insights.previous;
+    const change = (value, before) => (previous && before ? this._t("vsPrevious", { change: this._percent(value / before - 1) }) : null);
     return h(
       "div",
       { class: "kpis" },
-      tile(this._t("actualCost"), this._money(actual.total_cost), this._t("ofWhichSubscription", { amount: this._money(actual.fixed_cost) })),
-      tile(this._t("consumption"), this._kwh(actual.energy), ""),
+      tile(
+        this._t("actualCost"),
+        this._money(actual.total_cost),
+        this._t("ofWhichSubscription", { amount: this._money(actual.fixed_cost) }),
+        change(actual.total_cost, previous && previous.cost),
+      ),
+      tile(this._t("consumption"), this._kwh(actual.energy), change(actual.energy, previous && previous.energy)),
       tile(this._t("average"), actual.energy ? `${this._price(actual.variable_cost / actual.energy)}/kWh` : "—", this._t("withoutSubscription")),
     );
   }
 
   // The contracts in force today, with the prices they have had.
-  _renderContractCards() {
+  _renderContractCards(inForce) {
     const today = dayString(Date.now());
     return this._entry.contracts
       .filter((contract) => contract.active_from && contract.active_from <= today && (!contract.active_to || contract.active_to >= today))
@@ -1136,7 +1244,8 @@ class ElectricityContractsPanel extends HTMLElement {
               this._priceTiles(contract, periods, index, today),
             )
           : null;
-        return this._card(title, facts.filter(Boolean).join(" · "), h("div", {}, chips, details), toggle);
+        const rise = current > 0 && inForce.length === 1 && inForce[0].id === contract.id ? this._priceRise(inForce[0], periods[current], periods[current - 1]) : null;
+        return this._card(title, facts.filter(Boolean).join(" · "), h("div", {}, chips, rise, details), toggle);
       });
   }
 
@@ -1238,6 +1347,12 @@ class ElectricityContractsPanel extends HTMLElement {
     }
     if (this._cumulativeChart && this._bill) {
       this._renderCumulativeChart(this._bill.contract);
+    }
+    if (this._calendarChart) {
+      this._drawCalendar(this._calendarChart, this._insights.days);
+    }
+    if (this._profileChart) {
+      this._drawProfile(this._profileChart, this._insights.profile);
     }
   }
 
@@ -1514,6 +1629,245 @@ class ElectricityContractsPanel extends HTMLElement {
       ),
     );
     return h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, head), h("tbody", {}, rows)));
+  }
+
+  // What today's prices change over a year, with the consumption of the period.
+  _priceRise(costed, now, before) {
+    const days = (Date.parse(this._data.end) - Date.parse(this._data.start)) / DAY_MS;
+    if (!(days > 0)) return null;
+    const yearly = (period) =>
+      Object.entries(costed.tranches).reduce((sum, [tranche, item]) => sum + item.energy * (period.tranches[tranche] ?? 0), 0) * (365 / days) + period.fixed_per_year;
+    const difference = yearly(now) - yearly(before);
+    if (Math.abs(difference) < 0.5) return null;
+    return h(
+      "p",
+      { class: "note" },
+      this._t(difference > 0 ? "priceRise" : "priceDrop", { amount: this._money(Math.abs(difference), 0), change: this._percent(difference / yearly(before)) }),
+    );
+  }
+
+  // Tomorrow's color with what it should cost, and what is left of the season.
+  _renderTempo(tempo) {
+    const colors = COLORS[this._language];
+    const tomorrow = new Date(Date.now() + DAY_MS);
+    const weekday = new Intl.DateTimeFormat(this._locale, { weekday: "long" }).format(tomorrow);
+    const estimate = tempo.tomorrow_estimate;
+    let hint = null;
+    if (estimate && estimate.cost !== null) {
+      hint = this._t("estimate", { energy: this._kwh(estimate.energy), cost: this._money(estimate.cost), weekday });
+    } else if (estimate) {
+      hint = this._t("estimateEnergy", { energy: this._kwh(estimate.energy), weekday });
+    }
+    const season = tempo.season;
+    const meter = (color, left, total) =>
+      h(
+        "div",
+        { class: "meter" },
+        h("div", { class: "row" }, h("span", {}, colors[color]), h("strong", {}, this._t("daysLeft", { left, total }))),
+        h("div", { class: "track", role: "img", "aria-label": `${colors[color]}: ${left}/${total}` }, h("div", { class: "fill", style: { width: `${(left / total) * 100}%`, background: DAY_FILLS[color] } })),
+      );
+    return h(
+      "div",
+      { class: "pair" },
+      this._card(
+        this._t("tomorrow"),
+        tempo.today ? this._t("today", { color: colors[tempo.today] }) : null,
+        h(
+          "div",
+          {},
+          h(
+            "div",
+            { class: "big" },
+            tempo.tomorrow ? h("span", { class: "swatch", style: { background: DAY_FILLS[tempo.tomorrow] } }) : null,
+            tempo.tomorrow ? colors[tempo.tomorrow] : this._t("notPublished"),
+          ),
+          hint ? h("p", { class: "note" }, hint) : null,
+        ),
+      ),
+      this._card(
+        this._t("season", { season: `${season.start.slice(0, 4)}-${season.end.slice(0, 4)}` }),
+        null,
+        h("div", {}, meter("red", season.red_left, season.red_total), meter("white", season.white_left, season.white_total)),
+      ),
+    );
+  }
+
+  _renderRedDays(days) {
+    const red = days.filter((day) => day.color === "red");
+    if (!red.length) {
+      return this._card(this._t("redDaysCard"), null, h("p", { class: "message" }, this._t("noRedDay")));
+    }
+    const others = days.filter((day) => day.color !== "red");
+    const mean = (list) => list.reduce((sum, day) => sum + day.peak_energy, 0) / list.length;
+    const peak = mean(red);
+    const other = others.length ? mean(others) : null;
+    const kwh = (value) => `${this._number(value, 1)} kWh`;
+    return this._card(
+      this._t("redDaysCard"),
+      null,
+      h(
+        "div",
+        { class: "facts" },
+        h("span", {}, this._t("redDaysCount")),
+        h("span", { class: "num" }, String(red.length)),
+        h("span", {}, this._t("redDaysCost")),
+        h("span", { class: "num" }, this._money(red.reduce((sum, day) => sum + day.cost, 0))),
+        h("span", {}, this._t("redDaysPeak")),
+        h("span", { class: "num" }, kwh(peak)),
+        other ? h("p", { class: "hint" }, this._t("redDaysPeakHint", { other: kwh(other), change: this._percent(peak / other - 1) })) : null,
+      ),
+    );
+  }
+
+  _renderTopDays(days) {
+    const colors = COLORS[this._language];
+    const top = [...days].sort((first, second) => second.cost - first.cost).slice(0, 5);
+    return this._card(
+      this._t("topDays"),
+      null,
+      h(
+        "div",
+        { class: "table-wrap" },
+        h(
+          "table",
+          {},
+          h("thead", {}, h("tr", {}, h("th", {}, this._t("day")), h("th", {}, this._t("energy")), h("th", {}, this._t("cost")))),
+          h(
+            "tbody",
+            {},
+            top.map((day) =>
+              h(
+                "tr",
+                {},
+                h(
+                  "td",
+                  {},
+                  day.color ? h("span", { class: "swatch", title: colors[day.color], style: { background: DAY_FILLS[day.color] } }) : null,
+                  this._dayLabel(day.date, { weekday: "short", day: "numeric", month: "short" }),
+                ),
+                h("td", {}, `${this._number(day.energy, 1)} kWh`),
+                h("td", {}, this._money(day.cost)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // One square per day, a column per week from Monday to Sunday.
+  _drawCalendar(container, days) {
+    const colors = COLORS[this._language];
+    const first = dayTime(days[0].date);
+    // Monday of the first week.
+    const origin = first - ((new Date(first).getUTCDay() + 6) % 7) * DAY_MS;
+    const weeks = Math.floor((dayTime(days[days.length - 1].date) - origin) / (7 * DAY_MS)) + 1;
+    const left = 28;
+    const top = 16;
+    const width = container.clientWidth || 320;
+    const cell = Math.max(10, Math.min(18, Math.floor((width - left) / weeks)));
+    const most = Math.max(...days.map((day) => day.cost), 0.01);
+    const root = s("svg", { class: "calendar", width: left + weeks * cell, height: top + 7 * cell, role: "img", "aria-label": this._t("calendar") });
+    [0, 2, 4, 6].forEach((weekday) => {
+      const label = new Intl.DateTimeFormat(this._locale, { weekday: "short", timeZone: "UTC" }).format(origin + weekday * DAY_MS);
+      root.append(s("text", { x: 0, y: top + weekday * cell + cell / 2, "dominant-baseline": "middle", style: { "font-size": "10px", fill: "var(--ec-muted)" } }, label));
+    });
+    let month = null;
+    for (const day of days) {
+      const offset = Math.round((dayTime(day.date) - origin) / DAY_MS);
+      const week = Math.floor(offset / 7);
+      if (day.date.slice(0, 7) !== month) {
+        month = day.date.slice(0, 7);
+        root.append(s("text", { x: left + week * cell, y: 10, style: { "font-size": "10px", fill: "var(--ec-muted)" } }, this._dayLabel(day.date, { month: "short" })));
+      }
+      const what = [this._dayLabel(day.date, { weekday: "long", day: "numeric", month: "long" }), day.color ? colors[day.color] : null, `${this._number(day.energy, 1)} kWh`, this._money(day.cost)];
+      root.append(
+        s(
+          "rect",
+          {
+            x: left + week * cell,
+            y: top + (offset % 7) * cell,
+            width: cell,
+            height: cell,
+            rx: 3,
+            style: { fill: DAY_FILLS[day.color] || "var(--ec-s1)", opacity: String(0.35 + 0.65 * (day.cost / most)) },
+          },
+          s("title", {}, what.filter(Boolean).join(" · ")),
+        ),
+      );
+    }
+    container.replaceChildren(root);
+  }
+
+  // The hours of the day that are off-peak for the contract in force.
+  _offPeakHours() {
+    const inForce = this._contractsInForce();
+    const contract = inForce.length === 1 ? this._entry.contracts.find((item) => item.id === inForce[0].id) : null;
+    const hours = new Set();
+    if (!contract) return hours;
+    const ranges = contract.kind === "tempo" ? ["22:00-06:00"] : contract.off_peak;
+    for (const range of ranges) {
+      const [start, end] = range.split("-").map((time) => Number(time.slice(0, 2)) + Number(time.slice(3, 5)) / 60);
+      for (let hour = 0; hour < 24; hour++) {
+        if (start < end ? hour >= start && hour < end : hour >= start || hour < end) hours.add(hour);
+      }
+    }
+    return hours;
+  }
+
+  _drawProfile(container, profile) {
+    const offPeak = this._offPeakHours();
+    const values = profile.map((value) => value ?? 0);
+    const width = Math.max(container.clientWidth || 320, 240);
+    const height = 200;
+    const margin = { top: 12, right: 8, bottom: 24, left: 44 };
+    const ticks = niceTicks(0, Math.max(...values, 0.01), 3);
+    const high = ticks[ticks.length - 1];
+    const plotHeight = height - margin.top - margin.bottom;
+    const band = (width - margin.left - margin.right) / 24;
+    const y = (value) => margin.top + plotHeight - (value / high) * plotHeight;
+    const digits = ticks[1] - ticks[0] < 1 ? (ticks[1] - ticks[0] < 0.1 ? 2 : 1) : 0;
+    const root = s("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": this._t("profile") });
+    for (const tick of ticks) {
+      root.append(
+        s("line", { x1: margin.left, x2: width - margin.right, y1: y(tick), y2: y(tick), style: { stroke: tick === 0 ? "var(--ec-axis)" : "var(--ec-grid)", "stroke-width": "1px" } }),
+        s("text", { x: margin.left - 6, y: y(tick), "text-anchor": "end", "dominant-baseline": "middle" }, `${this._number(tick, digits)} kWh`),
+      );
+    }
+    const bar = Math.min(24, band - 2);
+    values.forEach((value, hour) => {
+      const x = margin.left + band * hour + (band - bar) / 2;
+      const quiet = offPeak.has(hour);
+      if (value > 0) {
+        root.append(
+          s(
+            "path",
+            { d: columnPath(x, bar, y(0), y(value)), style: { fill: quiet ? TRANCHE_FILLS.hc[0] : TRANCHE_FILLS.hp[0] } },
+            s("title", {}, `${hour} h – ${hour + 1} h · ${this._number(value, 2)} kWh`),
+          ),
+        );
+      }
+      if (hour % 3 === 0) {
+        root.append(s("text", { x: margin.left + band * (hour + 0.5), y: height - 6, "text-anchor": "middle" }, `${hour} h`));
+      }
+    });
+    const children = [root];
+    if (offPeak.size) {
+      const total = values.reduce((sum, value) => sum + value, 0);
+      const quiet = values.reduce((sum, value, hour) => sum + (offPeak.has(hour) ? value : 0), 0);
+      children.unshift(
+        h(
+          "ul",
+          { class: "legend" },
+          h("li", {}, h("span", { class: "swatch", style: { background: TRANCHE_FILLS.hc[0] } }), this._t("offPeak")),
+          h("li", {}, h("span", { class: "swatch", style: { background: TRANCHE_FILLS.hp[0] } }), this._t("peak")),
+        ),
+      );
+      if (total > 0) {
+        children.push(h("p", { class: "note" }, this._t("profileOffPeak", { share: this._percent(quiet / total).replace("+", "") })));
+      }
+    }
+    container.replaceChildren(...children);
   }
 
   // Tranches -------------------------------------------------------------------
