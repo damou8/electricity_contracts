@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from elec_tariffs import TempoAuthError, TempoError
+from homeassistant.components.recorder.models import StatisticMeanType
 from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -28,6 +29,7 @@ from custom_components.electricity_contracts.const import (
     CONF_RTE_CLIENT_SECRET,
     CONF_START,
     CONF_STATISTIC_ID,
+    CONF_TEMPERATURE,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
     DOMAIN,
@@ -42,9 +44,11 @@ from .conftest import (
     MANUAL_CONTRACT,
     OTHER_STATISTIC_ID,
     STATISTIC_ID,
+    TEMPERATURE_ID,
     TEMPO_CONTRACT,
     Sources,
     add_statistic,
+    add_temperature,
     make_entry,
     price_period_subentry,
 )
@@ -272,6 +276,47 @@ async def test_options_errors(
         {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "secret"},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_options_save_the_temperature(hass: HomeAssistant) -> None:
+    await add_temperature(hass, [10.0, 11.0])
+    result = await options_flow(hass, {CONF_TEMPERATURE: TEMPERATURE_ID})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    # Credentials left empty are removed.
+    assert result["data"] == {CONF_TEMPERATURE: TEMPERATURE_ID}
+
+
+@pytest.mark.parametrize(
+    ("unit", "mean_type", "error"),
+    [
+        pytest.param(
+            "kWh", StatisticMeanType.ARITHMETIC, "statistic_not_temperature", id="unit"
+        ),
+        pytest.param("°C", StatisticMeanType.CIRCULAR, "statistic_no_mean", id="mean"),
+        pytest.param(None, None, "statistic_not_found", id="missing"),
+    ],
+)
+async def test_options_temperature_errors(
+    hass: HomeAssistant,
+    sources: Sources,
+    unit: str | None,
+    mean_type: StatisticMeanType | None,
+    error: str,
+) -> None:
+    if unit is not None and mean_type is not None:
+        await add_temperature(hass, [10.0], unit=unit, mean_type=mean_type)
+    result = await options_flow(
+        hass,
+        {
+            CONF_TEMPERATURE: TEMPERATURE_ID,
+            CONF_RTE_CLIENT_ID: "my-id",
+            CONF_RTE_CLIENT_SECRET: "secret",
+        },
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_TEMPERATURE: error}
+    # The credentials wait for a valid temperature.
+    sources.official.async_check_credentials.assert_not_awaited()
 
 
 # Contracts.

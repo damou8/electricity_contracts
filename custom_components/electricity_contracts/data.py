@@ -139,6 +139,18 @@ def contracts(entry: ConfigEntry) -> list[Contract]:
     ]
 
 
+def in_force(entry_contracts: list[Contract], day: date) -> Contract | None:
+    """Return the contract that was in force on `day`, if any."""
+    for contract in entry_contracts:
+        if (
+            contract.active_from is not None
+            and contract.active_from <= day
+            and (contract.active_to is None or contract.active_to >= day)
+        ):
+            return contract
+    return None
+
+
 def manual_prices(entry: ConfigEntry) -> list[ManualPrices]:
     """Return the price periods entered by hand, in the order they were added."""
     return [

@@ -37,15 +37,22 @@
   "options": {
     "step": {
       "init": {
-        "title": "RTE account (optional)",
-        "description": "Tempo colors come from RTE's public calendar, which needs no account. If it stops working, the integration can use RTE's official API instead: create a free application for the \"Tempo Like Supply Contract\" API on data.rte-france.com and enter its credentials. Leave both fields empty to use the public calendar only.",
+        "title": "Options",
+        "description": "Both are optional. The outdoor temperature shows the weather next to the consumption on the Contracts page. Tempo colors come from RTE's public calendar, which needs no account; if it stops working, the integration can use RTE's official API instead: create a free application for the \"Tempo Like Supply Contract\" API on data.rte-france.com and enter its credentials.",
         "data": {
-          "rte_client_id": "Client ID",
-          "rte_client_secret": "Client secret"
+          "temperature_statistic_id": "Outdoor temperature",
+          "rte_client_id": "RTE client ID",
+          "rte_client_secret": "RTE client secret"
+        },
+        "data_description": {
+          "temperature_statistic_id": "A temperature sensor outside, with long-term statistics (state class measurement)."
         }
       }
     },
     "error": {
+      "statistic_not_found": "This statistic doesn't exist.",
+      "statistic_not_temperature": "This statistic isn't a temperature (°C, °F…).",
+      "statistic_no_mean": "This statistic has no hourly mean: choose a sensor whose state class is measurement.",
       "incomplete_credentials": "Enter both the client ID and the secret, or neither.",
       "invalid_auth": "RTE refused these credentials.",
       "cannot_connect": "Could not reach RTE. Try again later."

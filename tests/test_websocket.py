@@ -15,17 +15,19 @@ from pytest_homeassistant_custom_component.typing import (
     WebSocketGenerator,
 )
 
-from custom_components.electricity_contracts.const import DOMAIN
+from custom_components.electricity_contracts.const import CONF_TEMPERATURE, DOMAIN
 from custom_components.electricity_contracts.panel import PANEL_URL_PATH
 
 from .conftest import (
     BASE_CONTRACT,
     BASE_PERIODS,
     OTHER_STATISTIC_ID,
+    TEMPERATURE_ID,
     TEMPO_CONTRACT,
     TEMPO_PERIODS,
     Sources,
     add_statistic,
+    add_temperature,
     color_of,
     contract_subentry,
     make_entry,
@@ -411,8 +413,26 @@ async def test_insights(
         # 16 hours from 6:00 to 22:00.
         "peak_energy": 8.0,
         "cost": action["actual"]["total_cost"],
+        "temperature": None,
     }
     assert insights["profile"] == [0.5] * 24
+    # No outdoor temperature in the options.
+    assert insights["weather"] is None
+    # 500 Wh every hour: 500 W all the time, and all the consumption.
+    baseload = insights["baseload"]
+    whole = await compare(hass, entry, "2026-03-01", "2026-03-04")
+    assert baseload == {
+        "power": 500,
+        "nights": [{"date": "2026-03-02", "power": 500}],
+        "share": 1.0,
+        "annual_energy": 4380,
+        # Every hour consumes the same: the average of the hours' prices is the
+        # actual average price of the 72 hours.
+        "annual_cost": pytest.approx(
+            4380 * whole["actual"]["variable_cost"] / whole["actual"]["energy"],
+            rel=1e-3,
+        ),
+    }
     # The day before isn't whole: the data starts at 1:00.
     assert insights["previous"] is None
     tempo = insights["tempo"]
@@ -483,4 +503,156 @@ async def test_insights_without_a_contract_in_force(
         start="2026-03-01",
         end="2026-03-02",
     )
-    assert insights == {"days": [], "profile": [], "previous": None, "tempo": None}
+    assert insights == {
+        "days": [],
+        "profile": [],
+        "previous": None,
+        "tempo": None,
+        "baseload": None,
+        "weather": None,
+    }
+
+
+@pytest.mark.usefixtures("sources")
+async def test_insights_weather(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    # From 2 March (midnight in Paris is 23:00 UTC), 16 days: day n is 18 - n °C
+    # and consumes 6 kWh plus 2 kWh per degree day.
+    days = 16
+    energy = [(6 + 2 * day) * 1000 / 24 for day in range(days) for _ in range(24)]
+    await add_statistic(hass, hours=24 * days, first=23, values=energy)
+    await add_temperature(
+        hass, [18.0 - day for day in range(days) for _ in range(24)], first=23
+    )
+    entry = await setup_entry(
+        hass,
+        make_entry([TEMPO_CONTRACT], options={CONF_TEMPERATURE: TEMPERATURE_ID}),
+    )
+    insights = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/insights",
+        entry_id=entry.entry_id,
+        start="2026-03-02",
+        end="2026-03-17",
+    )
+    assert [day["temperature"] for day in insights["days"]] == [
+        18.0 - day for day in range(days)
+    ]
+    degree_days = sum(range(days))
+    total = sum(6 + 2 * day for day in range(days))
+    assert insights["weather"] == {
+        "base": 18.0,
+        "days": days,
+        "degree_days": degree_days,
+        "mean_temperature": 10.5,
+        "slope": pytest.approx(2.0),
+        "intercept": pytest.approx(6.0),
+        "heating_share": pytest.approx(2 * degree_days / total, abs=1e-4),
+    }
+    # The quietest hour of the first night.
+    assert insights["baseload"]["nights"][0] == {"date": "2026-03-02", "power": 250}
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_insights_weather_needs_days(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    entry = await setup_entry(
+        hass,
+        make_entry([TEMPO_CONTRACT], options={CONF_TEMPERATURE: TEMPERATURE_ID}),
+    )
+    insights = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/insights",
+        entry_id=entry.entry_id,
+        start="2026-03-01",
+        end="2026-03-03",
+    )
+    # No temperature recorded, and too few days to fit anything.
+    assert insights["weather"] == {
+        "base": 18.0,
+        "days": 0,
+        "degree_days": 0,
+        "mean_temperature": None,
+        "slope": None,
+        "intercept": None,
+        "heating_share": None,
+    }
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_outlook(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) -> None:
+    entry = await setup_entry(hass, make_entry([TEMPO_CONTRACT, BASE_CONTRACT]))
+    outlook = await result(
+        hass_ws_client, hass, type=f"{DOMAIN}/outlook", entry_id=entry.entry_id
+    )
+    assert outlook["contract"] == {"id": "tempo001", "name": "Tempo"}
+    # Saturday 7 November, 10:00: a blue day; Sunday's color isn't published.
+    prices = TEMPO_PERIODS[1].prices
+    assert outlook["prices"] == [
+        {
+            "start": "2026-11-07T10:00:00+01:00",
+            "end": "2026-11-07T22:00:00+01:00",
+            "tranche": "blue_hp",
+            "price": prices[Tranche.BLUE_HP],
+        },
+        {
+            "start": "2026-11-07T22:00:00+01:00",
+            "end": "2026-11-08T06:00:00+01:00",
+            "tranche": "blue_hc",
+            "price": prices[Tranche.BLUE_HC],
+        },
+        {
+            "start": "2026-11-08T06:00:00+01:00",
+            "end": "2026-11-08T10:00:00+01:00",
+            "tranche": None,
+            "price": None,
+        },
+    ]
+    # The data stops in March, before the season: nothing spent, nothing known a
+    # year before to project from.
+    assert outlook["season"] == {
+        "start": "2026-09-01",
+        "end": "2027-08-31",
+        "until": "2026-08-31",
+        "complete": True,
+        "spent": {"cost": 0.0, "energy": 0.0},
+        "projection": None,
+        "total": None,
+        "previous": None,
+    }
+
+
+@pytest.mark.usefixtures("sources")
+async def test_outlook_spent_this_season(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    # The season's first two days, from midnight in Paris (22:00 UTC).
+    first = (date(2026, 8, 31) - date(2026, 3, 1)).days * 24 + 22
+    await add_statistic(hass, hours=48, first=first, values=[500.0] * 48)
+    entry = await setup_entry(hass, make_entry([BASE_CONTRACT, TEMPO_CONTRACT]))
+    outlook = await result(
+        hass_ws_client, hass, type=f"{DOMAIN}/outlook", entry_id=entry.entry_id
+    )
+    action = await compare(hass, entry, "2026-09-01", "2026-09-02")
+    season = outlook["season"]
+    assert season["complete"] is True
+    assert season["until"] == "2026-09-02"
+    assert season["spent"] == {
+        "cost": action["actual"]["total_cost"],
+        "energy": 24.0,
+    }
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_outlook_without_a_contract_in_force(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    entry = await setup_entry(hass, make_entry([BASE_CONTRACT]))
+    outlook = await result(
+        hass_ws_client, hass, type=f"{DOMAIN}/outlook", entry_id=entry.entry_id
+    )
+    assert outlook == {"contract": None, "prices": [], "season": None}

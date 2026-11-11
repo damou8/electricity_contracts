@@ -42,6 +42,7 @@ from .data import (
     price_periods,
 )
 from .insights import async_insights
+from .outlook import async_outlook
 
 _HOUR = timedelta(hours=1)
 # Longer windows are split into months.
@@ -60,6 +61,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     async_register_command(hass, ws_compare)
     async_register_command(hass, ws_bill)
     async_register_command(hass, ws_insights)
+    async_register_command(hass, ws_outlook)
 
 
 def _local_day(moment: datetime) -> str:
@@ -282,6 +284,22 @@ async def ws_insights(
             end=day_start(end + timedelta(days=1)),
         ),
     )
+
+
+@websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/outlook",
+        vol.Required(ATTR_ENTRY_ID): cv.string,
+    }
+)
+@async_response
+async def ws_outlook(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the price over the next 24 hours and the bill of the season."""
+    if (entry := _loaded_entry(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], await async_outlook(hass, entry=entry))
 
 
 def bill_response(bill: Bill) -> dict[str, Any]:

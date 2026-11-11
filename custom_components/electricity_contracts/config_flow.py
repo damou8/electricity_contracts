@@ -13,6 +13,7 @@ from elec_tariffs import (
     TempoAuthError,
     TempoError,
 )
+from homeassistant.components.recorder.models import StatisticMeanType
 from homeassistant.components.recorder.statistics import (
     async_list_statistic_ids,
     get_last_statistics,
@@ -46,7 +47,7 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
-from homeassistant.util.unit_conversion import EnergyConverter
+from homeassistant.util.unit_conversion import EnergyConverter, TemperatureConverter
 
 from .const import (
     CONF_ACTIVE_FROM,
@@ -63,6 +64,7 @@ from .const import (
     CONF_RTE_CLIENT_SECRET,
     CONF_START,
     CONF_STATISTIC_ID,
+    CONF_TEMPERATURE,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
     DEFAULT_OFF_PEAK,
@@ -89,8 +91,9 @@ _DAILY_SECONDS = 23 * 3600
 
 STATISTIC_SCHEMA = vol.Schema({vol.Required(CONF_STATISTIC_ID): StatisticSelector()})
 
-CREDENTIALS_SCHEMA = vol.Schema(
+OPTIONS_SCHEMA = vol.Schema(
     {
+        vol.Optional(CONF_TEMPERATURE): StatisticSelector(),
         vol.Optional(CONF_RTE_CLIENT_ID): TextSelector(),
         vol.Optional(CONF_RTE_CLIENT_SECRET): TextSelector(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
@@ -144,6 +147,23 @@ async def async_validate_statistic(hass: HomeAssistant, statistic_id: str) -> st
         # Only daily values: they can't be split between off-peak and peak hours.
         raise InvalidStatisticError(reason="statistic_daily")
     return meta["name"] or statistic_id
+
+
+async def async_validate_temperature(hass: HomeAssistant, statistic_id: str) -> None:
+    """Check that a statistic is a temperature with a mean.
+
+    Raise InvalidStatisticError otherwise.
+    """
+    metadata = await get_instance(hass).async_add_executor_job(
+        lambda: get_metadata(hass, statistic_ids={statistic_id})
+    )
+    if statistic_id not in metadata:
+        raise InvalidStatisticError(reason="statistic_not_found")
+    _, meta = metadata[statistic_id]
+    if meta["unit_of_measurement"] not in TemperatureConverter.VALID_UNITS:
+        raise InvalidStatisticError(reason="statistic_not_temperature")
+    if meta["mean_type"] != StatisticMeanType.ARITHMETIC:
+        raise InvalidStatisticError(reason="statistic_no_mean")
 
 
 async def async_energy_statistics(
@@ -261,44 +281,54 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class ElectricityContractsOptionsFlow(OptionsFlow):
-    """Set the optional RTE credentials used when the public source fails."""
+    """Set the outdoor temperature and the RTE credentials, both optional."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Check the credentials before saving them."""
+        """Check the temperature and the credentials before saving them."""
         errors: dict[str, str] = {}
         if user_input is not None:
+            options: dict[str, str] = {}
+            if temperature := user_input.get(CONF_TEMPERATURE):
+                try:
+                    await async_validate_temperature(self.hass, temperature)
+                except InvalidStatisticError as err:
+                    errors[CONF_TEMPERATURE] = err.reason
+                options[CONF_TEMPERATURE] = temperature
             client_id = user_input.get(CONF_RTE_CLIENT_ID, "").strip()
             client_secret = user_input.get(CONF_RTE_CLIENT_SECRET, "").strip()
-            if not client_id and not client_secret:
-                return self.async_create_entry(data={})
-            if not client_id or not client_secret:
-                errors["base"] = "incomplete_credentials"
-            else:
-                client = RteOfficialTempoClient(
-                    async_get_clientsession(self.hass), client_id, client_secret
-                )
-                try:
-                    await client.async_check_credentials()
-                except TempoAuthError:
-                    errors["base"] = "invalid_auth"
-                except TempoError:
-                    errors["base"] = "cannot_connect"
-                else:
-                    return self.async_create_entry(
-                        data={
-                            CONF_RTE_CLIENT_ID: client_id,
-                            CONF_RTE_CLIENT_SECRET: client_secret,
-                        }
-                    )
+            if (client_id or client_secret) and not errors:
+                if error := await self._check_credentials(client_id, client_secret):
+                    errors["base"] = error
+                options[CONF_RTE_CLIENT_ID] = client_id
+                options[CONF_RTE_CLIENT_SECRET] = client_secret
+            if not errors:
+                return self.async_create_entry(data=options)
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(
-                CREDENTIALS_SCHEMA, user_input or self.config_entry.options
+                OPTIONS_SCHEMA, user_input or self.config_entry.options
             ),
             errors=errors,
         )
+
+    async def _check_credentials(
+        self, client_id: str, client_secret: str
+    ) -> str | None:
+        """Return why RTE refuses the credentials, None if it accepts them."""
+        if not client_id or not client_secret:
+            return "incomplete_credentials"
+        client = RteOfficialTempoClient(
+            async_get_clientsession(self.hass), client_id, client_secret
+        )
+        try:
+            await client.async_check_credentials()
+        except TempoAuthError:
+            return "invalid_auth"
+        except TempoError:
+            return "cannot_connect"
+        return None
 
 
 def _date(value: str | None) -> date | None:
