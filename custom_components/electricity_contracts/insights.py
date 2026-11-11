@@ -1,7 +1,6 @@
 """What the consumption in force looked like over a window: days, hours, Tempo."""
 
 from datetime import date, datetime, timedelta
-from statistics import median
 from typing import Any
 
 from elec_tariffs import ContractKind, TempoColor, Tranche, season_bounds, season_of
@@ -29,8 +28,9 @@ from .outlook import RED_DAYS, WHITE_DAYS, placed_days
 # Tempo's peak hours, also used to tell day from night for the other contracts.
 _PEAK_HOURS = range(6, 22)
 _ESTIMATE_WEEKS = 8
-# What keeps running at night: the lowest hour between 3:00 and 5:00.
+# What keeps running: the lowest hour between 3:00 and 5:00 of the quiet nights.
 _BASELOAD_HOURS = (3, 4)
+_QUIET_NIGHTS = 0.1
 _YEAR = timedelta(days=365)
 _YEAR_HOURS = 8760
 # Heating degree days count the degrees below 18 °C of each day's mean.
@@ -211,13 +211,15 @@ def _baseload(  # noqa: PLR0913 - the nights, the window and the year
 ) -> dict[str, Any] | None:
     """Describe what keeps running all the time, and what it costs over a year.
 
-    A constant load pays the average price of the hours, which comes from the
-    last 12 months.
+    The quietest nights tell it, as heating or cooling keeps others busy. A
+    constant load pays the average price of the hours, which comes from the last
+    12 months.
     """
     if not nights:
         return None
-    # An hour's kWh is its average power in kW.
-    power = median(nights.values())
+    # The 10th percentile of the nights; an hour's kWh is its average power in kW.
+    quiet = sorted(nights.values())
+    power = quiet[int(_QUIET_NIGHTS * (len(quiet) - 1))]
     energy_by_hour = dict(year.get(energy_id, []))
     prices = [
         cost / energy_by_hour[hour]

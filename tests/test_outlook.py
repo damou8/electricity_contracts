@@ -16,8 +16,11 @@ from homeassistant.config_entries import ConfigSubentryData
 from custom_components.electricity_contracts.const import FRANCE_TIME_ZONE
 from custom_components.electricity_contracts.data import Contract, contracts
 from custom_components.electricity_contracts.outlook import (
+    _history,
+    _peak_shares,
     _place_colors,
     _project,
+    _split_like,
     tranche_at,
 )
 
@@ -98,7 +101,8 @@ def test_project_tempo() -> None:
         tempo,
         TEMPO_PERIODS,
         known,
-        rows,
+        _history(rows, []),
+        {},
         start=start,
         end=end,
         today=date(2026, 11, 30),
@@ -126,13 +130,14 @@ def test_project_needs_history_and_prices() -> None:
     base = contract(BASE_CONTRACT)
     start = paris(2026, 12, 1).astimezone(UTC)
     end = start + timedelta(days=1)
-    rows = history(start, [0.5] * 20)
+    rows = _history(history(start, [0.5] * 20), [])
     assert (
         _project(
             base,
             TEMPO_PERIODS,
             {},
             rows,
+            {},
             start=start,
             end=end,
             today=date(2026, 11, 30),
@@ -140,12 +145,66 @@ def test_project_needs_history_and_prices() -> None:
         is None
     )
     assert (
-        _project(base, [], {}, rows, start=start, end=end, today=date(2026, 11, 30))
+        _project(base, [], {}, rows, {}, start=start, end=end, today=date(2026, 11, 30))
         is None
     )
     assert _project(
-        base, TEMPO_PERIODS, {}, rows, start=end, end=end, today=date(2026, 11, 30)
+        base, TEMPO_PERIODS, {}, rows, {}, start=end, end=end, today=date(2026, 11, 30)
     ) == {
         "cost": 0.0,
         "energy": 0.0,
     }
+
+
+def test_history_spreads_the_days_known_in_total() -> None:
+    # 1 December was only known in total, the hours after it one by one.
+    day = paris(2026, 12, 1).astimezone(UTC)
+    rows = [
+        (day.timestamp(), 24.0),
+        ((day + timedelta(days=1)).timestamp(), 2.0),
+        ((day + timedelta(days=1, hours=1)).timestamp(), 3.0),
+    ]
+    hours = {
+        moment.replace(tzinfo=FRANCE_TIME_ZONE): value
+        for moment, value in _history(rows, []).items()
+    }
+    # Without hours to learn a typical day from, every hour gets as much.
+    assert [hours[paris(2026, 12, 1, hour)] for hour in range(24)] == [1.0] * 24
+    assert hours[paris(2026, 12, 2, 0)] == 2.0
+    assert hours[paris(2026, 12, 2, 1)] == 3.0
+    assert len(hours) == 26
+
+
+def test_peak_shares() -> None:
+    shares = _peak_shares(
+        {
+            Tranche.BLUE_HC: 3.0,
+            Tranche.BLUE_HP: 1.0,
+            Tranche.RED_HC: 4.0,
+            Tranche.RED_HP: 0.0,
+        }
+    )
+    # White days consumed nothing: they take the share of all the days.
+    assert shares == {
+        TempoColor.BLUE: 0.25,
+        TempoColor.WHITE: 1 / 8,
+        TempoColor.RED: 0.0,
+    }
+    assert _peak_shares({}) == {}
+
+
+def test_split_like_the_color() -> None:
+    # A red day from 6:00 to 6:00, 1 kWh an hour: 16 in peak hours, 8 off-peak.
+    hours = [paris(2026, 12, 1, 6) + timedelta(hours=hour) for hour in range(24)]
+    colors = {date(2026, 12, 1): TempoColor.RED}
+    energy = _split_like(hours, [1.0] * 24, colors, {TempoColor.RED: 0.25})
+    assert sum(energy) == pytest.approx(24.0)
+    # 22:00 to 6:00 are off-peak.
+    assert sum(energy[16:]) == pytest.approx(18.0)
+    assert _split_like(hours, [1.0] * 24, colors, {}) == [1.0] * 24
+    # A day of unknown color, or cut, stays as it is.
+    assert _split_like(hours, [1.0] * 24, {}, {TempoColor.RED: 0.25}) == [1.0] * 24
+    assert (
+        _split_like(hours[:20], [1.0] * 20, colors, {TempoColor.RED: 0.25})
+        == [1.0] * 20
+    )

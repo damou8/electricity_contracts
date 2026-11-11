@@ -10,6 +10,7 @@ from elec_tariffs import (
     TEMPO_OFF_PEAK,
     ContractKind,
     ContractRules,
+    DayShape,
     PricePeriod,
     TempoColor,
     Tranche,
@@ -19,6 +20,8 @@ from elec_tariffs import (
     season_of,
     tempo_day,
 )
+from homeassistant.components.recorder.statistics import statistics_during_period
+from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.recorder import get_instance
 from homeassistant.util import dt as dt_util
@@ -31,7 +34,7 @@ from .comparison import (
     hourly_changes,
     read_changes,
 )
-from .const import FRANCE_TIME_ZONE
+from .const import CONF_STATISTIC_ID, FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
 from .data import Contract, contracts, in_force, manual_prices, price_periods
 
@@ -45,10 +48,18 @@ _SATURDAY = 5
 _SUNDAY = 6
 
 _HOUR = timedelta(hours=1)
+_DAY = timedelta(days=1)
+# Linky rows at least this far apart hold a whole day.
+_DAILY = timedelta(hours=23)
+# The typical day the daily totals are spread with.
+_SHAPE_WEEKS = timedelta(weeks=8)
 _HALF_HOUR = timedelta(minutes=30)
 _TIMELINE = timedelta(hours=24)
 # The same day of the week, a year before.
 _YEAR_BEFORE = timedelta(days=364)
+_YEAR = timedelta(days=365)
+# A whole day has 23 hours or more (24, or 23 and 25 when the clocks change).
+_MIN_DAY_HOURS = 23
 # Below this share of last year's hours, the rest of the season isn't projected.
 _MIN_HISTORY = 0.9
 
@@ -153,7 +164,10 @@ async def _async_season(
     """Add what the season has cost so far to what the rest should cost.
 
     The rest of the season consumes like the same days a year before, at today's
-    prices. Tempo's colors left go to the days that consumed the most.
+    prices; a day the meter only gave the total of is spread like a typical day of
+    the last weeks. Tempo's colors left go to the days that consumed the most, and
+    each Tempo day splits between peak and off-peak hours like the days of its
+    color did over the last 12 months.
     """
     coordinator = entry.runtime_data
     status = coordinator.data.costing
@@ -172,16 +186,22 @@ async def _async_season(
     previous_start = day_start(previous_first)
     previous_end = day_start(previous_last + timedelta(days=1))
     actual = coordinator.costing.actual_statistics()
-    energy_id = coordinator.costing.contract_statistics(
-        contract.uid, contract.kind
-    ).energy
+    contract_ids = coordinator.costing.contract_statistics(contract.uid, contract.kind)
+    energy_id = contract_ids.energy
+    tranche_ids = (
+        contract_ids.tranche_energy if contract.kind is ContractKind.TEMPO else {}
+    )
+    year_start = max(available - _YEAR, status.first_hour)
     totals = [actual.variable, actual.fixed, actual.energy]
+    source_id: str = entry.data[CONF_STATISTIC_ID]
 
     def read() -> tuple[
         dict[str, float],
         dict[str, float] | None,
         dict[str, float] | None,
         list[tuple[float, float]],
+        list[tuple[float, float]],
+        dict[str, float],
     ]:
         spent = read_changes(hass, spent_start, spent_end, totals)
         previous = to_date = None
@@ -195,21 +215,40 @@ async def _async_season(
                 previous_start + (spent_end - season_start),
                 totals,
             )
-        history = hourly_changes(
-            hass, spent_end - _YEAR_BEFORE, season_end - _YEAR_BEFORE, [energy_id]
-        )[energy_id]
-        return spent, previous, to_date, history
+        # The source, not our statistics: it also has the days only known in total.
+        # A day more on each side, to tell daily rows from hourly ones.
+        history = [
+            (row["start"], row.get("change") or 0.0)
+            for row in statistics_during_period(
+                hass,
+                spent_end - _YEAR_BEFORE - _DAY,
+                season_end - _YEAR_BEFORE + _DAY,
+                {source_id},
+                "hour",
+                {"energy": UnitOfEnergy.KILO_WATT_HOUR},
+                {"change"},
+            ).get(source_id, [])
+        ]
+        recent = hourly_changes(hass, spent_end - _SHAPE_WEEKS, spent_end, [energy_id])[
+            energy_id
+        ]
+        tranches = read_changes(hass, year_start, available, list(tranche_ids.values()))
+        return spent, previous, to_date, history, recent, tranches
 
-    spent, previous, to_date, history = await get_instance(hass).async_add_executor_job(
-        read
-    )
+    spent, previous, to_date, history, recent, tranches = await get_instance(
+        hass
+    ).async_add_executor_job(read)
     projection = await hass.async_add_executor_job(
         partial(
             _project,
             contract,
             periods,
             coordinator.data.sources.calendar,
-            history,
+            _history(history, recent),
+            {
+                tranche: tranches[statistic_id]
+                for tranche, statistic_id in tranche_ids.items()
+            },
             start=spent_end,
             end=season_end,
             today=today,
@@ -261,7 +300,8 @@ def _project(  # noqa: PLR0913 - the contract, its data and the hours to project
     contract: Contract,
     periods: list[PricePeriod],
     calendar: Mapping[date, TempoColor],
-    history: list[tuple[float, float]],
+    history: dict[datetime, float],
+    tranches: Mapping[Tranche, float],
     *,
     start: datetime,
     end: datetime,
@@ -274,11 +314,7 @@ def _project(  # noqa: PLR0913 - the contract, its data and the hours to project
     period = next((item for item in periods if item.covers(today)), None)
     if period is None:
         return None
-    hours: list[datetime] = []
-    moment = start
-    while moment < end:
-        hours.append(moment.astimezone(FRANCE_TIME_ZONE))
-        moment += _HOUR
+    hours = _local_hours(start, end)
     if (energy := _year_before(history, hours)) is None:
         return None
     # Today's prices for the rest of the season: the next ones aren't known.
@@ -286,41 +322,135 @@ def _project(  # noqa: PLR0913 - the contract, its data and the hours to project
     colors = dict(calendar)
     if contract.kind is ContractKind.TEMPO:
         colors.update(_place_colors(calendar, hours, energy, today))
+        energy = _split_like(hours, energy, colors, _peak_shares(tranches))
     cost = 0.0
     for hour, kwh in zip(hours, energy, strict=True):
         cost += cost_hour(hour, kwh, contract.rules, prices, colors).total
     return {"cost": cost, "energy": sum(energy)}
 
 
+def _local_hours(start: datetime, end: datetime) -> list[datetime]:
+    """Return the hours from `start` to `end`, French time."""
+    hours: list[datetime] = []
+    moment = start
+    while moment < end:
+        hours.append(moment.astimezone(FRANCE_TIME_ZONE))
+        moment += _HOUR
+    return hours
+
+
+def _wall(moment: datetime) -> datetime:
+    """Return the time a French clock shows, without the time zone."""
+    return moment.astimezone(FRANCE_TIME_ZONE).replace(tzinfo=None)
+
+
+def _history(
+    rows: list[tuple[float, float]], recent: list[tuple[float, float]]
+) -> dict[datetime, float]:
+    """Return what each hour consumed (French clock time) from the source's rows.
+
+    A row the next one follows a day later holds a whole day: it is spread like
+    the typical day of the `recent` hours.
+    """
+    days: dict[date, list[float]] = {}
+    for timestamp, energy in recent:
+        days.setdefault(_wall(dt_util.utc_from_timestamp(timestamp)).date(), []).append(
+            energy
+        )
+    shape = DayShape.learn(days)
+    hours: dict[datetime, float] = {}
+    for index, (timestamp, energy) in enumerate(rows):
+        start = dt_util.utc_from_timestamp(timestamp)
+        following = rows[index + 1][0] if index + 1 < len(rows) else None
+        if following is not None and following - timestamp >= _DAILY.total_seconds():
+            day = _wall(start).date()
+            day_hours = _local_hours(day_start(day), day_start(day + _DAY))
+            for hour, value in zip(
+                day_hours, shape.spread(day_hours, energy), strict=True
+            ):
+                hours[_wall(hour)] = value
+        else:
+            hours[_wall(start)] = energy
+    return hours
+
+
 def _year_before(
-    history: list[tuple[float, float]], hours: list[datetime]
+    history: dict[datetime, float], hours: list[datetime]
 ) -> list[float] | None:
     """Return what each hour (French time) consumed on the same day a year before.
 
     The few hours missing take the average of the same hour of the day; None when
     too many are missing.
     """
-
-    def wall(moment: datetime) -> datetime:
-        return moment.astimezone(FRANCE_TIME_ZONE).replace(tzinfo=None)
-
-    before = {
-        wall(dt_util.utc_from_timestamp(timestamp)) + _YEAR_BEFORE: energy
-        for timestamp, energy in history
-    }
     by_hour: dict[int, list[float]] = {}
     for hour in hours:
-        if (value := before.get(wall(hour))) is not None:
+        if (value := history.get(_wall(hour) - _YEAR_BEFORE)) is not None:
             by_hour.setdefault(hour.hour, []).append(value)
     if sum(len(values) for values in by_hour.values()) < _MIN_HISTORY * len(hours):
         return None
     energy: list[float] = []
     for hour in hours:
-        if (value := before.get(wall(hour))) is None:
+        if (value := history.get(_wall(hour) - _YEAR_BEFORE)) is None:
             same = by_hour.get(hour.hour, [])
             value = sum(same) / len(same) if same else 0.0
         energy.append(value)
     return energy
+
+
+def _peak_shares(tranches: Mapping[Tranche, float]) -> dict[TempoColor, float]:
+    """Return the share of peak hours in the days of each color.
+
+    A color without consumption takes the share of all the days.
+    """
+    peak = {
+        color: tranches.get(Tranche(f"{color.value}_hp"), 0.0) for color in TempoColor
+    }
+    total = {
+        color: peak[color] + tranches.get(Tranche(f"{color.value}_hc"), 0.0)
+        for color in TempoColor
+    }
+    if not (overall := sum(total.values())):
+        return {}
+    return {
+        color: peak[color] / total[color]
+        if total[color]
+        else sum(peak.values()) / overall
+        for color in TempoColor
+    }
+
+
+def _split_like(
+    hours: list[datetime],
+    energy: list[float],
+    colors: Mapping[date, TempoColor],
+    shares: Mapping[TempoColor, float],
+) -> list[float]:
+    """Move energy between the peak and off-peak hours of each Tempo day.
+
+    Each day keeps its total, split like the days of its color.
+    """
+    if not shares:
+        return energy
+    # Off-peak and peak energy, and hours, of each day; a day cut by the start or
+    # the end of the projection stays as it is.
+    parts: dict[date, list[float]] = {}
+    for hour, kwh in zip(hours, energy, strict=True):
+        part = parts.setdefault(tempo_day(hour), [0.0, 0.0, 0])
+        part[0 if is_off_peak(hour.time(), TEMPO_OFF_PEAK) else 1] += kwh
+        part[2] += 1
+    factors: dict[date, tuple[float, float]] = {}
+    for day, (off, on, count) in parts.items():
+        color = colors.get(day)
+        if color is None or count < _MIN_DAY_HOURS or not off or not on:
+            factors[day] = (1.0, 1.0)
+            continue
+        share = shares[color]
+        factors[day] = ((off + on) * (1 - share) / off, (off + on) * share / on)
+    return [
+        kwh
+        * factors[tempo_day(hour)][0 if is_off_peak(hour.time(), TEMPO_OFF_PEAK) else 1]
+        for hour, kwh in zip(hours, energy, strict=True)
+    ]
 
 
 def _place_colors(

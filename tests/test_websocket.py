@@ -553,6 +553,8 @@ async def test_insights_weather(
     }
     # The quietest hour of the first night.
     assert insights["baseload"]["nights"][0] == {"date": "2026-03-02", "power": 250}
+    # The second quietest of the 16 nights: 8 kWh over the day.
+    assert insights["baseload"]["power"] == 333
 
 
 @pytest.mark.usefixtures("statistic", "sources")
