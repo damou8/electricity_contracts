@@ -13,6 +13,16 @@ const STRINGS = {
     title: "Contracts",
     tabActual: "Actual cost",
     tabBill: "Phantom bill",
+    currentContract: "Current contract",
+    regulated: "regulated prices",
+    manualPrices: "prices entered by hand",
+    since: "since {date}",
+    offPeakHours: "off-peak {ranges}",
+    weekendOffPeak: "weekends off-peak",
+    pricesSince: "Prices in force since {date}",
+    noPrices: "No price is known for today.",
+    price: "Price",
+    perMonth: "{amount}/month",
     noContractInForce: "Set when your contract started (in the contract's settings) to see what you paid.",
     ofWhichSubscription: "of which {amount} of subscription",
     withSubscription: "subscription included",
@@ -74,6 +84,16 @@ const STRINGS = {
     title: "Contrats",
     tabActual: "Coût réel",
     tabBill: "Facture fantôme",
+    currentContract: "Contrat en cours",
+    regulated: "tarif réglementé",
+    manualPrices: "prix saisis à la main",
+    since: "depuis le {date}",
+    offPeakHours: "heures creuses {ranges}",
+    weekendOffPeak: "week-end en heures creuses",
+    pricesSince: "Prix en vigueur depuis le {date}",
+    noPrices: "Aucun prix n'est connu pour aujourd'hui.",
+    price: "Prix",
+    perMonth: "{amount}/mois",
     noContractInForce: "Indiquez le début de votre contrat (dans les réglages du contrat) pour voir ce que vous avez payé.",
     ofWhichSubscription: "dont {amount} d'abonnement",
     withSubscription: "abonnement compris",
@@ -131,6 +151,11 @@ const STRINGS = {
     cheaper: "{amount} de moins que le coût réel",
     same: "Identique au coût réel",
   },
+};
+
+const KINDS = {
+  en: { base: "Base", hphc: "Peak / off-peak", tempo: "Tempo" },
+  fr: { base: "Base", hphc: "Heures pleines / creuses", tempo: "Tempo" },
 };
 
 const TRANCHES = {
@@ -990,12 +1015,16 @@ class ElectricityContractsPanel extends HTMLElement {
     } else {
       this._timeChart = h("div", { class: "chart" });
       const inForce = this._contractsInForce();
-      this._content.replaceChildren(
+      const cards = [
         this._renderKpis(),
+        ...this._renderContractCards(),
         this._card(this._t("costOverTime"), this._t(this._data.group_by === "month" ? "costPerMonth" : "costPerDay"), this._timeChart, this._toggle("time")),
-        // The split of a contract covers the whole period: only shown when one was in force.
-        inForce.length === 1 ? this._card(this._t("tranches"), this._t("tranchesHint"), this._renderTranches(inForce)) : null,
-      );
+      ];
+      // The split of a contract covers the whole period: only shown when one was in force.
+      if (inForce.length === 1) {
+        cards.push(this._card(this._t("tranches"), this._t("tranchesHint"), this._renderTranches(inForce)));
+      }
+      this._content.replaceChildren(...cards);
     }
     this._width = this._content.clientWidth;
     this._renderCharts();
@@ -1028,6 +1057,64 @@ class ElectricityContractsPanel extends HTMLElement {
       tile(this._t("consumption"), this._kwh(actual.energy), ""),
       tile(this._t("average"), actual.average_price !== null ? `${this._price(actual.average_price)}/kWh` : "—", this._t("withSubscription")),
     );
+  }
+
+  // The contracts in force today, with the prices they have today.
+  _renderContractCards() {
+    const today = dayString(Date.now());
+    const names = TRANCHES[this._language];
+    return this._entry.contracts
+      .filter((contract) => contract.active_from && contract.active_from <= today && (!contract.active_to || contract.active_to >= today))
+      .map((contract) => {
+        const facts = [
+          KINDS[this._language][contract.kind] || contract.kind,
+          contract.kva ? `${contract.kva} kVA` : null,
+          this._t(contract.official ? "regulated" : "manualPrices"),
+          this._t("since", { date: this._dayLabel(contract.active_from) }),
+          contract.off_peak.length ? this._t("offPeakHours", { ranges: contract.off_peak.join(", ") }) : null,
+          contract.weekend_off_peak ? this._t("weekendOffPeak") : null,
+        ];
+        const prices = contract.prices;
+        const body = prices
+          ? h(
+              "div",
+              { class: "bill" },
+              h("h3", {}, this._t("pricesSince", { date: this._dayLabel(prices.start) })),
+              h(
+                "div",
+                { class: "table-wrap" },
+                h(
+                  "table",
+                  {},
+                  h("thead", {}, h("tr", {}, h("th", {}, this._t("item")), h("th", {}, this._t("price")))),
+                  h(
+                    "tbody",
+                    {},
+                    h(
+                      "tr",
+                      {},
+                      h("td", {}, this._t("subscription")),
+                      h(
+                        "td",
+                        {},
+                        `${this._t("subscriptionYear", { amount: this._money(prices.fixed_per_year) })} · ${this._t("perMonth", { amount: this._money(prices.fixed_per_year / 12) })}`,
+                      ),
+                    ),
+                    Object.entries(prices.tranches).map(([tranche, price]) =>
+                      h(
+                        "tr",
+                        {},
+                        h("td", {}, h("span", { class: "swatch", style: { background: (TRANCHE_FILLS[tranche] || ["#898781"])[0] } }), names[tranche] || tranche),
+                        h("td", {}, `${this._price(price)}/kWh`),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : h("p", { class: "message" }, this._t("noPrices"));
+        return this._card(`${this._t("currentContract")} · ${contract.name}`, facts.filter(Boolean).join(" · "), body);
+      });
   }
 
   // The compared contracts that were in force during the period.

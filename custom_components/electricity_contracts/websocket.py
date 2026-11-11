@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 import probatio as vol
+from elec_tariffs import PricePeriod
 from homeassistant.components.websocket_api import async_register_command
 from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.components.websocket_api.const import (
@@ -18,6 +19,7 @@ from homeassistant.components.websocket_api.decorators import (
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.util import dt as dt_util
 
 from .bill import Bill, async_bill
 from .comparison import (
@@ -33,7 +35,13 @@ from .coordinator import (
     ElectricityContractsConfigEntry,
     ElectricityContractsCoordinator,
 )
-from .data import contracts, manual_prices, price_periods
+from .data import (
+    Contract,
+    contracts,
+    format_time_range,
+    manual_prices,
+    price_periods,
+)
 
 _HOUR = timedelta(hours=1)
 # Longer windows are split into months.
@@ -87,6 +95,38 @@ def _window(
     return start, end
 
 
+def _contract(
+    contract: Contract, periods: list[PricePeriod], today: date
+) -> dict[str, Any]:
+    """Describe a contract and the prices it has today, None without any."""
+    current = next((period for period in periods if period.covers(today)), None)
+    return {
+        "id": contract.uid,
+        "name": contract.name,
+        "kind": contract.kind.value,
+        "official": contract.official,
+        "kva": contract.kva,
+        "off_peak": [format_time_range(item) for item in contract.rules.off_peak],
+        "weekend_off_peak": contract.rules.weekend_off_peak,
+        "active_from": (
+            contract.active_from.isoformat() if contract.active_from else None
+        ),
+        "active_to": contract.active_to.isoformat() if contract.active_to else None,
+        "prices": (
+            {
+                "start": current.start.isoformat(),
+                "end": current.end.isoformat() if current.end else None,
+                "fixed_per_year": current.fixed_per_year,
+                "tranches": {
+                    tranche.value: price for tranche, price in current.prices.items()
+                },
+            }
+            if current is not None
+            else None
+        ),
+    }
+
+
 @websocket_command({vol.Required("type"): f"{DOMAIN}/entries"})
 @callback
 def ws_entries(
@@ -94,7 +134,9 @@ def ws_entries(
 ) -> None:
     """List the consumption sources, their contracts and the days they cover."""
     result: list[dict[str, Any]] = []
+    today = dt_util.now(FRANCE_TIME_ZONE).date()
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        manual = manual_prices(entry)
         coordinator: ElectricityContractsCoordinator = entry.runtime_data
         status = coordinator.data.costing
         entry_contracts = contracts(entry)
@@ -108,21 +150,13 @@ def ws_entries(
                 ),
                 "last_day": _local_day(end - _HOUR) if end else None,
                 "contracts": [
-                    {
-                        "id": contract.uid,
-                        "name": contract.name,
-                        "kind": contract.kind.value,
-                        "active_from": (
-                            contract.active_from.isoformat()
-                            if contract.active_from
-                            else None
+                    _contract(
+                        contract,
+                        price_periods(
+                            contract, manual, coordinator.data.sources.official_prices
                         ),
-                        "active_to": (
-                            contract.active_to.isoformat()
-                            if contract.active_to
-                            else None
-                        ),
-                    }
+                        today,
+                    )
                     for contract in entry_contracts
                 ],
                 "actual": status.actual is not None,

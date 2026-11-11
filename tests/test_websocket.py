@@ -63,15 +63,39 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
                     "id": "tempo001",
                     "name": "Tempo",
                     "kind": "tempo",
+                    "official": True,
+                    "kva": 6,
+                    "off_peak": [],
+                    "weekend_off_peak": False,
                     "active_from": "2024-01-01",
                     "active_to": None,
+                    # The prices of 7 November 2026.
+                    "prices": {
+                        "start": "2026-08-01",
+                        "end": None,
+                        "fixed_per_year": 189.98,
+                        "tranches": {
+                            tranche.value: price
+                            for tranche, price in TEMPO_PERIODS[1].prices.items()
+                        },
+                    },
                 },
                 {
                     "id": "base0001",
                     "name": "Base",
                     "kind": "base",
+                    "official": True,
+                    "kva": 6,
+                    "off_peak": [],
+                    "weekend_off_peak": False,
                     "active_from": None,
                     "active_to": None,
+                    "prices": {
+                        "start": "2026-08-01",
+                        "end": None,
+                        "fixed_per_year": 190.81,
+                        "tranches": {"base": 0.2001},
+                    },
                 },
             ],
             "actual": True,
@@ -83,8 +107,14 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
 async def test_entries_before_any_data(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator
 ) -> None:
-    await setup_entry(hass, make_entry([BASE_CONTRACT]))
+    offer = contract_subentry(
+        "Offer", uid="offer001", kind=ContractKind.BASE, pricing="manual"
+    )
+    await setup_entry(hass, make_entry([BASE_CONTRACT, offer]))
     [entry] = await result(hass_ws_client, hass, type=f"{DOMAIN}/entries")
+    # No price was entered for the offer.
+    assert entry["contracts"][1]["official"] is False
+    assert entry["contracts"][1]["prices"] is None
     assert entry["first_day"] is None
     assert entry["last_day"] is None
     assert entry["actual"] is False
