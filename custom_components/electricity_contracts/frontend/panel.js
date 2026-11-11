@@ -21,8 +21,7 @@ const STRINGS = {
     weekendOffPeak: "weekends off-peak",
     pricesSince: "Prices in force since {date}",
     noPrices: "No price is known for this contract.",
-    price: "Price",
-    perMonth: "{amount}/month",
+    sincePrevious: "{change} vs previous prices",
     noContractInForce: "Set when your contract started (in the contract's settings) to see what you paid.",
     ofWhichSubscription: "of which {amount} of subscription",
     withSubscription: "subscription included",
@@ -92,8 +91,7 @@ const STRINGS = {
     weekendOffPeak: "week-end en heures creuses",
     pricesSince: "Prix en vigueur depuis le {date}",
     noPrices: "Aucun prix n'est connu pour ce contrat.",
-    price: "Prix",
-    perMonth: "{amount}/mois",
+    sincePrevious: "{change} vs prix précédents",
     noContractInForce: "Indiquez le début de votre contrat (dans les réglages du contrat) pour voir ce que vous avez payé.",
     ofWhichSubscription: "dont {amount} d'abonnement",
     withSubscription: "abonnement compris",
@@ -366,6 +364,13 @@ main {
 .kpi .label { color: var(--ec-text-2); font-size: 14px; }
 .kpi .value { font-size: 28px; font-weight: 600; margin: 4px 0 2px; line-height: 1.2; overflow-wrap: anywhere; }
 .kpi .sub { color: var(--ec-text-2); font-size: 13px; }
+.price-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 8px; }
+.price-tile { border: 1px solid var(--divider-color, var(--ec-grid)); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.price-tile .name { display: flex; align-items: center; gap: 6px; color: var(--ec-text-2); font-size: 13px; }
+.price-tile .price { font-size: 18px; font-weight: 600; margin: 2px 0; }
+.price-tile .delta { color: var(--ec-text-2); font-size: 12px; }
+.price-tile svg { display: block; margin-top: 8px; overflow: visible; }
+.price-tile rect { fill: transparent; cursor: pointer; }
 .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .line-key { width: 14px; height: 2px; border-radius: 1px; flex: none; }
 .chart { position: relative; width: 100%; }
@@ -1064,7 +1069,6 @@ class ElectricityContractsPanel extends HTMLElement {
   // The contracts in force today, with the prices they have had.
   _renderContractCards() {
     const today = dayString(Date.now());
-    const names = TRANCHES[this._language];
     return this._entry.contracts
       .filter((contract) => contract.active_from && contract.active_from <= today && (!contract.active_to || contract.active_to >= today))
       .map((contract) => {
@@ -1085,9 +1089,7 @@ class ElectricityContractsPanel extends HTMLElement {
               "div",
               {},
               this._nav(
-                prices.end
-                  ? this._t("pricesFrom", { start: this._dayLabel(prices.start), end: this._dayLabel(prices.end) })
-                  : this._t("pricesSince", { date: this._dayLabel(prices.start) }),
+                this._periodLabel(prices),
                 index > 0,
                 index < periods.length - 1,
                 (step) => {
@@ -1095,41 +1097,90 @@ class ElectricityContractsPanel extends HTMLElement {
                   this._renderContent();
                 },
               ),
-              h(
-                "div",
-                { class: "table-wrap" },
-                h(
-                  "table",
-                  {},
-                  h("thead", {}, h("tr", {}, h("th", {}, this._t("item")), h("th", {}, this._t("price")))),
-                  h(
-                    "tbody",
-                    {},
-                    h(
-                      "tr",
-                      {},
-                      h("td", {}, this._t("subscription")),
-                      h(
-                        "td",
-                        {},
-                        `${this._t("subscriptionYear", { amount: this._money(prices.fixed_per_year) })} · ${this._t("perMonth", { amount: this._money(prices.fixed_per_year / 12) })}`,
-                      ),
-                    ),
-                    Object.entries(prices.tranches).map(([tranche, price]) =>
-                      h(
-                        "tr",
-                        {},
-                        h("td", {}, h("span", { class: "swatch", style: { background: (TRANCHE_FILLS[tranche] || ["#898781"])[0] } }), names[tranche] || tranche),
-                        h("td", {}, `${this._price(price)}/kWh`),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              this._priceTiles(contract, periods, index, today),
             )
           : h("p", { class: "message" }, this._t("noPrices"));
         return this._card(`${this._t("currentContract")} · ${contract.name}`, facts.filter(Boolean).join(" · "), body);
       });
+  }
+
+  // One tile per price of a contract: its value in the chosen price period, the
+  // change since the period before, and how it moved over every period.
+  _priceTiles(contract, periods, index, today) {
+    const names = TRANCHES[this._language];
+    const starts = periods.map((period) => dayTime(period.start));
+    const last = Math.max(dayTime(today), starts[starts.length - 1] + DAY_MS);
+    const x = (time) => ((time - starts[0]) / (last - starts[0])) * 100;
+    const edge = (position) => (position < periods.length ? x(starts[position]) : 100);
+    const select = (position) => {
+      this._pricePeriods[contract.id] = position;
+      this._renderContent();
+    };
+    const percent = new Intl.NumberFormat(this._locale, { style: "percent", maximumFractionDigits: 1, signDisplay: "exceptZero" });
+    const tile = (label, color, values, text) => {
+      const known = values.filter((value) => value !== null);
+      const min = Math.min(...known);
+      const max = Math.max(...known);
+      const y = (value) => (max === min ? 20 : 36 - ((value - min) / (max - min)) * 32);
+      let path = "";
+      values.forEach((value, position) => {
+        if (value === null) return;
+        path += `${path ? "L" : "M"}${edge(position)},${y(value)}H${edge(position + 1)}`;
+      });
+      const value = values[index];
+      const before = index > 0 ? values[index - 1] : null;
+      const change = value !== null && before ? value / before - 1 : null;
+      return h(
+        "div",
+        { class: "price-tile" },
+        h("div", { class: "name" }, color ? h("span", { class: "swatch", style: { background: color } }) : null, label),
+        h("div", { class: "price" }, value === null ? "—" : text(value)),
+        h("div", { class: "delta" }, change === null ? "\u00a0" : this._t("sincePrevious", { change: percent.format(change) })),
+        s(
+          "svg",
+          { viewBox: "0 0 100 40", preserveAspectRatio: "none", width: "100%", height: 44, role: "img", "aria-label": label },
+          s("path", { d: path, "vector-effect": "non-scaling-stroke", style: { fill: "none", stroke: "var(--ec-muted)", "stroke-width": "1.5px" } }),
+          value === null
+            ? null
+            : s("path", {
+                d: `M${edge(index)},${y(value)}H${edge(index + 1)}`,
+                "vector-effect": "non-scaling-stroke",
+                style: { fill: "none", stroke: color || "var(--ec-s1)", "stroke-width": "4px", "stroke-linecap": "round" },
+              }),
+          periods.map((period, position) =>
+            s(
+              "rect",
+              { x: edge(position), y: 0, width: edge(position + 1) - edge(position), height: 40, onclick: () => select(position) },
+              s("title", {}, `${this._periodLabel(period)} : ${values[position] === null ? "—" : text(values[position])}`),
+            ),
+          ),
+        ),
+      );
+    };
+    return h(
+      "div",
+      { class: "price-tiles" },
+      tile(
+        this._t("subscription"),
+        null,
+        periods.map((period) => period.fixed_per_year),
+        (value) => this._t("subscriptionYear", { amount: this._money(value) }),
+      ),
+      Object.keys(periods[index].tranches).map((tranche) =>
+        tile(
+          names[tranche] || tranche,
+          (TRANCHE_FILLS[tranche] || ["#898781"])[0],
+          periods.map((period) => period.tranches[tranche] ?? null),
+          (value) => `${this._price(value)}/kWh`,
+        ),
+      ),
+    );
+  }
+
+  _periodLabel(period) {
+    return period.end
+      ? this._t("pricesFrom", { start: this._dayLabel(period.start), end: this._dayLabel(period.end) })
+      : this._t("pricesSince", { date: this._dayLabel(period.start) });
   }
 
   // The compared contracts that were in force during the period.
