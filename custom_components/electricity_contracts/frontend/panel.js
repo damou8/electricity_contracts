@@ -5,12 +5,17 @@ const DOMAIN = "electricity_contracts";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const DAY_MS = 86400000;
 const SERIES_SLOTS = 8;
+// Series of what the contracts in force cost.
+const ACTUAL = "actual";
 
 const STRINGS = {
   en: {
     title: "Contracts",
-    tabCompare: "Comparison",
+    tabActual: "Actual cost",
     tabBill: "Phantom bill",
+    noContractInForce: "Set when your contract started (in the contract's settings) to see what you paid.",
+    ofWhichSubscription: "of which {amount} of subscription",
+    withSubscription: "subscription included",
     rolling: "Last 12 months",
     year: "Year",
     month: "Month",
@@ -27,14 +32,6 @@ const STRINGS = {
     noContract: "Add a contract to the integration to compare it here.",
     loadFailed: "Loading failed: {error}",
     actualCost: "Actual cost",
-    actualHint: "{price}/kWh with the contracts in force",
-    noActual: "Set when your contract started to see it",
-    cheapest: "Cheapest",
-    ranking: "Ranking",
-    rankingHint: "Subscription and consumption, over the same hours",
-    current: "Current",
-    best: "Cheapest",
-    perKwh: "{price}/kWh",
     costOverTime: "Cost over time",
     costPerMonth: "Total cost per month",
     costPerDay: "Total cost per day",
@@ -75,8 +72,11 @@ const STRINGS = {
   },
   fr: {
     title: "Contrats",
-    tabCompare: "Comparaison",
+    tabActual: "Coût réel",
     tabBill: "Facture fantôme",
+    noContractInForce: "Indiquez le début de votre contrat (dans les réglages du contrat) pour voir ce que vous avez payé.",
+    ofWhichSubscription: "dont {amount} d'abonnement",
+    withSubscription: "abonnement compris",
     rolling: "12 derniers mois",
     year: "Année",
     month: "Mois",
@@ -93,14 +93,6 @@ const STRINGS = {
     noContract: "Ajoutez un contrat à l'intégration pour le comparer ici.",
     loadFailed: "Le chargement a échoué : {error}",
     actualCost: "Coût réel",
-    actualHint: "{price}/kWh avec les contrats en vigueur",
-    noActual: "Indiquez le début de votre contrat pour le voir",
-    cheapest: "Le moins cher",
-    ranking: "Classement",
-    rankingHint: "Abonnement et consommation, sur les mêmes heures",
-    current: "Actuel",
-    best: "Le moins cher",
-    perKwh: "{price}/kWh",
     costOverTime: "Coût dans le temps",
     costPerMonth: "Coût total par mois",
     costPerDay: "Coût total par jour",
@@ -139,11 +131,6 @@ const STRINGS = {
     cheaper: "{amount} de moins que le coût réel",
     same: "Identique au coût réel",
   },
-};
-
-const KINDS = {
-  en: { base: "Base", hphc: "Peak / off-peak", tempo: "Tempo" },
-  fr: { base: "Base", hphc: "Heures pleines / creuses", tempo: "Tempo" },
 };
 
 const TRANCHES = {
@@ -354,26 +341,6 @@ main {
 .kpi .label { color: var(--ec-text-2); font-size: 14px; }
 .kpi .value { font-size: 28px; font-weight: 600; margin: 4px 0 2px; line-height: 1.2; overflow-wrap: anywhere; }
 .kpi .sub { color: var(--ec-text-2); font-size: 13px; }
-.ranking { display: flex; flex-direction: column; gap: 14px; }
-.rank-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
-.rank-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.rank-name .name { font-weight: 500; overflow-wrap: anywhere; }
-.rank-name .kind { color: var(--ec-text-2); font-size: 13px; }
-.badge {
-  font-size: 12px;
-  border-radius: 10px;
-  padding: 1px 8px;
-  border: 1px solid var(--divider-color, var(--ec-axis));
-  color: var(--ec-text-2);
-  white-space: nowrap;
-}
-.badge.best { border-color: var(--ec-good); color: var(--ec-text); }
-.rank-total { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.track { grid-column: 1 / -1; height: 12px; }
-.bar { height: 12px; border-radius: 0 4px 4px 0; min-width: 2px; }
-.rank-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; color: var(--ec-text-2); font-size: 13px; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; padding: 0; list-style: none; font-size: 13px; color: var(--ec-text-2); }
-.legend li { display: inline-flex; align-items: center; gap: 6px; }
 .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .line-key { width: 14px; height: 2px; border-radius: 1px; flex: none; }
 .chart { position: relative; width: 100%; }
@@ -720,6 +687,7 @@ class ElectricityContractsPanel extends HTMLElement {
   _color(contractId) {
     const contracts = this._entry ? this._entry.contracts : [];
     const index = contracts.findIndex((contract) => contract.id === contractId);
+    if (contractId === ACTUAL) return "var(--ec-s1)";
     return index >= 0 && index < SERIES_SLOTS ? `var(--ec-s${index + 1})` : "var(--ec-other)";
   }
 
@@ -844,7 +812,7 @@ class ElectricityContractsPanel extends HTMLElement {
               this._renderContent();
             },
           },
-          this._t(tab === "compare" ? "tabCompare" : "tabBill"),
+          this._t(tab === "compare" ? "tabActual" : "tabBill"),
         ),
       ),
     );
@@ -1017,18 +985,16 @@ class ElectricityContractsPanel extends HTMLElement {
     this._cumulativeChart = null;
     if (this._tab === "bill") {
       this._content.replaceChildren(...this._renderBillTab());
+    } else if (!this._data.actual) {
+      this._content.replaceChildren(h("section", { class: "card message" }, this._t("noContractInForce")));
     } else {
       this._timeChart = h("div", { class: "chart" });
+      const inForce = this._contractsInForce();
       this._content.replaceChildren(
         this._renderKpis(),
-        this._card(this._t("ranking"), this._t("rankingHint"), this._renderRanking()),
-        this._card(
-          this._t("costOverTime"),
-          this._t(this._data.group_by === "month" ? "costPerMonth" : "costPerDay"),
-          h("div", {}, this._legend("rect"), this._timeChart),
-          this._toggle("time"),
-        ),
-        this._card(this._t("tranches"), this._t("tranchesHint"), this._renderTranches()),
+        this._card(this._t("costOverTime"), this._t(this._data.group_by === "month" ? "costPerMonth" : "costPerDay"), this._timeChart, this._toggle("time")),
+        // The split of a contract covers the whole period: only shown when one was in force.
+        inForce.length === 1 ? this._card(this._t("tranches"), this._t("tranchesHint"), this._renderTranches(inForce)) : null,
       );
     }
     this._width = this._content.clientWidth;
@@ -1049,90 +1015,29 @@ class ElectricityContractsPanel extends HTMLElement {
     );
   }
 
-  _legend(shape) {
-    return h(
-      "ul",
-      { class: "legend" },
-      this._data.contracts.map((contract) =>
-        h(
-          "li",
-          {},
-          h("span", { class: shape === "line" ? "line-key" : "swatch", style: { background: this._color(contract.id) } }),
-          contract.name,
-        ),
-      ),
-    );
-  }
-
   // Headline figures -----------------------------------------------------------
 
   _renderKpis() {
-    const data = this._data;
-    const best = data.contracts.find((contract) => contract.name === data.best);
+    const actual = this._data.actual;
     const tile = (label, value, sub) =>
       h("section", { class: "card kpi" }, h("div", { class: "label" }, label), h("div", { class: "value" }, value), h("div", { class: "sub" }, sub));
-    const actual = data.actual
-      ? tile(
-          this._t("actualCost"),
-          this._money(data.actual.total_cost),
-          data.actual.average_price !== null ? this._t("actualHint", { price: this._price(data.actual.average_price) }) : "",
-        )
-      : tile(this._t("actualCost"), "—", this._t("noActual"));
-    const cheapest = best
-      ? tile(this._t("cheapest"), best.name, `${this._money(best.total_cost)} · ${this._t("perKwh", { price: this._price(best.average_price) })}`)
-      : tile(this._t("cheapest"), "—", "");
-    return h("div", { class: "kpis" }, actual, cheapest);
-  }
-
-  _inForce(contractId) {
-    const contract = this._entry.contracts.find((item) => item.id === contractId);
-    const last = lastDayOf(this._data.end);
-    return Boolean(contract && contract.active_from && contract.active_from <= last && (!contract.active_to || contract.active_to >= last));
-  }
-
-  _kindLabel(contract) {
-    const kind = KINDS[this._language][contract.kind] || contract.kind;
-    return kind.toLowerCase() === contract.name.toLowerCase() ? null : h("span", { class: "kind" }, kind);
-  }
-
-  _renderRanking() {
-    const data = this._data;
-    const ranked = [...data.contracts].sort((first, second) => first.total_cost - second.total_cost);
-    const max = Math.max(...ranked.map((contract) => contract.total_cost), 0);
     return h(
       "div",
-      { class: "ranking" },
-      ranked.map((contract) => {
-        const share = max > 0 ? (contract.total_cost / max) * 100 : 0;
-        return h(
-          "div",
-          { class: "rank-row" },
-          h(
-            "div",
-            { class: "rank-name" },
-            h("span", { class: "name" }, contract.name),
-            this._kindLabel(contract),
-            this._inForce(contract.id) ? h("span", { class: "badge" }, this._t("current")) : null,
-            contract.name === data.best ? h("span", { class: "badge best" }, this._t("best")) : null,
-          ),
-          h("div", { class: "rank-total" }, this._money(contract.total_cost)),
-          h(
-            "div",
-            {
-              class: "track",
-              role: "img",
-              "aria-label": `${contract.name}: ${this._money(contract.total_cost)}`,
-            },
-            h("div", { class: "bar", style: { width: `${share}%`, background: this._color(contract.id) } }),
-          ),
-          h(
-            "div",
-            { class: "rank-foot" },
-            contract.average_price !== null ? this._t("perKwh", { price: this._price(contract.average_price) }) : null,
-          ),
-        );
-      }),
+      { class: "kpis" },
+      tile(this._t("actualCost"), this._money(actual.total_cost), this._t("ofWhichSubscription", { amount: this._money(actual.fixed_cost) })),
+      tile(this._t("consumption"), this._kwh(actual.energy), ""),
+      tile(this._t("average"), actual.average_price !== null ? `${this._price(actual.average_price)}/kWh` : "—", this._t("withSubscription")),
     );
+  }
+
+  // The compared contracts that were in force during the period.
+  _contractsInForce() {
+    const first = this._data.start.slice(0, 10);
+    const last = lastDayOf(this._data.end);
+    const ids = this._entry.contracts
+      .filter((contract) => contract.active_from && contract.active_from <= last && (!contract.active_to || contract.active_to >= first))
+      .map((contract) => contract.id);
+    return this._data.contracts.filter((contract) => ids.includes(contract.id));
   }
 
   // Charts ---------------------------------------------------------------------
@@ -1148,19 +1053,20 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   _renderTimeChart() {
+    const actual = { id: ACTUAL, name: this._t("actual") };
+    const partial = this._data.series.some((bucket) => bucket.actual === null);
     if (this._views.time === "chart") {
-      const series = this._data.contracts.map((contract) => ({
-        id: contract.id,
-        name: contract.name,
-        values: this._data.series.map((bucket) => bucket.contracts[contract.id] ?? 0),
-      }));
+      const series = [{ ...actual, values: this._data.series.map((bucket) => bucket.actual ?? 0) }];
       if (this._data.group_by === "month") {
         this._drawColumns(this._timeChart, series);
       } else {
         this._drawLines(this._timeChart, series, { zero: false });
       }
     } else {
-      this._timeChart.replaceChildren(this._seriesTable((bucket, contract) => bucket.contracts[contract.id] ?? 0, true));
+      this._timeChart.replaceChildren(this._seriesTable((bucket) => bucket.actual, false, [actual]));
+    }
+    if (partial) {
+      this._timeChart.append(h("p", { class: "note" }, this._t("partialActual")));
     }
   }
 
@@ -1411,7 +1317,10 @@ class ElectricityContractsPanel extends HTMLElement {
         "tr",
         {},
         h("td", {}, this._bucketLabel(bucket.start, true)),
-        contracts.map((contract) => h("td", {}, this._money(value(bucket, contract, index)))),
+        contracts.map((contract) => {
+          const amount = value(bucket, contract, index);
+          return h("td", {}, amount === null ? "—" : this._money(amount));
+        }),
         withActual && this._data.actual ? h("td", {}, bucket.actual === null ? "—" : this._money(bucket.actual)) : null,
       ),
     );
@@ -1420,13 +1329,12 @@ class ElectricityContractsPanel extends HTMLElement {
 
   // Tranches -------------------------------------------------------------------
 
-  _renderTranches() {
+  _renderTranches(contracts) {
     const names = TRANCHES[this._language];
-    const ranked = [...this._data.contracts].sort((first, second) => first.total_cost - second.total_cost);
     return h(
       "div",
       {},
-      ranked.map((contract) => {
+      contracts.map((contract) => {
         const tranches = Object.entries(contract.tranches);
         const energy = tranches.reduce((sum, [, item]) => sum + item.energy, 0);
         const cost = tranches.reduce((sum, [, item]) => sum + item.cost, 0);
