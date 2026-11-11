@@ -26,7 +26,7 @@ const STRINGS = {
     less: "Show less",
     noContractInForce: "Set when your contract started (in the contract's settings) to see what you paid.",
     ofWhichSubscription: "of which {amount} of subscription",
-    withSubscription: "subscription included",
+    withoutSubscription: "subscription excluded",
     rolling: "Last 12 months",
     year: "Year",
     month: "Month",
@@ -98,7 +98,7 @@ const STRINGS = {
     less: "Voir moins",
     noContractInForce: "Indiquez le début de votre contrat (dans les réglages du contrat) pour voir ce que vous avez payé.",
     ofWhichSubscription: "dont {amount} d'abonnement",
-    withSubscription: "abonnement compris",
+    withoutSubscription: "hors abonnement",
     rolling: "12 derniers mois",
     year: "Année",
     month: "Mois",
@@ -1071,7 +1071,7 @@ class ElectricityContractsPanel extends HTMLElement {
       { class: "kpis" },
       tile(this._t("actualCost"), this._money(actual.total_cost), this._t("ofWhichSubscription", { amount: this._money(actual.fixed_cost) })),
       tile(this._t("consumption"), this._kwh(actual.energy), ""),
-      tile(this._t("average"), actual.average_price !== null ? `${this._price(actual.average_price)}/kWh` : "—", this._t("withSubscription")),
+      tile(this._t("average"), actual.energy ? `${this._price(actual.variable_cost / actual.energy)}/kWh` : "—", this._t("withoutSubscription")),
     );
   }
 
