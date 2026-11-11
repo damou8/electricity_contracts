@@ -41,6 +41,7 @@ from .data import (
     manual_prices,
     price_periods,
 )
+from .insights import async_insights
 
 _HOUR = timedelta(hours=1)
 # Longer windows are split into months.
@@ -58,6 +59,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     async_register_command(hass, ws_entries)
     async_register_command(hass, ws_compare)
     async_register_command(hass, ws_bill)
+    async_register_command(hass, ws_insights)
 
 
 def _local_day(moment: datetime) -> str:
@@ -251,6 +253,35 @@ async def ws_bill(
         end=day_start(end + timedelta(days=1)),
     )
     connection.send_result(msg["id"], bill_response(bill))
+
+
+@websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/insights",
+        vol.Required(ATTR_ENTRY_ID): cv.string,
+        vol.Required(ATTR_START): cv.date,
+        vol.Required(ATTR_END): cv.date,
+    }
+)
+@async_response
+async def ws_insights(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Describe the actual consumption from one day to another, both included."""
+    if (entry := _loaded_entry(hass, connection, msg)) is None or (
+        window := _window(connection, msg)
+    ) is None:
+        return
+    start, end = window
+    connection.send_result(
+        msg["id"],
+        await async_insights(
+            hass,
+            entry=entry,
+            start=day_start(start),
+            end=day_start(end + timedelta(days=1)),
+        ),
+    )
 
 
 def bill_response(bill: Bill) -> dict[str, Any]:

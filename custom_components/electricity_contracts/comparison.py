@@ -269,9 +269,13 @@ def _bucket(day: date, group_by: GroupBy) -> date:
     return day.replace(day=1) if group_by == "month" else day
 
 
-def _hourly_changes(
+def hourly_changes(
     hass: HomeAssistant, start: datetime, end: datetime, ids: list[str]
 ) -> dict[str, list[tuple[float, float]]]:
+    """Read how much each statistic grew at each hour between `start` and `end`.
+
+    Run it in the recorder's executor.
+    """
     rows = statistics_during_period(
         hass, start, end, set(ids), "hour", None, {"change"}
     )
@@ -306,7 +310,7 @@ async def async_series(
     if actual_ids is not None:
         ids.extend((actual_ids.variable, actual_ids.fixed, actual_ids.energy))
     hourly = await get_instance(hass).async_add_executor_job(
-        _hourly_changes, hass, comparison.start, comparison.end, ids
+        hourly_changes, hass, comparison.start, comparison.end, ids
     )
 
     first = comparison.start.astimezone(FRANCE_TIME_ZONE).date()

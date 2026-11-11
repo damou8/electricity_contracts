@@ -1,9 +1,10 @@
 """Tests of the commands behind the Contracts page, and of the page itself."""
 
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
-from elec_tariffs import ContractKind, PricePeriod
+from elec_tariffs import ContractKind, PricePeriod, TempoColor, Tranche
 from homeassistant.components import frontend
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.components.recorder.common import (
@@ -23,10 +24,13 @@ from .conftest import (
     OTHER_STATISTIC_ID,
     TEMPO_CONTRACT,
     TEMPO_PERIODS,
+    Sources,
     add_statistic,
+    color_of,
     contract_subentry,
     make_entry,
     price_period_subentry,
+    published_calendar,
 )
 from .test_comparison import compare, setup_entry
 
@@ -382,3 +386,101 @@ async def test_panel_module(
     response = await client.get(custom["module_url"])
     assert response.status == 200
     assert "electricity-contracts-panel" in await response.text()
+
+
+@pytest.mark.usefixtures("sources")
+async def test_insights(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    await add_statistic(hass, hours=72)
+    entry = await setup_entry(hass, make_entry([TEMPO_CONTRACT, BASE_CONTRACT]))
+    insights = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/insights",
+        entry_id=entry.entry_id,
+        start="2026-03-02",
+        end="2026-03-02",
+    )
+    [day] = insights["days"]
+    action = await compare(hass, entry, "2026-03-02", "2026-03-02")
+    assert day == {
+        "date": "2026-03-02",
+        "color": color_of(date(2026, 3, 2)).value,
+        "energy": 12.0,
+        # 16 hours from 6:00 to 22:00.
+        "peak_energy": 8.0,
+        "cost": action["actual"]["total_cost"],
+    }
+    assert insights["profile"] == [0.5] * 24
+    # The day before isn't whole: the data starts at 1:00.
+    assert insights["previous"] is None
+    tempo = insights["tempo"]
+    assert tempo["today"] == color_of(date(2026, 11, 7)).value
+    # Not published yet, and nothing consumed lately to estimate from.
+    assert tempo["tomorrow"] is None
+    assert tempo["tomorrow_estimate"] is None
+    season = tempo["season"]
+    assert (season["start"], season["end"]) == ("2026-09-01", "2027-08-31")
+    placed = [
+        color_of(date(2026, 9, 1) + timedelta(days=offset)) for offset in range(68)
+    ]
+    assert season["red_left"] == 22 - placed.count(TempoColor.RED)
+    assert season["white_left"] == 43 - placed.count(TempoColor.WHITE)
+    assert season["white_left"] < 43
+
+    third = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/insights",
+        entry_id=entry.entry_id,
+        start="2026-03-03",
+        end="2026-03-03",
+    )
+    assert third["previous"] == {
+        "start": "2026-03-02T00:00:00+01:00",
+        "energy": 12.0,
+        "cost": day["cost"],
+    }
+
+
+async def test_insights_estimate_tomorrow(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, sources: Sources
+) -> None:
+    # Tomorrow, Sunday 8 November, is published; the Sunday before was consumed.
+    sources.public.async_calendar.side_effect = published_calendar(date(2026, 11, 8))
+    await add_statistic(hass, hours=24 * 4, first=24 * 244)
+    entry = await setup_entry(hass, make_entry([TEMPO_CONTRACT]))
+    insights = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/insights",
+        entry_id=entry.entry_id,
+        start="2026-11-01",
+        end="2026-11-07",
+    )
+    tempo = insights["tempo"]
+    assert tempo["tomorrow"] == "blue"
+    estimate = tempo["tomorrow_estimate"]
+    assert estimate["energy"] == 12.0
+    prices = TEMPO_PERIODS[1].prices
+    assert estimate["cost"] == pytest.approx(
+        8 * prices[Tranche.BLUE_HP] + 4 * prices[Tranche.BLUE_HC] + 189.98 / 365,
+        abs=0.01,
+    )
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_insights_without_a_contract_in_force(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    entry = await setup_entry(hass, make_entry([BASE_CONTRACT]))
+    insights = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/insights",
+        entry_id=entry.entry_id,
+        start="2026-03-01",
+        end="2026-03-02",
+    )
+    assert insights == {"days": [], "profile": [], "previous": None, "tempo": None}
