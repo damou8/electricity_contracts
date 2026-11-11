@@ -19,7 +19,6 @@ from homeassistant.components.websocket_api.decorators import (
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
-from homeassistant.util import dt as dt_util
 
 from .bill import Bill, async_bill
 from .comparison import (
@@ -95,11 +94,8 @@ def _window(
     return start, end
 
 
-def _contract(
-    contract: Contract, periods: list[PricePeriod], today: date
-) -> dict[str, Any]:
-    """Describe a contract and the prices it has today, None without any."""
-    current = next((period for period in periods if period.covers(today)), None)
+def _contract(contract: Contract, periods: list[PricePeriod]) -> dict[str, Any]:
+    """Describe a contract and the prices it has had, oldest first."""
     return {
         "id": contract.uid,
         "name": contract.name,
@@ -112,18 +108,17 @@ def _contract(
             contract.active_from.isoformat() if contract.active_from else None
         ),
         "active_to": contract.active_to.isoformat() if contract.active_to else None,
-        "prices": (
+        "prices": [
             {
-                "start": current.start.isoformat(),
-                "end": current.end.isoformat() if current.end else None,
-                "fixed_per_year": current.fixed_per_year,
+                "start": period.start.isoformat(),
+                "end": period.end.isoformat() if period.end else None,
+                "fixed_per_year": period.fixed_per_year,
                 "tranches": {
-                    tranche.value: price for tranche, price in current.prices.items()
+                    tranche.value: price for tranche, price in period.prices.items()
                 },
             }
-            if current is not None
-            else None
-        ),
+            for period in periods
+        ],
     }
 
 
@@ -134,7 +129,6 @@ def ws_entries(
 ) -> None:
     """List the consumption sources, their contracts and the days they cover."""
     result: list[dict[str, Any]] = []
-    today = dt_util.now(FRANCE_TIME_ZONE).date()
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
         manual = manual_prices(entry)
         coordinator: ElectricityContractsCoordinator = entry.runtime_data
@@ -155,7 +149,6 @@ def ws_entries(
                         price_periods(
                             contract, manual, coordinator.data.sources.official_prices
                         ),
-                        today,
                     )
                     for contract in entry_contracts
                 ],

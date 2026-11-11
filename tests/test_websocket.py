@@ -3,7 +3,7 @@
 from typing import Any
 
 import pytest
-from elec_tariffs import ContractKind
+from elec_tariffs import ContractKind, PricePeriod
 from homeassistant.components import frontend
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.components.recorder.common import (
@@ -19,6 +19,7 @@ from custom_components.electricity_contracts.panel import PANEL_URL_PATH
 
 from .conftest import (
     BASE_CONTRACT,
+    BASE_PERIODS,
     OTHER_STATISTIC_ID,
     TEMPO_CONTRACT,
     TEMPO_PERIODS,
@@ -28,6 +29,15 @@ from .conftest import (
     price_period_subentry,
 )
 from .test_comparison import compare, setup_entry
+
+
+def prices(period: PricePeriod) -> dict[str, Any]:
+    return {
+        "start": period.start.isoformat(),
+        "end": period.end.isoformat() if period.end else None,
+        "fixed_per_year": period.fixed_per_year,
+        "tranches": {tranche.value: price for tranche, price in period.prices.items()},
+    }
 
 
 async def command(
@@ -69,16 +79,7 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
                     "weekend_off_peak": False,
                     "active_from": "2024-01-01",
                     "active_to": None,
-                    # The prices of 7 November 2026.
-                    "prices": {
-                        "start": "2026-08-01",
-                        "end": None,
-                        "fixed_per_year": 189.98,
-                        "tranches": {
-                            tranche.value: price
-                            for tranche, price in TEMPO_PERIODS[1].prices.items()
-                        },
-                    },
+                    "prices": [prices(period) for period in TEMPO_PERIODS],
                 },
                 {
                     "id": "base0001",
@@ -90,12 +91,7 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
                     "weekend_off_peak": False,
                     "active_from": None,
                     "active_to": None,
-                    "prices": {
-                        "start": "2026-08-01",
-                        "end": None,
-                        "fixed_per_year": 190.81,
-                        "tranches": {"base": 0.2001},
-                    },
+                    "prices": [prices(period) for period in BASE_PERIODS],
                 },
             ],
             "actual": True,
@@ -114,7 +110,7 @@ async def test_entries_before_any_data(
     [entry] = await result(hass_ws_client, hass, type=f"{DOMAIN}/entries")
     # No price was entered for the offer.
     assert entry["contracts"][1]["official"] is False
-    assert entry["contracts"][1]["prices"] is None
+    assert entry["contracts"][1]["prices"] == []
     assert entry["first_day"] is None
     assert entry["last_day"] is None
     assert entry["actual"] is False

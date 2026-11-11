@@ -20,7 +20,7 @@ const STRINGS = {
     offPeakHours: "off-peak {ranges}",
     weekendOffPeak: "weekends off-peak",
     pricesSince: "Prices in force since {date}",
-    noPrices: "No price is known for today.",
+    noPrices: "No price is known for this contract.",
     price: "Price",
     perMonth: "{amount}/month",
     noContractInForce: "Set when your contract started (in the contract's settings) to see what you paid.",
@@ -91,7 +91,7 @@ const STRINGS = {
     offPeakHours: "heures creuses {ranges}",
     weekendOffPeak: "week-end en heures creuses",
     pricesSince: "Prix en vigueur depuis le {date}",
-    noPrices: "Aucun prix n'est connu pour aujourd'hui.",
+    noPrices: "Aucun prix n'est connu pour ce contrat.",
     price: "Prix",
     perMonth: "{amount}/mois",
     noContractInForce: "Indiquez le début de votre contrat (dans les réglages du contrat) pour voir ce que vous avez payé.",
@@ -593,6 +593,8 @@ class ElectricityContractsPanel extends HTMLElement {
     this._billError = null;
     this._billBusy = false;
     this._billCount = 0;
+    // Which price period each contract card shows, by contract id.
+    this._pricePeriods = {};
     this._loadCount = 0;
     this._width = 0;
   }
@@ -1059,7 +1061,7 @@ class ElectricityContractsPanel extends HTMLElement {
     );
   }
 
-  // The contracts in force today, with the prices they have today.
+  // The contracts in force today, with the prices they have had.
   _renderContractCards() {
     const today = dayString(Date.now());
     const names = TRANCHES[this._language];
@@ -1074,12 +1076,25 @@ class ElectricityContractsPanel extends HTMLElement {
           contract.off_peak.length ? this._t("offPeakHours", { ranges: contract.off_peak.join(", ") }) : null,
           contract.weekend_off_peak ? this._t("weekendOffPeak") : null,
         ];
-        const prices = contract.prices;
+        const periods = contract.prices;
+        const current = periods.findIndex((period) => period.start <= today && (!period.end || period.end >= today));
+        const index = Math.min(this._pricePeriods[contract.id] ?? (current >= 0 ? current : periods.length - 1), periods.length - 1);
+        const prices = periods[index];
         const body = prices
           ? h(
               "div",
-              { class: "bill" },
-              h("h3", {}, this._t("pricesSince", { date: this._dayLabel(prices.start) })),
+              {},
+              this._nav(
+                prices.end
+                  ? this._t("pricesFrom", { start: this._dayLabel(prices.start), end: this._dayLabel(prices.end) })
+                  : this._t("pricesSince", { date: this._dayLabel(prices.start) }),
+                index > 0,
+                index < periods.length - 1,
+                (step) => {
+                  this._pricePeriods[contract.id] = index + step;
+                  this._renderContent();
+                },
+              ),
               h(
                 "div",
                 { class: "table-wrap" },
