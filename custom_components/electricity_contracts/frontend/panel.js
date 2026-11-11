@@ -21,7 +21,9 @@ const STRINGS = {
     weekendOffPeak: "weekends off-peak",
     pricesSince: "Prices in force since {date}",
     noPrices: "No price is known for this contract.",
-    sincePrevious: "{change} vs previous prices",
+    price: "Price",
+    priceBefore: "Before",
+    change: "Change",
     noContractInForce: "Set when your contract started (in the contract's settings) to see what you paid.",
     ofWhichSubscription: "of which {amount} of subscription",
     withSubscription: "subscription included",
@@ -91,7 +93,9 @@ const STRINGS = {
     weekendOffPeak: "week-end en heures creuses",
     pricesSince: "Prix en vigueur depuis le {date}",
     noPrices: "Aucun prix n'est connu pour ce contrat.",
-    sincePrevious: "{change} vs prix précédents",
+    price: "Prix",
+    priceBefore: "Avant",
+    change: "Écart",
     noContractInForce: "Indiquez le début de votre contrat (dans les réglages du contrat) pour voir ce que vous avez payé.",
     ofWhichSubscription: "dont {amount} d'abonnement",
     withSubscription: "abonnement compris",
@@ -364,13 +368,6 @@ main {
 .kpi .label { color: var(--ec-text-2); font-size: 14px; }
 .kpi .value { font-size: 28px; font-weight: 600; margin: 4px 0 2px; line-height: 1.2; overflow-wrap: anywhere; }
 .kpi .sub { color: var(--ec-text-2); font-size: 13px; }
-.price-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 8px; }
-.price-tile { border: 1px solid var(--divider-color, var(--ec-grid)); border-radius: 10px; padding: 10px 12px; min-width: 0; }
-.price-tile .name { display: flex; align-items: center; gap: 6px; color: var(--ec-text-2); font-size: 13px; }
-.price-tile .price { font-size: 18px; font-weight: 600; margin: 2px 0; }
-.price-tile .delta { color: var(--ec-text-2); font-size: 12px; }
-.price-tile svg { display: block; margin-top: 8px; overflow: visible; }
-.price-tile rect { fill: transparent; cursor: pointer; }
 .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .line-key { width: 14px; height: 2px; border-radius: 1px; flex: none; }
 .chart { position: relative; width: 100%; }
@@ -1097,81 +1094,45 @@ class ElectricityContractsPanel extends HTMLElement {
                   this._renderContent();
                 },
               ),
-              this._priceTiles(contract, periods, index, today),
+              this._priceTable(periods, index),
             )
           : h("p", { class: "message" }, this._t("noPrices"));
         return this._card(`${this._t("currentContract")} · ${contract.name}`, facts.filter(Boolean).join(" · "), body);
       });
   }
 
-  // One tile per price of a contract: its value in the chosen price period, the
-  // change since the period before, and how it moved over every period.
-  _priceTiles(contract, periods, index, today) {
+  // The prices of the chosen price period, beside those of the period before.
+  _priceTable(periods, index) {
     const names = TRANCHES[this._language];
-    const starts = periods.map((period) => dayTime(period.start));
-    const last = Math.max(dayTime(today), starts[starts.length - 1] + DAY_MS);
-    const x = (time) => ((time - starts[0]) / (last - starts[0])) * 100;
-    const edge = (position) => (position < periods.length ? x(starts[position]) : 100);
-    const select = (position) => {
-      this._pricePeriods[contract.id] = position;
-      this._renderContent();
-    };
     const percent = new Intl.NumberFormat(this._locale, { style: "percent", maximumFractionDigits: 1, signDisplay: "exceptZero" });
-    const tile = (label, color, values, text) => {
-      const known = values.filter((value) => value !== null);
-      const min = Math.min(...known);
-      const max = Math.max(...known);
-      const y = (value) => (max === min ? 20 : 36 - ((value - min) / (max - min)) * 32);
-      let path = "";
-      values.forEach((value, position) => {
-        if (value === null) return;
-        path += `${path ? "L" : "M"}${edge(position)},${y(value)}H${edge(position + 1)}`;
-      });
-      const value = values[index];
-      const before = index > 0 ? values[index - 1] : null;
-      const change = value !== null && before ? value / before - 1 : null;
-      return h(
-        "div",
-        { class: "price-tile" },
-        h("div", { class: "name" }, color ? h("span", { class: "swatch", style: { background: color } }) : null, label),
-        h("div", { class: "price" }, value === null ? "—" : text(value)),
-        h("div", { class: "delta" }, change === null ? "\u00a0" : this._t("sincePrevious", { change: percent.format(change) })),
-        s(
-          "svg",
-          { viewBox: "0 0 100 40", preserveAspectRatio: "none", width: "100%", height: 44, role: "img", "aria-label": label },
-          s("path", { d: path, "vector-effect": "non-scaling-stroke", style: { fill: "none", stroke: "var(--ec-muted)", "stroke-width": "1.5px" } }),
-          value === null
-            ? null
-            : s("path", {
-                d: `M${edge(index)},${y(value)}H${edge(index + 1)}`,
-                "vector-effect": "non-scaling-stroke",
-                style: { fill: "none", stroke: color || "var(--ec-s1)", "stroke-width": "4px", "stroke-linecap": "round" },
-              }),
-          periods.map((period, position) =>
-            s(
-              "rect",
-              { x: edge(position), y: 0, width: edge(position + 1) - edge(position), height: 40, onclick: () => select(position) },
-              s("title", {}, `${this._periodLabel(period)} : ${values[position] === null ? "—" : text(values[position])}`),
-            ),
-          ),
-        ),
+    const before = index > 0 ? periods[index - 1] : null;
+    const row = (label, color, value, previous, text) =>
+      h(
+        "tr",
+        {},
+        h("td", {}, color ? h("span", { class: "swatch", style: { background: color } }) : null, label),
+        h("td", {}, text(value)),
+        before ? h("td", {}, previous === undefined ? "—" : text(previous)) : null,
+        before ? h("td", {}, previous ? percent.format(value / previous - 1) : "—") : null,
       );
-    };
     return h(
       "div",
-      { class: "price-tiles" },
-      tile(
-        this._t("subscription"),
-        null,
-        periods.map((period) => period.fixed_per_year),
-        (value) => this._t("subscriptionYear", { amount: this._money(value) }),
-      ),
-      Object.keys(periods[index].tranches).map((tranche) =>
-        tile(
-          names[tranche] || tranche,
-          (TRANCHE_FILLS[tranche] || ["#898781"])[0],
-          periods.map((period) => period.tranches[tranche] ?? null),
-          (value) => `${this._price(value)}/kWh`,
+      { class: "table-wrap" },
+      h(
+        "table",
+        {},
+        h(
+          "thead",
+          {},
+          h("tr", {}, h("th", {}, this._t("item")), h("th", {}, this._t("price")), before ? h("th", {}, this._t("priceBefore")) : null, before ? h("th", {}, this._t("change")) : null),
+        ),
+        h(
+          "tbody",
+          {},
+          row(this._t("subscription"), null, periods[index].fixed_per_year, before?.fixed_per_year, (value) => this._t("subscriptionYear", { amount: this._money(value) })),
+          Object.entries(periods[index].tranches).map(([tranche, price]) =>
+            row(names[tranche] || tranche, (TRANCHE_FILLS[tranche] || ["#898781"])[0], price, before?.tranches[tranche], (value) => `${this._price(value)}/kWh`),
+          ),
         ),
       ),
     );
