@@ -15,10 +15,12 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 
 from .comparison import async_compare, comparison_response, day_start
-from .const import DOMAIN, SERVICE_COMPARE, SERVICE_RECOMPUTE
+from .const import DOMAIN, SERVICE_COMPARE, SERVICE_RECOMPUTE, SUBENTRY_COMPARISON
 from .coordinator import (
     ElectricityContractsConfigEntry,
     ElectricityContractsCoordinator,
@@ -26,12 +28,13 @@ from .coordinator import (
     cache_store,
 )
 from .data import contracts, manual_prices
+from .panel import async_register_panel, async_remove_panel, async_setup_frontend
 from .statistics import async_remove_statistics
+from .websocket import async_register_commands
 
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-
 PLATFORMS = [Platform.SENSOR]
 
 ATTR_START = "start"
@@ -67,7 +70,7 @@ def _async_loaded_entry(hass: HomeAssistant, call: ServiceCall) -> ConfigEntry:
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the actions."""
+    """Register the actions and the Contracts page's commands."""
 
     async def async_recompute(call: ServiceCall) -> None:
         coordinator: ElectricityContractsCoordinator = _async_loaded_entry(
@@ -114,6 +117,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         schema=COMPARE_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
+    async_register_commands(hass)
+    await async_setup_frontend(hass)
     return True
 
 
@@ -122,6 +127,9 @@ async def async_setup_entry(
 ) -> bool:
     """Set up a consumption source from a config entry."""
     _async_remove_orphan_price_periods(hass, entry)
+    # Before the first refresh, which takes minutes when a contract was added:
+    # the page tells it is preparing the figures meanwhile.
+    await async_register_panel(hass)
     coordinator = ElectricityContractsCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
@@ -137,17 +145,53 @@ async def async_setup_entry(
 async def async_unload_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> bool:
-    """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    """Unload a config entry, and the Contracts page with the last enabled one.
+
+    A reload keeps the page: every change of contract reloads the entry.
+    """
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
+    if entry.disabled_by:
+        _async_remove_panel_if_unused(hass, entry)
+    return True
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: ElectricityContractsConfigEntry
+) -> bool:
+    """Bring an entry written by an older version up to date.
+
+    Home Assistant refuses newer versions itself, before calling this.
+    """
+    if entry.minor_version < 2:  # noqa: PLR2004
+        _async_remove_comparisons(hass, entry)
+        hass.config_entries.async_update_entry(entry, minor_version=2)
+    return True
 
 
 async def async_remove_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> None:
     """Delete the statistics, the cache and the repair issues of a removed entry."""
+    _async_remove_panel_if_unused(hass, entry)
     await async_remove_statistics(hass, entry.entry_id)
     await cache_store(hass, entry.entry_id).async_remove()
     async_delete_issues(hass, entry.entry_id)
+
+
+@callback
+def _async_remove_panel_if_unused(
+    hass: HomeAssistant, leaving: ElectricityContractsConfigEntry
+) -> None:
+    """Remove the Contracts page when no other enabled entry is left."""
+    if not [
+        other
+        for other in hass.config_entries.async_entries(
+            DOMAIN, include_ignore=False, include_disabled=False
+        )
+        if other.entry_id != leaving.entry_id
+    ]:
+        async_remove_panel(hass)
 
 
 @callback
@@ -159,6 +203,22 @@ async def _async_reload(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> None:
     hass.config_entries.async_schedule_reload(entry.entry_id)
+
+
+@callback
+def _async_remove_comparisons(
+    hass: HomeAssistant, entry: ElectricityContractsConfigEntry
+) -> None:
+    """Remove the comparisons and sensors of 0.1, replaced by the Contracts page."""
+    for subentry in list(entry.subentries.values()):
+        if subentry.subentry_type == SUBENTRY_COMPARISON:
+            hass.config_entries.async_remove_subentry(entry, subentry.subentry_id)
+    entities = er.async_get(hass)
+    for item in er.async_entries_for_config_entry(entities, entry.entry_id):
+        entities.async_remove(item.entity_id)
+    devices = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(devices, entry.entry_id):
+        devices.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
 
 
 @callback

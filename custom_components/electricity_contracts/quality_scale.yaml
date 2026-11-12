@@ -11,9 +11,7 @@ rules:
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done
-  entity-event-setup:
-    status: exempt
-    comment: Entities only read the coordinator; they subscribe to no event.
+  entity-event-setup: done
   entity-unique-id: done
   has-entity-name: done
   runtime-data: done
@@ -56,18 +54,22 @@ rules:
   docs-supported-functions: done
   docs-troubleshooting: done
   docs-use-cases: done
-  dynamic-devices: done
+  dynamic-devices:
+    status: exempt
+    comment: One service device per entry, created and removed with it.
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default:
     status: exempt
-    comment: Every sensor answers a question users set up on purpose.
+    comment: Two sensors, the price and the tranche in force, both for automations.
   entity-translations: done
   exception-translations: done
   icon-translations: done
   reconfiguration-flow: done
   repair-issues: done
-  stale-devices: done
+  stale-devices:
+    status: exempt
+    comment: The only device belongs to its entry and goes with it.
 
   # Platinum
   async-dependency: done

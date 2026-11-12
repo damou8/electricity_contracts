@@ -4,11 +4,12 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from elec_tariffs import TempoAuthError, TempoError
+from elec_tariffs import ContractKind, TempoAuthError, TempoError
+from homeassistant.components.recorder.models import StatisticMeanType
 from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, section
 
 from custom_components.electricity_contracts.config_flow import (
     async_energy_statistics,
@@ -28,11 +29,15 @@ from custom_components.electricity_contracts.const import (
     CONF_RTE_CLIENT_SECRET,
     CONF_START,
     CONF_STATISTIC_ID,
+    CONF_TEMPERATURE,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
     DOMAIN,
+    OFF_PEAK_OTHER,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
+    SECTION_ACTIVE,
+    SECTION_RTE,
     SUBENTRY_CONTRACT,
     SUBENTRY_PRICE_PERIOD,
 )
@@ -42,9 +47,12 @@ from .conftest import (
     MANUAL_CONTRACT,
     OTHER_STATISTIC_ID,
     STATISTIC_ID,
+    TEMPERATURE_ID,
     TEMPO_CONTRACT,
     Sources,
     add_statistic,
+    add_temperature,
+    contract_subentry,
     make_entry,
     price_period_subentry,
 )
@@ -210,12 +218,47 @@ async def options_flow(hass: HomeAssistant, user_input: dict[str, Any]) -> Any:
     )
 
 
+def credentials(client_id: str | None = None, secret: str | None = None) -> Any:
+    """Fill the RTE section of the options."""
+    values = {CONF_RTE_CLIENT_ID: client_id, CONF_RTE_CLIENT_SECRET: secret}
+    return {SECTION_RTE: {key: value for key, value in values.items() if value}}
+
+
+def suggested(result: Any) -> dict[str, Any]:
+    """Return the suggested values of a form, sections included."""
+    values: dict[str, Any] = {}
+    for key, value in result["data_schema"].schema.items():
+        if isinstance(value, section):
+            values[key.schema] = {
+                inner.schema: inner.description["suggested_value"]
+                for inner in value.schema.schema
+                if inner.description
+            }
+        elif key.description:
+            values[key.schema] = key.description["suggested_value"]
+    return values
+
+
+async def test_options_suggest_the_current_values(hass: HomeAssistant) -> None:
+    entry = make_entry(
+        options={
+            CONF_TEMPERATURE: TEMPERATURE_ID,
+            CONF_RTE_CLIENT_ID: "my-id",
+            CONF_RTE_CLIENT_SECRET: "my-secret",
+        }
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert suggested(result) == {
+        CONF_TEMPERATURE: TEMPERATURE_ID,
+        SECTION_RTE: {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "my-secret"},
+    }
+
+
 async def test_options_save_checked_credentials(
     hass: HomeAssistant, sources: Sources
 ) -> None:
-    result = await options_flow(
-        hass, {CONF_RTE_CLIENT_ID: " my-id ", CONF_RTE_CLIENT_SECRET: "my-secret"}
-    )
+    result = await options_flow(hass, credentials(" my-id ", "my-secret"))
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
         CONF_RTE_CLIENT_ID: "my-id",
@@ -227,7 +270,7 @@ async def test_options_save_checked_credentials(
 
 @pytest.mark.usefixtures("sources")
 async def test_options_clear_credentials(hass: HomeAssistant) -> None:
-    result = await options_flow(hass, {})
+    result = await options_flow(hass, credentials())
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {}
 
@@ -236,19 +279,16 @@ async def test_options_clear_credentials(hass: HomeAssistant) -> None:
     ("user_input", "check_error", "error"),
     [
         pytest.param(
-            {CONF_RTE_CLIENT_ID: "my-id"},
-            None,
-            "incomplete_credentials",
-            id="no_secret",
+            credentials("my-id"), None, "incomplete_credentials", id="no_secret"
         ),
         pytest.param(
-            {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "bad"},
+            credentials("my-id", "bad"),
             TempoAuthError("refused"),
             "invalid_auth",
             id="refused",
         ),
         pytest.param(
-            {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "secret"},
+            credentials("my-id", "secret"),
             TempoError("down"),
             "cannot_connect",
             id="down",
@@ -258,7 +298,7 @@ async def test_options_clear_credentials(hass: HomeAssistant) -> None:
 async def test_options_errors(
     hass: HomeAssistant,
     sources: Sources,
-    user_input: dict[str, str],
+    user_input: dict[str, Any],
     check_error: Exception | None,
     error: str,
 ) -> None:
@@ -268,10 +308,48 @@ async def test_options_errors(
     assert result["errors"] == {"base": error}
     sources.official.async_check_credentials.side_effect = None
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"],
-        {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "secret"},
+        result["flow_id"], credentials("my-id", "secret")
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_options_save_the_temperature(hass: HomeAssistant) -> None:
+    await add_temperature(hass, [10.0, 11.0])
+    result = await options_flow(
+        hass, {CONF_TEMPERATURE: TEMPERATURE_ID, **credentials()}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    # Credentials left empty are removed.
+    assert result["data"] == {CONF_TEMPERATURE: TEMPERATURE_ID}
+
+
+@pytest.mark.parametrize(
+    ("unit", "mean_type", "error"),
+    [
+        pytest.param(
+            "kWh", StatisticMeanType.ARITHMETIC, "statistic_not_temperature", id="unit"
+        ),
+        pytest.param("°C", StatisticMeanType.CIRCULAR, "statistic_no_mean", id="mean"),
+        pytest.param(None, None, "statistic_not_found", id="missing"),
+    ],
+)
+async def test_options_temperature_errors(
+    hass: HomeAssistant,
+    sources: Sources,
+    unit: str | None,
+    mean_type: StatisticMeanType | None,
+    error: str,
+) -> None:
+    if unit is not None and mean_type is not None:
+        await add_temperature(hass, [10.0], unit=unit, mean_type=mean_type)
+    result = await options_flow(
+        hass,
+        {CONF_TEMPERATURE: TEMPERATURE_ID, **credentials("my-id", "secret")},
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_TEMPERATURE: error}
+    # The credentials wait for a valid temperature.
+    sources.official.async_check_credentials.assert_not_awaited()
 
 
 # Contracts.
@@ -285,11 +363,26 @@ async def start_subentry_flow(
     )
 
 
+def details(
+    name: str = "My contract",
+    active_from: str | None = None,
+    active_to: str | None = None,
+    off_peak: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fill the second step of a contract; `off_peak` holds the HP/HC fields."""
+    period = {CONF_ACTIVE_FROM: active_from, CONF_ACTIVE_TO: active_to}
+    return {
+        CONF_NAME: name,
+        **(off_peak or {}),
+        SECTION_ACTIVE: {key: value for key, value in period.items() if value},
+    }
+
+
 async def add_contract(
     hass: HomeAssistant,
     entry_id: str,
     first: dict[str, Any],
-    details: dict[str, Any],
+    second: dict[str, Any],
 ) -> Any:
     result = await start_subentry_flow(hass, entry_id, SUBENTRY_CONTRACT)
     assert result["type"] is FlowResultType.FORM
@@ -300,16 +393,16 @@ async def add_contract(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "details"
     return await hass.config_entries.subentries.async_configure(
-        result["flow_id"], details
+        result["flow_id"], second
     )
 
 
 @pytest.mark.parametrize(
-    ("first", "details", "expected"),
+    ("first", "second", "expected"),
     [
         pytest.param(
-            {CONF_NAME: " Tempo ", CONF_KIND: "tempo", CONF_PRICING: PRICING_OFFICIAL},
-            {CONF_KVA: "6", CONF_ACTIVE_FROM: "2024-01-01"},
+            {CONF_KIND: "tempo", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"},
+            details(" Tempo ", active_from="2024-01-01"),
             {
                 CONF_KIND: "tempo",
                 CONF_PRICING: PRICING_OFFICIAL,
@@ -320,17 +413,15 @@ async def add_contract(
             id="tempo",
         ),
         pytest.param(
-            {CONF_NAME: "HP/HC", CONF_KIND: "hphc", CONF_PRICING: PRICING_OFFICIAL},
-            {
-                CONF_KVA: "9",
-                CONF_OFF_PEAK: ["23:00 - 07:00", "", "12:30-14:00"],
-                CONF_WEEKEND_OFF_PEAK: True,
-            },
+            {CONF_KIND: "hphc", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "9"},
+            details(
+                "HP/HC", off_peak={CONF_OFF_PEAK: "23_07", CONF_WEEKEND_OFF_PEAK: True}
+            ),
             {
                 CONF_KIND: "hphc",
                 CONF_PRICING: PRICING_OFFICIAL,
                 CONF_KVA: 9,
-                CONF_OFF_PEAK: ["23:00-07:00", "12:30-14:00"],
+                CONF_OFF_PEAK: ["23:00-07:00"],
                 CONF_WEEKEND_OFF_PEAK: True,
                 CONF_ACTIVE_FROM: None,
                 CONF_ACTIVE_TO: None,
@@ -338,8 +429,9 @@ async def add_contract(
             id="hphc",
         ),
         pytest.param(
-            {CONF_NAME: "Offer", CONF_KIND: "base", CONF_PRICING: PRICING_MANUAL},
-            {CONF_ACTIVE_FROM: "2023-01-01", CONF_ACTIVE_TO: "2023-12-31"},
+            # A manual contract keeps no power.
+            {CONF_KIND: "base", CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"},
+            details("Offer", "2023-01-01", "2023-12-31"),
             {
                 CONF_KIND: "base",
                 CONF_PRICING: PRICING_MANUAL,
@@ -353,15 +445,18 @@ async def add_contract(
 async def test_add_contract(
     hass: HomeAssistant,
     first: dict[str, Any],
-    details: dict[str, Any],
+    second: dict[str, Any],
     expected: dict[str, Any],
 ) -> None:
     entry = make_entry()
     entry.add_to_hass(hass)
-    result = await add_contract(hass, entry.entry_id, first, details)
+    result = await add_contract(hass, entry.entry_id, first, second)
     assert result["type"] is FlowResultType.CREATE_ENTRY
+    # The message after it: where the prices go, or where the contract shows.
+    manual = expected[CONF_PRICING] == PRICING_MANUAL
+    assert result["description"] == ("add_prices" if manual else None)
     (subentry,) = entry.subentries.values()
-    assert subentry.title == first[CONF_NAME].strip()
+    assert subentry.title == second[CONF_NAME].strip()
     uid = subentry.data[CONF_UID]
     assert len(uid) == 8
     assert subentry.unique_id == uid
@@ -369,130 +464,153 @@ async def test_add_contract(
 
 
 @pytest.mark.parametrize(
-    ("details", "errors"),
+    ("language", "first", "name"),
     [
         pytest.param(
-            {CONF_KVA: "6", CONF_OFF_PEAK: ["22h-6h"], CONF_WEEKEND_OFF_PEAK: False},
-            {CONF_OFF_PEAK: "invalid_off_peak"},
-            id="unreadable_range",
+            "fr",
+            {CONF_KIND: "hphc", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "9"},
+            "Heures creuses 9 kVA",
+            id="official",
         ),
         pytest.param(
-            {
-                CONF_KVA: "6",
-                CONF_OFF_PEAK: ["22:15-06:00"],
-                CONF_WEEKEND_OFF_PEAK: False,
-            },
-            {CONF_OFF_PEAK: "invalid_off_peak"},
-            id="quarter_hour",
+            "en",
+            {CONF_KIND: "tempo", CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"},
+            "Tempo · my prices",
+            id="manual",
         ),
         pytest.param(
-            {
-                CONF_KVA: "6",
-                CONF_OFF_PEAK: ["22:00-22:00"],
-                CONF_WEEKEND_OFF_PEAK: False,
-            },
-            {CONF_OFF_PEAK: "invalid_off_peak"},
-            id="empty_range",
-        ),
-        pytest.param(
-            {CONF_KVA: "6", CONF_OFF_PEAK: [" "], CONF_WEEKEND_OFF_PEAK: False},
-            {CONF_OFF_PEAK: "invalid_off_peak"},
-            id="no_range",
-        ),
-        pytest.param(
-            {
-                CONF_KVA: "6",
-                CONF_OFF_PEAK: ["22:00-06:00"],
-                CONF_WEEKEND_OFF_PEAK: False,
-                CONF_ACTIVE_TO: "2026-01-01",
-            },
-            {CONF_ACTIVE_FROM: "active_to_without_from"},
-            id="end_without_start",
-        ),
-        pytest.param(
-            {
-                CONF_KVA: "6",
-                CONF_OFF_PEAK: ["22:00-06:00"],
-                CONF_WEEKEND_OFF_PEAK: False,
-                CONF_ACTIVE_FROM: "2026-01-01",
-                CONF_ACTIVE_TO: "2025-12-31",
-            },
-            {CONF_ACTIVE_TO: "end_before_start"},
-            id="end_before_start",
-        ),
-        pytest.param(
-            {
-                CONF_KVA: "6",
-                CONF_OFF_PEAK: ["22:00-06:00"],
-                CONF_WEEKEND_OFF_PEAK: False,
-                CONF_ACTIVE_FROM: "2023-06-01",
-            },
-            {"base": "overlapping_active_period"},
-            id="overlap",
+            "de",
+            {CONF_KIND: "base", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"},
+            # Base 6 kVA is taken.
+            "Base 6 kVA 2",
+            id="taken",
         ),
     ],
 )
+async def test_contract_name_is_suggested(
+    hass: HomeAssistant, language: str, first: dict[str, Any], name: str
+) -> None:
+    await hass.config.async_update(language=language)
+    entry = make_entry(
+        [contract_subentry("base 6 kva", uid="base0001", kind=ContractKind.BASE)]
+    )
+    entry.add_to_hass(hass)
+    result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_CONTRACT)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], first
+    )
+    assert result["step_id"] == "details"
+    assert suggested(result)[CONF_NAME] == name
+
+
+async def test_contract_power_must_be_offered(hass: HomeAssistant) -> None:
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_CONTRACT)
+    # Tempo has no 3 kVA offer.
+    tempo = {CONF_KIND: "tempo", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "3"}
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], tempo
+    )
+    assert result["step_id"] == "user"
+    assert result["errors"] == {CONF_KVA: "kva_not_offered"}
+    # Prices set by hand don't depend on it.
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {**tempo, CONF_PRICING: PRICING_MANUAL}
+    )
+    assert result["step_id"] == "details"
+
+
+async def test_add_contract_with_other_off_peak_hours(hass: HomeAssistant) -> None:
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await add_contract(
+        hass,
+        entry.entry_id,
+        {CONF_KIND: "hphc", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"},
+        details(off_peak={CONF_OFF_PEAK: OFF_PEAK_OTHER, CONF_WEEKEND_OFF_PEAK: False}),
+    )
+    assert result["step_id"] == "off_peak"
+    assert suggested(result) == {CONF_OFF_PEAK: [""]}
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_OFF_PEAK: ["01:00 - 07:00", "", "12:30-14:30"]}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    (subentry,) = entry.subentries.values()
+    assert subentry.data[CONF_OFF_PEAK] == ["01:00-07:00", "12:30-14:30"]
+
+
+@pytest.mark.parametrize(
+    "ranges",
+    [
+        pytest.param(["22h-6h"], id="unreadable_range"),
+        pytest.param(["22:15-06:00"], id="quarter_hour"),
+        pytest.param(["22:00-22:00"], id="empty_range"),
+        pytest.param([" "], id="no_range"),
+    ],
+)
+async def test_other_off_peak_hours_errors(
+    hass: HomeAssistant, ranges: list[str]
+) -> None:
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await add_contract(
+        hass,
+        entry.entry_id,
+        {CONF_KIND: "hphc", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"},
+        details(off_peak={CONF_OFF_PEAK: OFF_PEAK_OTHER, CONF_WEEKEND_OFF_PEAK: False}),
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_OFF_PEAK: ranges}
+    )
+    assert result["step_id"] == "off_peak"
+    assert result["errors"] == {CONF_OFF_PEAK: "invalid_off_peak"}
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_OFF_PEAK: ["22:00-06:00"]}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.parametrize(
+    ("second", "errors"),
+    [
+        pytest.param(
+            details(active_to="2026-01-01"),
+            {SECTION_ACTIVE: "active_to_without_from"},
+            id="end_without_start",
+        ),
+        pytest.param(
+            details(active_from="2026-01-01", active_to="2025-12-31"),
+            {SECTION_ACTIVE: "end_before_start"},
+            id="end_before_start",
+        ),
+        pytest.param(
+            details(active_from="2023-06-01"),
+            {SECTION_ACTIVE: "overlapping_active_period"},
+            id="overlap",
+        ),
+        pytest.param(details(" "), {CONF_NAME: "empty_name"}, id="no_name"),
+        pytest.param(details("tempo"), {CONF_NAME: "duplicate_name"}, id="taken_name"),
+    ],
+)
 async def test_add_contract_errors(
-    hass: HomeAssistant, details: dict[str, Any], errors: dict[str, str]
+    hass: HomeAssistant, second: dict[str, Any], errors: dict[str, str]
 ) -> None:
     entry = make_entry([TEMPO_CONTRACT])
     entry.add_to_hass(hass)
     result = await add_contract(
         hass,
         entry.entry_id,
-        {CONF_NAME: "HP/HC", CONF_KIND: "hphc", CONF_PRICING: PRICING_OFFICIAL},
-        details,
+        {CONF_KIND: "base", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"},
+        second,
     )
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "details"
     assert result["errors"] == errors
     result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
-        {CONF_KVA: "6", CONF_OFF_PEAK: ["22:00-06:00"], CONF_WEEKEND_OFF_PEAK: False},
+        result["flow_id"], details()
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-
-
-async def test_contract_needs_a_name(hass: HomeAssistant) -> None:
-    entry = make_entry([BASE_CONTRACT])
-    entry.add_to_hass(hass)
-    first = {CONF_NAME: "  ", CONF_KIND: "base", CONF_PRICING: PRICING_MANUAL}
-    result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_CONTRACT)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], first
-    )
-    assert result["step_id"] == "user"
-    assert result["errors"] == {CONF_NAME: "empty_name"}
-    (subentry,) = entry.subentries.values()
-    result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_NAME: "", CONF_PRICING: PRICING_OFFICIAL}
-    )
-    assert result["step_id"] == "reconfigure"
-    assert result["errors"] == {CONF_NAME: "empty_name"}
-
-
-async def test_contract_names_are_unique(hass: HomeAssistant) -> None:
-    entry = make_entry([BASE_CONTRACT, TEMPO_CONTRACT])
-    entry.add_to_hass(hass)
-    result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_CONTRACT)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
-        {CONF_NAME: " base ", CONF_KIND: "base", CONF_PRICING: PRICING_MANUAL},
-    )
-    assert result["errors"] == {CONF_NAME: "duplicate_name"}
-    base, tempo = entry.subentries.values()
-    result = await entry.start_subentry_reconfigure_flow(hass, tempo.subentry_id)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_NAME: "Base", CONF_PRICING: PRICING_OFFICIAL}
-    )
-    assert result["errors"] == {CONF_NAME: "duplicate_name"}
-    # A contract keeps its own name.
-    result = await entry.start_subentry_reconfigure_flow(hass, base.subentry_id)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_NAME: "Base", CONF_PRICING: PRICING_OFFICIAL}
-    )
-    assert result["step_id"] == "details"
 
 
 async def test_contract_before_another_one(hass: HomeAssistant) -> None:
@@ -501,8 +619,8 @@ async def test_contract_before_another_one(hass: HomeAssistant) -> None:
     result = await add_contract(
         hass,
         entry.entry_id,
-        {CONF_NAME: "Old", CONF_KIND: "base", CONF_PRICING: PRICING_OFFICIAL},
-        {CONF_KVA: "6", CONF_ACTIVE_FROM: "2020-01-01", CONF_ACTIVE_TO: "2023-12-31"},
+        {CONF_KIND: "base", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"},
+        details("Old", "2020-01-01", "2023-12-31"),
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
@@ -514,13 +632,17 @@ async def test_reconfigure_contract(hass: HomeAssistant) -> None:
     result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "reconfigure"
+    assert suggested(result) == {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"}
     result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_NAME: "My Tempo", CONF_PRICING: PRICING_MANUAL}
+        result["flow_id"], {CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"}
     )
     assert result["step_id"] == "details"
+    assert suggested(result) == {
+        CONF_NAME: "Tempo",
+        SECTION_ACTIVE: {CONF_ACTIVE_FROM: "2024-01-01"},
+    }
     result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
-        {CONF_ACTIVE_FROM: "2024-01-01", CONF_ACTIVE_TO: "2026-10-31"},
+        result["flow_id"], details("My Tempo", "2024-01-01", "2026-10-31")
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
@@ -535,25 +657,66 @@ async def test_reconfigure_contract(hass: HomeAssistant) -> None:
     }
 
 
-async def test_reconfigure_contract_suggests_current_values(
-    hass: HomeAssistant,
-) -> None:
+async def test_reconfigure_contract_power(hass: HomeAssistant) -> None:
     entry = make_entry([BASE_CONTRACT])
     entry.add_to_hass(hass)
     (subentry,) = entry.subentries.values()
     result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
     result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_NAME: "Base", CONF_PRICING: PRICING_OFFICIAL}
+        result["flow_id"], {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "36"}
     )
-    assert result["data_schema"] is not None
-    schema = result["data_schema"].schema
-    kva = next(key for key in schema if key == CONF_KVA)
-    assert kva.description == {"suggested_value": "6"}
+    # Base stops at 15 kVA.
+    assert result["errors"] == {CONF_KVA: "kva_not_offered"}
     result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_KVA: "9"}
+        result["flow_id"], {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "9"}
+    )
+    # A contract keeps its own name.
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], details("Base")
     )
     assert result["reason"] == "reconfigure_successful"
     assert entry.subentries[subentry.subentry_id].data[CONF_KVA] == 9
+
+
+@pytest.mark.parametrize(
+    ("off_peak", "preset", "typed"),
+    [
+        pytest.param(["22:30-06:30"], "2230_0630", [""], id="preset"),
+        pytest.param(
+            ["02:00-07:00", "13:00-16:00"],
+            OFF_PEAK_OTHER,
+            ["02:00-07:00", "13:00-16:00"],
+            id="other",
+        ),
+    ],
+)
+async def test_reconfigure_off_peak_hours(
+    hass: HomeAssistant, off_peak: list[str], preset: str, typed: list[str]
+) -> None:
+    hphc = contract_subentry(
+        "HP/HC", uid="hphc0001", kind=ContractKind.HPHC, off_peak=off_peak
+    )
+    entry = make_entry([hphc])
+    entry.add_to_hass(hass)
+    (subentry,) = entry.subentries.values()
+    result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"}
+    )
+    assert suggested(result)[CONF_OFF_PEAK] == preset
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        details(
+            "HP/HC",
+            off_peak={CONF_OFF_PEAK: OFF_PEAK_OTHER, CONF_WEEKEND_OFF_PEAK: False},
+        ),
+    )
+    assert suggested(result) == {CONF_OFF_PEAK: typed}
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_OFF_PEAK: ["23:00-07:00"]}
+    )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.subentries[subentry.subentry_id].data[CONF_OFF_PEAK] == ["23:00-07:00"]
 
 
 # Price periods.

@@ -57,7 +57,13 @@ from .costing import (
     cost_contract,
     hourly_rows,
 )
-from .data import Contract, contracts, format_time_range, manual_prices
+from .data import (
+    Contract,
+    contracts,
+    format_time_range,
+    manual_prices,
+    price_periods,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -363,18 +369,7 @@ class StatisticsWriter:
         series: dict[str, _Series] = {}
         fingerprints: dict[str, str] = {}
         for contract in entry_contracts:
-            if contract.official:
-                assert contract.kva is not None
-                periods = official_prices[(contract.kind, contract.kva)]
-            else:
-                periods = sorted(
-                    (
-                        item.period
-                        for item in manual
-                        if item.contract_uid == contract.uid
-                    ),
-                    key=lambda period: period.start,
-                )
+            periods = price_periods(contract, manual, official_prices)
             inputs[contract.uid] = ContractInput(
                 uid=contract.uid,
                 rules=contract.rules,

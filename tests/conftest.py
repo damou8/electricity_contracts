@@ -22,7 +22,10 @@ from homeassistant.components.recorder.models import (
     StatisticMeanType,
     StatisticMetaData,
 )
-from homeassistant.components.recorder.statistics import async_add_external_statistics
+from homeassistant.components.recorder.statistics import (
+    async_add_external_statistics,
+    async_import_statistics,
+)
 from homeassistant.config_entries import ConfigSubentryData
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -34,7 +37,6 @@ from custom_components.electricity_contracts.const import (
     CONF_ACTIVE_FROM,
     CONF_ACTIVE_TO,
     CONF_CONTRACT,
-    CONF_CONTRACTS,
     CONF_END,
     CONF_FIXED_PER_YEAR,
     CONF_KIND,
@@ -46,7 +48,6 @@ from custom_components.electricity_contracts.const import (
     CONF_STATISTIC_ID,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
-    CONF_WINDOW,
     DOMAIN,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
@@ -57,6 +58,7 @@ from custom_components.electricity_contracts.const import (
 
 STATISTIC_ID = "linky:00000000000000"
 OTHER_STATISTIC_ID = "linky:11111111111111"
+TEMPERATURE_ID = "sensor.outdoor_temperature"
 FIRST_HOUR = datetime(2026, 3, 1, tzinfo=UTC)
 NOW = datetime(2026, 11, 7, 9, tzinfo=UTC)  # 10:00 in Paris
 
@@ -148,9 +150,14 @@ async def add_statistic(
     has_sum: bool = True,
     first: int = 0,
     wh: float = 500.0,
+    values: list[float] | None = None,
     step: timedelta = timedelta(hours=1),
 ) -> None:
-    """Import an hourly statistic like the Linky app does."""
+    """Import an hourly statistic like the Linky app does.
+
+    Every hour consumes `wh`, or the Wh of `values` one after the other: then the
+    sum starts at the first value.
+    """
     source = statistic_id.split(":", 1)[0]
     metadata = StatisticMetaData(
         mean_type=StatisticMeanType.NONE,
@@ -161,15 +168,43 @@ async def add_statistic(
         unit_class="energy" if unit == "Wh" else None,
         unit_of_measurement=unit,
     )
+    consumed = values or [wh] * hours
+    total = wh * first if values is None else 0.0
+    rows: list[StatisticData] = []
+    for hour, value in enumerate(consumed, start=first):
+        total += value
+        rows.append(
+            StatisticData(start=FIRST_HOUR + step * hour, state=value, sum=total)
+        )
+    async_add_external_statistics(hass, metadata, rows)
+    await async_wait_recording_done(hass)
+
+
+async def add_temperature(
+    hass: HomeAssistant,
+    means: list[float],
+    *,
+    first: int = 0,
+    unit: str = "°C",
+    mean_type: StatisticMeanType = StatisticMeanType.ARITHMETIC,
+) -> None:
+    """Import the hourly means of an outdoor temperature sensor."""
+    metadata = StatisticMetaData(
+        mean_type=mean_type,
+        has_sum=False,
+        name="Outdoor temperature",
+        source="recorder",
+        statistic_id=TEMPERATURE_ID,
+        unit_class="temperature" if unit in {"°C", "°F"} else None,
+        unit_of_measurement=unit,
+    )
     rows = [
         StatisticData(
-            start=FIRST_HOUR + step * hour,
-            state=wh,
-            sum=wh * (hour + 1),
+            start=FIRST_HOUR + timedelta(hours=hour), mean=mean, min=mean, max=mean
         )
-        for hour in range(first, first + hours)
+        for hour, mean in enumerate(means, start=first)
     ]
-    async_add_external_statistics(hass, metadata, rows)
+    async_import_statistics(hass, metadata, rows)
     await async_wait_recording_done(hass)
 
 
@@ -245,13 +280,13 @@ def comparison_subentry(
     end: str | None = "2026-03-31",
     contracts: list[str] | None = None,
 ) -> ConfigSubentryData:
-    """Build the subentry of a comparison."""
+    """Build the subentry of a comparison, as 0.1 stored it."""
     return ConfigSubentryData(
         data={
-            CONF_WINDOW: window,
+            "window": window,
             CONF_START: start if window == "fixed" else None,
             CONF_END: end if window == "fixed" else None,
-            CONF_CONTRACTS: contracts or [],
+            "contracts": contracts or [],
         },
         subentry_type=SUBENTRY_COMPARISON,
         title=title,
@@ -276,6 +311,7 @@ def make_entry(
     """Build the config entry of a consumption source."""
     return MockConfigEntry(
         domain=DOMAIN,
+        minor_version=2,
         title="Linky 00000000000000",
         unique_id=statistic_id,
         data={CONF_STATISTIC_ID: statistic_id},

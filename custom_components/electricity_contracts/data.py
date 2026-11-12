@@ -1,5 +1,6 @@
 """Typed view of the configuration kept in the config entry and its subentries."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, time
 from typing import Any
@@ -17,7 +18,6 @@ from .const import (
     CONF_ACTIVE_FROM,
     CONF_ACTIVE_TO,
     CONF_CONTRACT,
-    CONF_CONTRACTS,
     CONF_END,
     CONF_FIXED_PER_YEAR,
     CONF_KIND,
@@ -28,13 +28,10 @@ from .const import (
     CONF_START,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
-    CONF_WINDOW,
     PRICING_OFFICIAL,
-    SUBENTRY_COMPARISON,
     SUBENTRY_CONTRACT,
     SUBENTRY_PRICE_PERIOD,
 )
-from .costing import in_force
 
 
 def parse_time_range(value: str) -> TimeRange:
@@ -133,59 +130,6 @@ class ManualPrices:
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class ComparisonConfig:
-    """Contracts to compare over a window."""
-
-    subentry_id: str
-    name: str
-    window: str
-    start: date | None
-    end: date | None
-    contract_uids: tuple[str, ...]
-    """Empty to compare every contract."""
-
-    @classmethod
-    def from_subentry(cls, subentry: ConfigSubentry) -> ComparisonConfig:
-        """Read a comparison subentry."""
-        data = subentry.data
-        return cls(
-            subentry_id=subentry.subentry_id,
-            name=subentry.title,
-            window=data[CONF_WINDOW],
-            start=_optional_date(data.get(CONF_START)),
-            end=_optional_date(data.get(CONF_END)),
-            contract_uids=tuple(data.get(CONF_CONTRACTS, ())),
-        )
-
-    def select(self, available: list[Contract]) -> list[Contract]:
-        """Return the compared contracts among the entry's."""
-        if not self.contract_uids:
-            return available
-        return [item for item in available if item.uid in self.contract_uids]
-
-
-def comparisons(entry: ConfigEntry) -> list[ComparisonConfig]:
-    """Return the comparisons of an entry, in the order they were added."""
-    return [
-        ComparisonConfig.from_subentry(subentry)
-        for subentry in entry.subentries.values()
-        if subentry.subentry_type == SUBENTRY_COMPARISON
-    ]
-
-
-def active_contract(entry_contracts: list[Contract], day: date) -> Contract | None:
-    """Return the contract in force on a day, if any."""
-    return next(
-        (
-            contract
-            for contract in entry_contracts
-            if in_force(day, contract.active_from, contract.active_to)
-        ),
-        None,
-    )
-
-
 def contracts(entry: ConfigEntry) -> list[Contract]:
     """Return the contracts of an entry, in the order they were added."""
     return [
@@ -195,6 +139,18 @@ def contracts(entry: ConfigEntry) -> list[Contract]:
     ]
 
 
+def in_force(entry_contracts: list[Contract], day: date) -> Contract | None:
+    """Return the contract that was in force on `day`, if any."""
+    for contract in entry_contracts:
+        if (
+            contract.active_from is not None
+            and contract.active_from <= day
+            and (contract.active_to is None or contract.active_to >= day)
+        ):
+            return contract
+    return None
+
+
 def manual_prices(entry: ConfigEntry) -> list[ManualPrices]:
     """Return the price periods entered by hand, in the order they were added."""
     return [
@@ -202,6 +158,21 @@ def manual_prices(entry: ConfigEntry) -> list[ManualPrices]:
         for subentry in entry.subentries.values()
         if subentry.subentry_type == SUBENTRY_PRICE_PERIOD
     ]
+
+
+def price_periods(
+    contract: Contract,
+    manual: list[ManualPrices],
+    official: Mapping[tuple[ContractKind, int], list[PricePeriod]],
+) -> list[PricePeriod]:
+    """Return the price periods of a contract, oldest first."""
+    if contract.official:
+        assert contract.kva is not None
+        return official[(contract.kind, contract.kva)]
+    return sorted(
+        (item.period for item in manual if item.contract_uid == contract.uid),
+        key=lambda period: period.start,
+    )
 
 
 def periods_overlap(

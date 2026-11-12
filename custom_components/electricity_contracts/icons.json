@@ -1,29 +1,17 @@
 {
   "entity": {
     "sensor": {
-      "last_day_cost": {
-        "default": "mdi:cash"
+      "current_price": {
+        "default": "mdi:currency-eur"
       },
-      "month_average_price": {
-        "default": "mdi:cash-clock"
-      },
-      "current_contract": {
-        "default": "mdi:file-document-outline"
-      },
-      "last_hour": {
-        "default": "mdi:clock-check-outline"
-      },
-      "best_contract": {
-        "default": "mdi:trophy-outline"
-      },
-      "saving": {
-        "default": "mdi:piggy-bank-outline"
-      },
-      "contract_cost": {
-        "default": "mdi:cash-multiple"
-      },
-      "contract_price": {
-        "default": "mdi:scale-balance"
+      "current_tranche": {
+        "default": "mdi:clock-outline",
+        "state": {
+          "hc": "mdi:weather-night",
+          "blue_hc": "mdi:weather-night",
+          "white_hc": "mdi:weather-night",
+          "red_hc": "mdi:weather-night"
+        }
       }
     }
   },

@@ -37,15 +37,30 @@
   "options": {
     "step": {
       "init": {
-        "title": "RTE account (optional)",
-        "description": "Tempo colors come from RTE's public calendar, which needs no account. If it stops working, the integration can use RTE's official API instead: create a free application for the \"Tempo Like Supply Contract\" API on data.rte-france.com and enter its credentials. Leave both fields empty to use the public calendar only.",
+        "title": "Options",
+        "description": "Costs and comparisons are on the [Contracts](/electricity-contracts) page of the sidebar.",
         "data": {
-          "rte_client_id": "Client ID",
-          "rte_client_secret": "Client secret"
+          "temperature": "Outdoor temperature (optional)"
+        },
+        "data_description": {
+          "temperature": "Puts the consumption next to the weather, in the Understand tab. The sensor must keep statistics."
+        },
+        "sections": {
+          "rte": {
+            "name": "Tempo backup: RTE's official API",
+            "description": "Optional, for when RTE's public calendar stops answering: create a free application for the \"Tempo Like Supply Contract\" API on data.rte-france.com and enter its credentials.",
+            "data": {
+              "rte_client_id": "Client ID",
+              "rte_client_secret": "Client secret"
+            }
+          }
         }
       }
     },
     "error": {
+      "statistic_not_found": "This sensor keeps no statistics: it needs the measurement state class.",
+      "statistic_not_temperature": "This sensor doesn't measure a temperature (°C, °F…).",
+      "statistic_no_mean": "This sensor has no hourly mean: it needs the measurement state class.",
       "incomplete_credentials": "Enter both the client ID and the secret, or neither.",
       "invalid_auth": "RTE refused these credentials.",
       "cannot_connect": "Could not reach RTE. Try again later."
@@ -60,39 +75,60 @@
       },
       "step": {
         "user": {
-          "title": "New contract",
+          "title": "Add a contract",
           "data": {
-            "name": "Name",
-            "kind": "Kind",
-            "pricing": "Prices"
+            "kind": "Kind of contract",
+            "pricing": "Prices",
+            "kva": "Subscribed power"
           },
           "data_description": {
-            "name": "For example \"Tempo\" or \"Offer X\".",
-            "pricing": "Regulated prices are downloaded with their history. Prices you set yourself are added afterwards as price periods."
+            "pricing": "Prices you set yourself are entered afterwards, as price periods.",
+            "kva": "Written on your bill; 6 kVA is the most common. Regulated prices depend on it."
           }
         },
         "reconfigure": {
-          "title": "Change contract",
+          "title": "Change {name}",
           "data": {
-            "name": "Name",
-            "pricing": "Prices"
+            "pricing": "Prices",
+            "kva": "Subscribed power"
+          },
+          "data_description": {
+            "pricing": "Prices you set yourself are entered as price periods.",
+            "kva": "Written on your bill. Regulated prices depend on it."
           }
         },
         "details": {
-          "title": "Contract details",
+          "title": "The contract",
           "data": {
-            "kva": "Subscribed power (kVA)",
+            "name": "Name",
             "off_peak": "Off-peak hours",
-            "weekend_off_peak": "Weekends are off-peak",
-            "active_from": "In force from",
-            "active_to": "In force until"
+            "weekend_off_peak": "Off-peak all weekend"
           },
           "data_description": {
-            "kva": "The regulated prices depend on it.",
-            "off_peak": "One range per line, on whole or half hours, like 22:00-06:00 or 12:30-14:00.",
-            "weekend_off_peak": "Saturdays and Sundays are billed at the off-peak price all day.",
-            "active_from": "First day you were billed under this contract. Leave empty for a contract you only want to compare.",
-            "active_to": "Last day of the contract. Leave empty if it is still in force."
+            "name": "As it shows on the Contracts page.",
+            "off_peak": "Your meter's hours are on your bill or in your Enedis account. \"Other hours\" opens a step to type them in.",
+            "weekend_off_peak": "Saturdays and Sundays are billed at the off-peak price all day."
+          },
+          "sections": {
+            "active_period": {
+              "name": "Days in force (optional)",
+              "description": "Leave empty for a contract you only want to compare.",
+              "data": {
+                "active_from": "From",
+                "active_to": "To"
+              },
+              "data_description": {
+                "active_from": "First day you were billed under this contract.",
+                "active_to": "Last day; empty while it is in force."
+              }
+            }
+          }
+        },
+        "off_peak": {
+          "title": "Off-peak hours",
+          "description": "One range per field, on whole or half hours, like 01:00-07:00 or 12:30-14:30.",
+          "data": {
+            "off_peak": "Range"
           }
         }
       },
@@ -102,7 +138,12 @@
         "invalid_off_peak": "Enter at least one range like 22:00-06:00, on whole or half hours.",
         "active_to_without_from": "Enter the first day too.",
         "end_before_start": "The last day is before the first day.",
-        "overlapping_active_period": "Another contract was in force during part of these days."
+        "overlapping_active_period": "Another contract was in force during part of these days.",
+        "kva_not_offered": "This kind of contract has no regulated price at this power."
+      },
+      "create_entry": {
+        "default": "The contract shows on the [Contracts](/electricity-contracts) page once its costs are computed over the whole history.",
+        "add_prices": "Last step: enter its prices with “Add price period”, on this page."
       }
     },
     "price_period": {
@@ -165,77 +206,54 @@
         "no_manual_contracts": "Add a contract with prices you set yourself first.",
         "contract_not_found": "The contract of this price period no longer exists, or now uses regulated prices."
       }
-    },
-    "comparison": {
-      "entry_type": "Comparison",
-      "initiate_flow": {
-        "user": "Add comparison",
-        "reconfigure": "Change comparison"
-      },
-      "step": {
-        "user": {
-          "title": "New comparison",
-          "description": "Compare what the contracts cost over the same hours. Rolling windows move every day.",
-          "data": {
-            "name": "Name",
-            "window": "Window",
-            "contracts": "Contracts"
-          },
-          "data_description": {
-            "name": "For example \"Last 12 months\".",
-            "contracts": "Leave empty to compare every contract, including the ones added later."
-          }
-        },
-        "reconfigure": {
-          "title": "Change comparison",
-          "data": {
-            "name": "Name",
-            "window": "Window",
-            "contracts": "Contracts"
-          },
-          "data_description": {
-            "name": "For example \"Last 12 months\".",
-            "contracts": "Leave empty to compare every contract, including the ones added later."
-          }
-        },
-        "dates": {
-          "title": "Days compared",
-          "data": {
-            "start": "First day",
-            "end": "Last day"
-          }
-        }
-      },
-      "error": {
-        "empty_name": "Enter a name.",
-        "end_before_start": "The last day is before the first day."
-      },
-      "abort": {
-        "no_contracts": "Add a contract first."
-      }
     }
   },
   "selector": {
     "kind": {
       "options": {
-        "base": "Base (one price)",
-        "hphc": "Off-peak hours (HP/HC)",
-        "tempo": "Tempo"
+        "base": "Base: one price at any time",
+        "hphc": "Peak and off-peak hours: two prices, by the hour",
+        "tempo": "Tempo: six prices, by the hour and the color of the day"
       }
     },
     "pricing": {
       "options": {
-        "official": "Regulated prices (Tarif Bleu)",
-        "manual": "Prices I set myself"
+        "official": "Regulated prices: updated on their own at each change",
+        "manual": "My own prices: a market offer, whose prices you enter afterwards"
       }
     },
-    "window": {
+    "off_peak": {
       "options": {
-        "last_12_months": "Last 12 months",
-        "current_year": "Current year",
-        "current_month": "Current month",
-        "tempo_season": "Tempo season (September to August)",
-        "fixed": "From one day to another"
+        "22_06": "22:00 – 6:00",
+        "23_07": "23:00 – 7:00",
+        "2230_0630": "22:30 – 6:30",
+        "other": "Other hours…"
+      }
+    }
+  },
+  "device": {
+    "contracts": {
+      "name": "Electricity contracts"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_price": {
+        "name": "Current price"
+      },
+      "current_tranche": {
+        "name": "Current tranche",
+        "state": {
+          "base": "Base",
+          "hc": "Off-peak",
+          "hp": "Peak",
+          "blue_hc": "Blue off-peak",
+          "blue_hp": "Blue peak",
+          "white_hc": "White off-peak",
+          "white_hp": "White peak",
+          "red_hc": "Red off-peak",
+          "red_hp": "Red peak"
+        }
       }
     }
   },
@@ -315,80 +333,6 @@
         "contracts": {
           "name": "Contracts",
           "description": "Names of the contracts to compare; every contract if empty."
-        }
-      }
-    }
-  },
-  "entity": {
-    "sensor": {
-      "last_day_cost": {
-        "name": "Actual cost of the last day",
-        "state_attributes": {
-          "day": {
-            "name": "Day"
-          }
-        }
-      },
-      "month_average_price": {
-        "name": "Actual price this month"
-      },
-      "current_contract": {
-        "name": "Current contract"
-      },
-      "last_hour": {
-        "name": "Last hour of data"
-      },
-      "best_contract": {
-        "name": "Best contract",
-        "state_attributes": {
-          "from": {
-            "name": "From"
-          },
-          "to": {
-            "name": "To"
-          }
-        }
-      },
-      "saving": {
-        "name": "Possible saving",
-        "state_attributes": {
-          "from": {
-            "name": "From"
-          },
-          "to": {
-            "name": "To"
-          }
-        }
-      },
-      "contract_cost": {
-        "name": "{contract} cost",
-        "state_attributes": {
-          "from": {
-            "name": "From"
-          },
-          "to": {
-            "name": "To"
-          },
-          "energy": {
-            "name": "Energy"
-          },
-          "variable_cost": {
-            "name": "Energy cost"
-          },
-          "fixed_cost": {
-            "name": "Subscription"
-          }
-        }
-      },
-      "contract_price": {
-        "name": "{contract} price per kWh",
-        "state_attributes": {
-          "from": {
-            "name": "From"
-          },
-          "to": {
-            "name": "To"
-          }
         }
       }
     }

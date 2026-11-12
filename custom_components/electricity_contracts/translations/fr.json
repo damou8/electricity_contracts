@@ -37,15 +37,30 @@
   "options": {
     "step": {
       "init": {
-        "title": "Compte RTE (facultatif)",
-        "description": "Les couleurs Tempo viennent du calendrier public de RTE, sans compte. S'il ne fonctionne plus, l'intégration peut utiliser l'API officielle de RTE : créez une application gratuite pour l'API « Tempo Like Supply Contract » sur data.rte-france.com et saisissez ses identifiants. Laissez les deux champs vides pour n'utiliser que le calendrier public.",
+        "title": "Options",
+        "description": "Les coûts et les comparaisons sont dans la page [Contrats](/electricity-contracts) du menu latéral.",
         "data": {
-          "rte_client_id": "ID client",
-          "rte_client_secret": "Secret client"
+          "temperature": "Température extérieure (facultatif)"
+        },
+        "data_description": {
+          "temperature": "Relie la consommation à la météo, dans l'onglet Comprendre. Le capteur doit garder des statistiques."
+        },
+        "sections": {
+          "rte": {
+            "name": "Secours Tempo : API officielle RTE",
+            "description": "Facultatif, si le calendrier public de RTE ne répond plus : créez une application gratuite pour l'API « Tempo Like Supply Contract » sur data.rte-france.com et saisissez ses identifiants.",
+            "data": {
+              "rte_client_id": "ID client",
+              "rte_client_secret": "Secret client"
+            }
+          }
         }
       }
     },
     "error": {
+      "statistic_not_found": "Ce capteur ne garde pas de statistiques : il lui faut la classe d'état measurement.",
+      "statistic_not_temperature": "Ce capteur ne mesure pas une température (°C, °F…).",
+      "statistic_no_mean": "Ce capteur n'a pas de moyenne horaire : il lui faut la classe d'état measurement.",
       "incomplete_credentials": "Saisissez l'ID client et le secret, ou aucun des deux.",
       "invalid_auth": "RTE a refusé ces identifiants.",
       "cannot_connect": "Impossible de joindre RTE. Réessayez plus tard."
@@ -60,39 +75,60 @@
       },
       "step": {
         "user": {
-          "title": "Nouveau contrat",
+          "title": "Ajouter un contrat",
           "data": {
-            "name": "Nom",
-            "kind": "Type",
-            "pricing": "Prix"
+            "kind": "Type de contrat",
+            "pricing": "Prix",
+            "kva": "Puissance souscrite"
           },
           "data_description": {
-            "name": "Par exemple « Tempo » ou « Offre X ».",
-            "pricing": "Les tarifs réglementés sont téléchargés avec leur historique. Les prix que vous fixez vous-même s'ajoutent ensuite comme périodes de prix."
+            "pricing": "Les prix que vous fixez vous-même se saisissent ensuite, en périodes de prix.",
+            "kva": "Écrite sur votre facture ; 6 kVA est la plus courante. Les tarifs réglementés en dépendent."
           }
         },
         "reconfigure": {
-          "title": "Modifier le contrat",
+          "title": "Modifier {name}",
           "data": {
-            "name": "Nom",
-            "pricing": "Prix"
+            "pricing": "Prix",
+            "kva": "Puissance souscrite"
+          },
+          "data_description": {
+            "pricing": "Les prix que vous fixez vous-même se saisissent en périodes de prix.",
+            "kva": "Écrite sur votre facture. Les tarifs réglementés en dépendent."
           }
         },
         "details": {
-          "title": "Détails du contrat",
+          "title": "Le contrat",
           "data": {
-            "kva": "Puissance souscrite (kVA)",
+            "name": "Nom",
             "off_peak": "Heures creuses",
-            "weekend_off_peak": "Week-end en heures creuses",
-            "active_from": "En vigueur du",
-            "active_to": "En vigueur jusqu'au"
+            "weekend_off_peak": "Heures creuses tout le week-end"
           },
           "data_description": {
-            "kva": "Les tarifs réglementés en dépendent.",
-            "off_peak": "Une plage par ligne, à l'heure ou à la demi-heure, comme 22:00-06:00 ou 12:30-14:00.",
-            "weekend_off_peak": "Les samedis et dimanches sont facturés au prix des heures creuses toute la journée.",
-            "active_from": "Premier jour facturé avec ce contrat. Laissez vide pour un contrat qui sert seulement à comparer.",
-            "active_to": "Dernier jour du contrat. Laissez vide s'il est toujours en vigueur."
+            "name": "Tel qu'il apparaît dans la page Contrats.",
+            "off_peak": "Les plages de votre compteur sont sur votre facture ou dans votre espace Enedis. « Autres plages » ouvre une étape pour les saisir.",
+            "weekend_off_peak": "Les samedis et dimanches sont facturés au prix des heures creuses toute la journée."
+          },
+          "sections": {
+            "active_period": {
+              "name": "Période d'activité (facultatif)",
+              "description": "Laissez vide si ce contrat sert seulement à comparer.",
+              "data": {
+                "active_from": "Du",
+                "active_to": "Au"
+              },
+              "data_description": {
+                "active_from": "Premier jour facturé avec ce contrat.",
+                "active_to": "Dernier jour ; vide s'il est toujours en vigueur."
+              }
+            }
+          }
+        },
+        "off_peak": {
+          "title": "Heures creuses",
+          "description": "Une plage par case, à l'heure ou à la demi-heure, comme 01:00-07:00 ou 12:30-14:30.",
+          "data": {
+            "off_peak": "Plage"
           }
         }
       },
@@ -102,7 +138,12 @@
         "invalid_off_peak": "Saisissez au moins une plage comme 22:00-06:00, à l'heure ou à la demi-heure.",
         "active_to_without_from": "Saisissez aussi le premier jour.",
         "end_before_start": "Le dernier jour est avant le premier.",
-        "overlapping_active_period": "Un autre contrat était en vigueur pendant une partie de ces jours."
+        "overlapping_active_period": "Un autre contrat était en vigueur pendant une partie de ces jours.",
+        "kva_not_offered": "Ce type de contrat n'a pas de tarif réglementé à cette puissance."
+      },
+      "create_entry": {
+        "default": "Le contrat apparaît dans la page [Contrats](/electricity-contracts) dès que ses coûts sont calculés sur tout l'historique.",
+        "add_prices": "Dernière étape : saisissez ses prix avec « Ajouter une période de prix », sur cette page."
       }
     },
     "price_period": {
@@ -165,77 +206,54 @@
         "no_manual_contracts": "Ajoutez d'abord un contrat dont vous fixez les prix vous-même.",
         "contract_not_found": "Le contrat de cette période de prix n'existe plus, ou utilise maintenant les tarifs réglementés."
       }
-    },
-    "comparison": {
-      "entry_type": "Comparaison",
-      "initiate_flow": {
-        "user": "Ajouter une comparaison",
-        "reconfigure": "Modifier la comparaison"
-      },
-      "step": {
-        "user": {
-          "title": "Nouvelle comparaison",
-          "description": "Compare ce qu'auraient coûté les contrats sur les mêmes heures. Les périodes glissantes avancent chaque jour.",
-          "data": {
-            "name": "Nom",
-            "window": "Période",
-            "contracts": "Contrats"
-          },
-          "data_description": {
-            "name": "Par exemple « 12 derniers mois ».",
-            "contracts": "Laissez vide pour comparer tous les contrats, y compris ceux ajoutés plus tard."
-          }
-        },
-        "reconfigure": {
-          "title": "Modifier la comparaison",
-          "data": {
-            "name": "Nom",
-            "window": "Période",
-            "contracts": "Contrats"
-          },
-          "data_description": {
-            "name": "Par exemple « 12 derniers mois ».",
-            "contracts": "Laissez vide pour comparer tous les contrats, y compris ceux ajoutés plus tard."
-          }
-        },
-        "dates": {
-          "title": "Jours comparés",
-          "data": {
-            "start": "Premier jour",
-            "end": "Dernier jour"
-          }
-        }
-      },
-      "error": {
-        "empty_name": "Saisissez un nom.",
-        "end_before_start": "Le dernier jour est avant le premier."
-      },
-      "abort": {
-        "no_contracts": "Ajoutez d'abord un contrat."
-      }
     }
   },
   "selector": {
     "kind": {
       "options": {
-        "base": "Base (un seul prix)",
-        "hphc": "Heures creuses (HP/HC)",
-        "tempo": "Tempo"
+        "base": "Base : un seul prix, à toute heure",
+        "hphc": "Heures pleines – heures creuses : deux prix selon l'heure",
+        "tempo": "Tempo : six prix selon l'heure et la couleur du jour"
       }
     },
     "pricing": {
       "options": {
-        "official": "Tarifs réglementés (Tarif Bleu)",
-        "manual": "Prix que je fixe moi-même"
+        "official": "Tarifs réglementés : mis à jour tout seuls à chaque hausse",
+        "manual": "Mes propres prix : une offre de marché, dont vous saisissez les prix ensuite"
       }
     },
-    "window": {
+    "off_peak": {
       "options": {
-        "last_12_months": "12 derniers mois",
-        "current_year": "Année en cours",
-        "current_month": "Mois en cours",
-        "tempo_season": "Saison Tempo (septembre à août)",
-        "fixed": "D'un jour à un autre"
+        "22_06": "22 h – 6 h",
+        "23_07": "23 h – 7 h",
+        "2230_0630": "22 h 30 – 6 h 30",
+        "other": "Autres plages…"
+      }
+    }
+  },
+  "device": {
+    "contracts": {
+      "name": "Contrats d'électricité"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_price": {
+        "name": "Prix actuel"
+      },
+      "current_tranche": {
+        "name": "Tranche actuelle",
+        "state": {
+          "base": "Base",
+          "hc": "Heures creuses",
+          "hp": "Heures pleines",
+          "blue_hc": "Bleu heures creuses",
+          "blue_hp": "Bleu heures pleines",
+          "white_hc": "Blanc heures creuses",
+          "white_hp": "Blanc heures pleines",
+          "red_hc": "Rouge heures creuses",
+          "red_hp": "Rouge heures pleines"
+        }
       }
     }
   },
@@ -315,80 +333,6 @@
         "contracts": {
           "name": "Contrats",
           "description": "Noms des contrats à comparer ; tous si vide."
-        }
-      }
-    }
-  },
-  "entity": {
-    "sensor": {
-      "last_day_cost": {
-        "name": "Coût réel du dernier jour",
-        "state_attributes": {
-          "day": {
-            "name": "Jour"
-          }
-        }
-      },
-      "month_average_price": {
-        "name": "Prix réel du mois"
-      },
-      "current_contract": {
-        "name": "Contrat actuel"
-      },
-      "last_hour": {
-        "name": "Dernière heure de données"
-      },
-      "best_contract": {
-        "name": "Meilleur contrat",
-        "state_attributes": {
-          "from": {
-            "name": "Du"
-          },
-          "to": {
-            "name": "Au"
-          }
-        }
-      },
-      "saving": {
-        "name": "Économie possible",
-        "state_attributes": {
-          "from": {
-            "name": "Du"
-          },
-          "to": {
-            "name": "Au"
-          }
-        }
-      },
-      "contract_cost": {
-        "name": "Coût {contract}",
-        "state_attributes": {
-          "from": {
-            "name": "Du"
-          },
-          "to": {
-            "name": "Au"
-          },
-          "energy": {
-            "name": "Énergie"
-          },
-          "variable_cost": {
-            "name": "Coût de l'énergie"
-          },
-          "fixed_cost": {
-            "name": "Abonnement"
-          }
-        }
-      },
-      "contract_price": {
-        "name": "Prix au kWh {contract}",
-        "state_attributes": {
-          "from": {
-            "name": "Du"
-          },
-          "to": {
-            "name": "Au"
-          }
         }
       }
     }
