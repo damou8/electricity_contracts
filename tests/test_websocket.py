@@ -488,6 +488,13 @@ async def test_insights_estimate_tomorrow(
         8 * prices[Tranche.BLUE_HP] + 4 * prices[Tranche.BLUE_HC] + 189.98 / 365,
         abs=0.01,
     )
+    costs = estimate["costs"]
+    assert costs["blue"] == estimate["cost"]
+    assert costs["red"] == pytest.approx(
+        8 * prices[Tranche.RED_HP] + 4 * prices[Tranche.RED_HC] + 189.98 / 365,
+        abs=0.01,
+    )
+    assert costs["blue"] < costs["white"] < costs["red"]
 
 
 @pytest.mark.usefixtures("statistic", "sources")

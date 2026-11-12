@@ -314,18 +314,24 @@ def _tempo(
             entry.runtime_data.data.sources.official_prices,
         )
         period = next((item for item in periods if item.covers(tomorrow)), None)
-        estimate = {
-            "energy": round(peak + off_peak, 3),
-            "cost": (
-                round(
-                    peak * period.prices[Tranche(f"{color.value}_hp")]
-                    + off_peak * period.prices[Tranche(f"{color.value}_hc")]
+        # What the day would cost in each color, until its color is published.
+        costs = (
+            {
+                item.value: round(
+                    peak * period.prices[Tranche(f"{item.value}_hp")]
+                    + off_peak * period.prices[Tranche(f"{item.value}_hc")]
                     + period.fixed_per_year / 365,
                     2,
                 )
-                if color is not None and period is not None
-                else None
-            ),
+                for item in TempoColor
+            }
+            if period is not None
+            else None
+        )
+        estimate = {
+            "energy": round(peak + off_peak, 3),
+            "cost": costs[color.value] if costs and color is not None else None,
+            "costs": costs,
         }
 
     first, last = season_bounds(season_of(today))
