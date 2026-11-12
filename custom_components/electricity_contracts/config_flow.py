@@ -19,6 +19,8 @@ from homeassistant.components.recorder.statistics import (
     get_last_statistics,
     get_metadata,
 )
+from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.config_entries import (
     SOURCE_USER,
     ConfigEntry,
@@ -30,11 +32,14 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.selector import (
     BooleanSelector,
     DateSelector,
+    EntitySelector,
+    EntitySelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -67,11 +72,15 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
-    DEFAULT_OFF_PEAK,
+    DEFAULT_KVA,
     DOMAIN,
+    OFF_PEAK_OTHER,
+    OFF_PEAK_PRESETS,
     OFFERED_KVA,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
+    SECTION_ACTIVE,
+    SECTION_RTE,
     SUBENTRY_CONTRACT,
     SUBENTRY_PRICE_PERIOD,
 )
@@ -93,20 +102,83 @@ STATISTIC_SCHEMA = vol.Schema({vol.Required(CONF_STATISTIC_ID): StatisticSelecto
 
 OPTIONS_SCHEMA = vol.Schema(
     {
-        vol.Optional(CONF_TEMPERATURE): StatisticSelector(),
-        vol.Optional(CONF_RTE_CLIENT_ID): TextSelector(),
-        vol.Optional(CONF_RTE_CLIENT_SECRET): TextSelector(
-            TextSelectorConfig(type=TextSelectorType.PASSWORD)
+        # The statistics of a sensor go by its entity ID.
+        vol.Optional(CONF_TEMPERATURE): EntitySelector(
+            EntitySelectorConfig(
+                domain=SENSOR_DOMAIN, device_class=SensorDeviceClass.TEMPERATURE
+            )
+        ),
+        vol.Required(SECTION_RTE): section(
+            vol.Schema(
+                {
+                    vol.Optional(CONF_RTE_CLIENT_ID): TextSelector(),
+                    vol.Optional(CONF_RTE_CLIENT_SECRET): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    ),
+                }
+            ),
+            {"collapsed": True},
         ),
     }
 )
 
+KIND_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[kind.value for kind in ContractKind],
+        translation_key=CONF_KIND,
+        mode=SelectSelectorMode.LIST,
+    )
+)
 PRICING_SELECTOR = SelectSelector(
     SelectSelectorConfig(
         options=[PRICING_OFFICIAL, PRICING_MANUAL],
         translation_key=CONF_PRICING,
         mode=SelectSelectorMode.LIST,
     )
+)
+# Every power a regulated offer has; the kind of contract narrows it on saving.
+KVA_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[
+            SelectOptionDict(value=str(kva), label=f"{kva} kVA")
+            for kva in sorted(
+                {kva for powers in OFFERED_KVA.values() for kva in powers}
+            )
+        ],
+        mode=SelectSelectorMode.DROPDOWN,
+    )
+)
+OFF_PEAK_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[*OFF_PEAK_PRESETS, OFF_PEAK_OTHER],
+        translation_key=CONF_OFF_PEAK,
+        mode=SelectSelectorMode.DROPDOWN,
+    )
+)
+
+# The name a new contract is given, in the server's language; users change it.
+_KIND_NAMES: dict[str, dict[ContractKind, str]] = {
+    "en": {
+        ContractKind.BASE: "Base",
+        ContractKind.HPHC: "Off-peak",
+        ContractKind.TEMPO: "Tempo",
+    },
+    "fr": {
+        ContractKind.BASE: "Base",
+        ContractKind.HPHC: "Heures creuses",
+        ContractKind.TEMPO: "Tempo",
+    },
+}
+_MY_PRICES = {"en": "my prices", "fr": "mes prix"}
+_CONTRACT_KEYS = (
+    CONF_UID,
+    CONF_KIND,
+    CONF_PRICING,
+    CONF_KVA,
+    CONF_OFF_PEAK,
+    CONF_WEEKEND_OFF_PEAK,
+    CONF_ACTIVE_FROM,
+    CONF_ACTIVE_TO,
 )
 
 
@@ -296,8 +368,9 @@ class ElectricityContractsOptionsFlow(OptionsFlow):
                 except InvalidStatisticError as err:
                     errors[CONF_TEMPERATURE] = err.reason
                 options[CONF_TEMPERATURE] = temperature
-            client_id = user_input.get(CONF_RTE_CLIENT_ID, "").strip()
-            client_secret = user_input.get(CONF_RTE_CLIENT_SECRET, "").strip()
+            rte = user_input.get(SECTION_RTE, {})
+            client_id = rte.get(CONF_RTE_CLIENT_ID, "").strip()
+            client_secret = rte.get(CONF_RTE_CLIENT_SECRET, "").strip()
             if (client_id or client_secret) and not errors:
                 if error := await self._check_credentials(client_id, client_secret):
                     errors["base"] = error
@@ -305,10 +378,20 @@ class ElectricityContractsOptionsFlow(OptionsFlow):
                 options[CONF_RTE_CLIENT_SECRET] = client_secret
             if not errors:
                 return self.async_create_entry(data=options)
+        current = self.config_entry.options
+        suggested: dict[str, Any] = {
+            SECTION_RTE: {
+                key: current[key]
+                for key in (CONF_RTE_CLIENT_ID, CONF_RTE_CLIENT_SECRET)
+                if current.get(key)
+            }
+        }
+        if current.get(CONF_TEMPERATURE):
+            suggested[CONF_TEMPERATURE] = current[CONF_TEMPERATURE]
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(
-                OPTIONS_SCHEMA, user_input or self.config_entry.options
+                OPTIONS_SCHEMA, user_input or suggested
             ),
             errors=errors,
         )
@@ -336,52 +419,29 @@ def _date(value: str | None) -> date | None:
 
 
 class ContractSubentryFlow(ConfigSubentryFlow):
-    """Add or change a contract."""
+    """Add or change a contract: what it is, then its name and its days."""
 
     def __init__(self) -> None:
         """Start with an empty contract."""
         self._title = ""
         self._data: dict[str, Any] = {}
 
-    def _name_error(self, uid: str | None) -> str | None:
-        """Return why the name can't be used: the compare action selects by name."""
-        if not self._title:
-            return "empty_name"
-        name = self._title.casefold()
-        if any(
-            contract.name.casefold() == name and contract.uid != uid
-            for contract in contracts(self._get_entry())
-        ):
-            return "duplicate_name"
-        return None
-
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Name the contract and choose its kind and where its prices come from."""
+        """Choose the kind of contract, where its prices come from and its power."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            self._title = user_input[CONF_NAME].strip()
-            if not (error := self._name_error(None)):
-                self._data = {
-                    CONF_UID: self._new_uid(),
-                    CONF_KIND: user_input[CONF_KIND],
-                    CONF_PRICING: user_input[CONF_PRICING],
-                }
+            self._data = {CONF_UID: self._new_uid()}
+            if self._read_pricing(
+                user_input, ContractKind(user_input[CONF_KIND]), errors
+            ):
                 return await self.async_step_details()
-            errors[CONF_NAME] = error
         schema = vol.Schema(
             {
-                # pylint: disable-next=home-assistant-config-flow-name-field
-                vol.Required(CONF_NAME): str,
-                vol.Required(CONF_KIND): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[kind.value for kind in ContractKind],
-                        translation_key=CONF_KIND,
-                        mode=SelectSelectorMode.LIST,
-                    )
-                ),
+                vol.Required(CONF_KIND): KIND_SELECTOR,
                 vol.Required(CONF_PRICING, default=PRICING_OFFICIAL): PRICING_SELECTOR,
+                vol.Required(CONF_KVA, default=str(DEFAULT_KVA)): KVA_SELECTOR,
             }
         )
         return self.async_show_form(
@@ -393,102 +453,86 @@ class ContractSubentryFlow(ConfigSubentryFlow):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Rename the contract or change where its prices come from."""
+        """Change where the prices come from, or the power."""
         subentry = self._get_reconfigure_subentry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            self._title = user_input[CONF_NAME].strip()
-            if not (error := self._name_error(subentry.data[CONF_UID])):
-                self._data = {**subentry.data, CONF_PRICING: user_input[CONF_PRICING]}
+            self._title = subentry.title
+            self._data = dict(subentry.data)
+            kind = ContractKind(subentry.data[CONF_KIND])
+            if self._read_pricing(user_input, kind, errors):
                 return await self.async_step_details()
-            errors[CONF_NAME] = error
         schema = vol.Schema(
             {
-                # pylint: disable-next=home-assistant-config-flow-name-field
-                vol.Required(CONF_NAME): str,
                 vol.Required(CONF_PRICING): PRICING_SELECTOR,
+                vol.Required(CONF_KVA): KVA_SELECTOR,
             }
         )
+        suggested = user_input or {
+            CONF_PRICING: subentry.data[CONF_PRICING],
+            CONF_KVA: str(subentry.data.get(CONF_KVA, DEFAULT_KVA)),
+        }
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=self.add_suggested_values_to_schema(
-                schema, user_input or {CONF_NAME: subentry.title, **subentry.data}
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
+            description_placeholders={"name": subentry.title},
         )
+
+    def _read_pricing(
+        self, user_input: dict[str, Any], kind: ContractKind, errors: dict[str, str]
+    ) -> bool:
+        """Keep the kind, the pricing and the power regulated prices need."""
+        official = user_input[CONF_PRICING] == PRICING_OFFICIAL
+        kva = int(user_input[CONF_KVA])
+        if official and kva not in OFFERED_KVA[kind]:
+            errors[CONF_KVA] = "kva_not_offered"
+            return False
+        self._data[CONF_KIND] = kind.value
+        self._data[CONF_PRICING] = user_input[CONF_PRICING]
+        if official:
+            self._data[CONF_KVA] = kva
+        else:
+            self._data.pop(CONF_KVA, None)
+        return True
 
     async def async_step_details(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Set the power, off-peak hours and when the contract was in force."""
+        """Name the contract; set its off-peak hours and when it was in force."""
         kind = ContractKind(self._data[CONF_KIND])
-        official = self._data[CONF_PRICING] == PRICING_OFFICIAL
         errors: dict[str, str] = {}
         if user_input is not None:
-            data = self._details_data(
-                user_input, kind=kind, official=official, errors=errors
-            )
+            self._title = user_input[CONF_NAME].strip()
+            if error := self._name_error():
+                errors[CONF_NAME] = error
+            period = self._active_period(user_input[SECTION_ACTIVE], errors)
             if not errors:
-                if self.source == SOURCE_USER:
-                    return self.async_create_entry(
-                        title=self._title, data=data, unique_id=data[CONF_UID]
-                    )
-                return self.async_update_and_abort(
-                    self._get_entry(),
-                    self._get_reconfigure_subentry(),
-                    title=self._title,
-                    data=data,
-                )
-        suggested = user_input
-        if suggested is None:
-            suggested = {CONF_OFF_PEAK: DEFAULT_OFF_PEAK, **self._data}
-            if CONF_KVA in suggested:
-                suggested[CONF_KVA] = str(suggested[CONF_KVA])
+                self._data.update(period)
+                if kind is ContractKind.HPHC:
+                    self._data[CONF_WEEKEND_OFF_PEAK] = user_input[
+                        CONF_WEEKEND_OFF_PEAK
+                    ]
+                    if user_input[CONF_OFF_PEAK] == OFF_PEAK_OTHER:
+                        return await self.async_step_off_peak()
+                    self._data[CONF_OFF_PEAK] = OFF_PEAK_PRESETS[
+                        user_input[CONF_OFF_PEAK]
+                    ]
+                return self._async_save()
         return self.async_show_form(
             step_id="details",
             data_schema=self.add_suggested_values_to_schema(
-                self._details_schema(kind, official=official), suggested
+                self._details_schema(kind), user_input or self._suggested_details(kind)
             ),
             errors=errors,
         )
 
-    @staticmethod
-    def _details_schema(kind: ContractKind, *, official: bool) -> vol.Schema:
-        fields: dict[vol.Marker, Any] = {}
-        if official:
-            fields[vol.Required(CONF_KVA)] = SelectSelector(
-                SelectSelectorConfig(
-                    options=[str(kva) for kva in OFFERED_KVA[kind]],
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            )
-        if kind is ContractKind.HPHC:
-            fields[vol.Required(CONF_OFF_PEAK)] = TextSelector(
-                TextSelectorConfig(multiple=True)
-            )
-            fields[vol.Required(CONF_WEEKEND_OFF_PEAK, default=False)] = (
-                BooleanSelector()
-            )
-        fields[vol.Optional(CONF_ACTIVE_FROM)] = DateSelector()
-        fields[vol.Optional(CONF_ACTIVE_TO)] = DateSelector()
-        return vol.Schema(fields)
-
-    def _details_data(
-        self,
-        user_input: dict[str, Any],
-        *,
-        kind: ContractKind,
-        official: bool,
-        errors: dict[str, str],
-    ) -> dict[str, Any]:
-        data: dict[str, Any] = {
-            CONF_UID: self._data[CONF_UID],
-            CONF_KIND: kind.value,
-            CONF_PRICING: self._data[CONF_PRICING],
-        }
-        if official:
-            data[CONF_KVA] = int(user_input[CONF_KVA])
-        if kind is ContractKind.HPHC:
+    async def async_step_off_peak(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Type in off-peak hours the list doesn't have."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
             try:
                 ranges = [
                     parse_time_range(text)
@@ -497,21 +541,116 @@ class ContractSubentryFlow(ConfigSubentryFlow):
                 ]
             except ValueError:
                 ranges = []
-            if not ranges:
-                errors[CONF_OFF_PEAK] = "invalid_off_peak"
-            data[CONF_OFF_PEAK] = [format_time_range(item) for item in ranges]
-            data[CONF_WEEKEND_OFF_PEAK] = user_input[CONF_WEEKEND_OFF_PEAK]
-        active_from = _date(user_input.get(CONF_ACTIVE_FROM))
-        active_to = _date(user_input.get(CONF_ACTIVE_TO))
-        data[CONF_ACTIVE_FROM] = active_from.isoformat() if active_from else None
-        data[CONF_ACTIVE_TO] = active_to.isoformat() if active_to else None
+            if ranges:
+                self._data[CONF_OFF_PEAK] = [format_time_range(item) for item in ranges]
+                return self._async_save()
+            errors[CONF_OFF_PEAK] = "invalid_off_peak"
+        current = self._data.get(CONF_OFF_PEAK)
+        typed = (
+            current if current and current not in OFF_PEAK_PRESETS.values() else [""]
+        )
+        return self.async_show_form(
+            step_id="off_peak",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Required(CONF_OFF_PEAK): TextSelector(
+                            TextSelectorConfig(multiple=True)
+                        )
+                    }
+                ),
+                user_input or {CONF_OFF_PEAK: typed},
+            ),
+            errors=errors,
+        )
+
+    @staticmethod
+    def _details_schema(kind: ContractKind) -> vol.Schema:
+        fields: dict[vol.Marker, Any] = {
+            # pylint: disable-next=home-assistant-config-flow-name-field
+            vol.Required(CONF_NAME): str,
+        }
+        if kind is ContractKind.HPHC:
+            fields[vol.Required(CONF_OFF_PEAK)] = OFF_PEAK_SELECTOR
+            fields[vol.Required(CONF_WEEKEND_OFF_PEAK, default=False)] = (
+                BooleanSelector()
+            )
+        fields[vol.Required(SECTION_ACTIVE)] = section(
+            vol.Schema(
+                {
+                    vol.Optional(CONF_ACTIVE_FROM): DateSelector(),
+                    vol.Optional(CONF_ACTIVE_TO): DateSelector(),
+                }
+            ),
+            {"collapsed": False},
+        )
+        return vol.Schema(fields)
+
+    def _suggested_details(self, kind: ContractKind) -> dict[str, Any]:
+        """Suggest the current values, or a name and the usual off-peak hours."""
+        suggested: dict[str, Any] = {
+            CONF_NAME: self._title or self._default_name(kind),
+            SECTION_ACTIVE: {
+                key: self._data[key]
+                for key in (CONF_ACTIVE_FROM, CONF_ACTIVE_TO)
+                if self._data.get(key)
+            },
+        }
+        if kind is ContractKind.HPHC:
+            ranges = self._data.get(CONF_OFF_PEAK, OFF_PEAK_PRESETS["22_06"])
+            suggested[CONF_OFF_PEAK] = next(
+                (key for key, preset in OFF_PEAK_PRESETS.items() if preset == ranges),
+                OFF_PEAK_OTHER,
+            )
+            suggested[CONF_WEEKEND_OFF_PEAK] = self._data.get(
+                CONF_WEEKEND_OFF_PEAK, False
+            )
+        return suggested
+
+    def _default_name(self, kind: ContractKind) -> str:
+        """Name a new contract after its kind and power, unlike the others."""
+        language = self.hass.config.language.split("-")[0]
+        names = _KIND_NAMES.get(language, _KIND_NAMES["en"])
+        if CONF_KVA in self._data:
+            name = f"{names[kind]} {self._data[CONF_KVA]} kVA"
+        else:
+            name = f"{names[kind]} · {_MY_PRICES.get(language, _MY_PRICES['en'])}"
+        taken = {contract.name.casefold() for contract in contracts(self._get_entry())}
+        candidate = name
+        number = 1
+        while candidate.casefold() in taken:
+            number += 1
+            candidate = f"{name} {number}"
+        return candidate
+
+    def _name_error(self) -> str | None:
+        """Return why the name can't be used: the compare action selects by name."""
+        if not self._title:
+            return "empty_name"
+        name = self._title.casefold()
+        if any(
+            contract.name.casefold() == name and contract.uid != self._data[CONF_UID]
+            for contract in contracts(self._get_entry())
+        ):
+            return "duplicate_name"
+        return None
+
+    def _active_period(
+        self, values: dict[str, Any], errors: dict[str, str]
+    ) -> dict[str, str | None]:
+        """Read and check the days the contract was in force."""
+        active_from = _date(values.get(CONF_ACTIVE_FROM))
+        active_to = _date(values.get(CONF_ACTIVE_TO))
         if active_to and not active_from:
-            errors[CONF_ACTIVE_FROM] = "active_to_without_from"
+            errors[SECTION_ACTIVE] = "active_to_without_from"
         elif active_from and active_to and active_to < active_from:
-            errors[CONF_ACTIVE_TO] = "end_before_start"
+            errors[SECTION_ACTIVE] = "end_before_start"
         elif active_from and self._overlaps_another_contract(active_from, active_to):
-            errors["base"] = "overlapping_active_period"
-        return data
+            errors[SECTION_ACTIVE] = "overlapping_active_period"
+        return {
+            CONF_ACTIVE_FROM: active_from.isoformat() if active_from else None,
+            CONF_ACTIVE_TO: active_to.isoformat() if active_to else None,
+        }
 
     def _overlaps_another_contract(
         self, active_from: date, active_to: date | None
@@ -522,6 +661,25 @@ class ContractSubentryFlow(ConfigSubentryFlow):
             )
             for contract in contracts(self._get_entry())
             if contract.uid != self._data[CONF_UID] and contract.active_from
+        )
+
+    def _async_save(self) -> SubentryFlowResult:
+        data = {key: self._data[key] for key in _CONTRACT_KEYS if key in self._data}
+        if self.source == SOURCE_USER:
+            # A contract priced by hand waits for its prices: say where they go.
+            return self.async_create_entry(
+                title=self._title,
+                data=data,
+                unique_id=data[CONF_UID],
+                description=(
+                    "add_prices" if data[CONF_PRICING] == PRICING_MANUAL else None
+                ),
+            )
+        return self.async_update_and_abort(
+            self._get_entry(),
+            self._get_reconfigure_subentry(),
+            title=self._title,
+            data=data,
         )
 
     def _new_uid(self) -> str:

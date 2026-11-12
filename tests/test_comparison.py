@@ -35,11 +35,14 @@ from .conftest import (
     busy_recorder,
     contract_subentry,
     make_entry,
+    price_period_subentry,
 )
 
 PREFIX = "electricity_contracts:linky_00000000000000"
 FIRST_HOUR = datetime(2026, 3, 1, tzinfo=UTC)
 END = datetime(2026, 3, 3, tzinfo=UTC)  # after the last of the 48 hours
+# Prices of the offer from the second day: the first one has none.
+LATE_PRICES = price_period_subentry("offer001", "2026-03-02")
 
 
 async def setup_entry(hass: HomeAssistant, entry: MockConfigEntry) -> MockConfigEntry:
@@ -168,8 +171,11 @@ async def test_compare_action(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.usefixtures("statistic", "sources")
-async def test_compare_without_costs(hass: HomeAssistant) -> None:
-    # The manual contract has no price, so it was never costed; Base isn't in force.
+async def test_compare_leaves_out_contracts_without_costs(
+    hass: HomeAssistant,
+) -> None:
+    # The manual contract has no price, so it was never costed: Base is compared
+    # alone, over the hours it has, instead of over none. Base isn't in force.
     entry = await setup_entry(hass, make_entry([BASE_CONTRACT, MANUAL_CONTRACT]))
     response: Any = await hass.services.async_call(
         DOMAIN,
@@ -182,9 +188,12 @@ async def test_compare_without_costs(hass: HomeAssistant) -> None:
         blocking=True,
         return_response=True,
     )
-    assert response["start"] == response["end"]
-    assert [item["total_cost"] for item in response["contracts"]] == [0, 0]
-    assert response["best"] is None
+    assert response["start"] == "2026-03-01T01:00:00+01:00"
+    assert response["end"] == "2026-03-03T00:00:00+01:00"
+    (base,) = response["contracts"]
+    assert base["name"] == "Base"
+    assert base["energy"] == 23.5
+    assert response["best"] == "Base"
     assert response["actual"] is None
     assert response["saving"] is None
 
@@ -238,7 +247,7 @@ async def test_compare_action_errors(
 
 @pytest.mark.usefixtures("statistic", "sources")
 async def test_missing_manual_price_repair(hass: HomeAssistant) -> None:
-    entry = await setup_entry(hass, make_entry([MANUAL_CONTRACT]))
+    entry = await setup_entry(hass, make_entry([MANUAL_CONTRACT, LATE_PRICES]))
     issue_id = f"missing_price_{entry.entry_id}_offer001"
     issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
     assert issue is not None
@@ -255,8 +264,18 @@ async def test_missing_manual_price_repair(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.usefixtures("statistic", "sources")
-async def test_ignored_repair_stays_ignored(hass: HomeAssistant) -> None:
+async def test_no_repair_before_the_first_manual_price(hass: HomeAssistant) -> None:
+    # Still being set up: the Contracts page shows it waiting for its prices.
     entry = await setup_entry(hass, make_entry([MANUAL_CONTRACT]))
+    status = entry.runtime_data.data.costing.contracts["offer001"]
+    assert status.waiting is not None
+    assert status.waiting.reason == "price"
+    assert not ir.async_get(hass).issues
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_ignored_repair_stays_ignored(hass: HomeAssistant) -> None:
+    entry = await setup_entry(hass, make_entry([MANUAL_CONTRACT, LATE_PRICES]))
     issue_id = f"missing_price_{entry.entry_id}_offer001"
     ir.async_ignore_issue(hass, DOMAIN, issue_id, ignore=True)
     await entry.runtime_data.async_refresh()

@@ -79,8 +79,16 @@ async def test_migration_removes_comparisons_and_sensors(hass: HomeAssistant) ->
     assert entry.state is ConfigEntryState.LOADED
     assert entry.minor_version == 2
     assert [item.subentry_type for item in entry.subentries.values()] == ["contract"]
-    assert not er.async_entries_for_config_entry(entities, entry.entry_id)
-    assert not dr.async_entries_for_config_entry(devices, entry.entry_id)
+    # Only the sensors of 0.2 are left, on a device of their own.
+    assert {
+        item.unique_id
+        for item in er.async_entries_for_config_entry(entities, entry.entry_id)
+    } == {f"{entry.entry_id}_current_price", f"{entry.entry_id}_current_tranche"}
+    assert devices.async_get(comparison.id) is None
+    assert [
+        device.identifiers
+        for device in dr.async_entries_for_config_entry(devices, entry.entry_id)
+    ] == [{(DOMAIN, entry.entry_id)}]
 
 
 @pytest.mark.usefixtures("statistic")

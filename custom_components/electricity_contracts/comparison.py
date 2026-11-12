@@ -149,11 +149,25 @@ def read_changes(
     return changes
 
 
-def data_end(status: CostingStatus, contracts: Sequence[Contract]) -> datetime | None:
-    """Return the end of the hours every contract (and the actual cost) covers."""
-    lasts = [
-        series.last_hour if (series := status.contracts.get(contract.uid)) else None
+def costed(status: CostingStatus, contracts: Sequence[Contract]) -> list[Contract]:
+    """Return the contracts with hours costed.
+
+    The others, like a contract priced by hand that has no price yet, can't be
+    compared: they are left out rather than emptying every comparison.
+    """
+    return [
+        contract
         for contract in contracts
+        if (series := status.contracts.get(contract.uid)) is not None
+        and series.last_hour is not None
+    ]
+
+
+def data_end(status: CostingStatus, contracts: Sequence[Contract]) -> datetime | None:
+    """Return the end of the hours every costed contract and the actual cost cover."""
+    lasts: list[datetime | None] = [
+        status.contracts[contract.uid].last_hour
+        for contract in costed(status, contracts)
     ]
     if status.actual is not None:
         lasts.append(status.actual.last_hour)
@@ -189,8 +203,10 @@ async def async_compare(  # noqa: PLR0913 - the window, the contracts and where 
     """Read what each contract cost between `start` and `end` (UTC).
 
     The window is narrowed to the hours every contract has been costed for, so
-    the contracts are compared over the same consumption.
+    the contracts are compared over the same consumption. Contracts with no hour
+    costed are left out.
     """
+    contracts = costed(status, contracts)
     start, end = narrow_window(status, contracts, start, end)
     ids: list[str] = []
     contract_ids = {

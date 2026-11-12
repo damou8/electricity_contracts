@@ -1,4 +1,20 @@
 {
+  "entity": {
+    "sensor": {
+      "current_price": {
+        "default": "mdi:currency-eur"
+      },
+      "current_tranche": {
+        "default": "mdi:clock-outline",
+        "state": {
+          "hc": "mdi:weather-night",
+          "blue_hc": "mdi:weather-night",
+          "white_hc": "mdi:weather-night",
+          "red_hc": "mdi:weather-night"
+        }
+      }
+    }
+  },
   "services": {
     "recompute": {
       "service": "mdi:calculator-variant"

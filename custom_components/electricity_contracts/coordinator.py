@@ -47,7 +47,7 @@ from .const import (
     TOMORROW_PUBLISHED,
     TOMORROW_RETRY_MINUTES,
 )
-from .data import Contract, contracts
+from .data import Contract, contracts, manual_prices
 from .statistics import CostingStatus, SeriesStatus, StatisticsWriter
 
 _LOGGER = logging.getLogger(__name__)
@@ -329,12 +329,22 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
     def _update_price_issues(
         self, costing: CostingStatus, entry_contracts: list[Contract]
     ) -> None:
-        """Raise an issue for each contract waiting for a price, clear the others."""
+        """Raise an issue for each contract waiting for a price, clear the others.
+
+        A contract priced by hand that has no price yet is still being set up:
+        the Contracts page shows it waiting, with a link to add them.
+        """
         prefix = f"missing_price_{self.config_entry.entry_id}_"
+        priced = {prices.contract_uid for prices in manual_prices(self.config_entry)}
         wanted: dict[str, tuple[Contract, date]] = {}
         for contract in entry_contracts:
             status = costing.contracts.get(contract.uid)
-            if status and status.waiting and status.waiting.reason == "price":
+            if (
+                status
+                and status.waiting
+                and status.waiting.reason == "price"
+                and (contract.official or contract.uid in priced)
+            ):
                 wanted[f"{prefix}{contract.uid}"] = (contract, status.waiting.day)
         registry = ir.async_get(self.hass)
         for domain, issue_id in list(registry.issues):

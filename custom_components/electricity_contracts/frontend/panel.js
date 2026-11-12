@@ -157,8 +157,8 @@ const STRINGS = {
     window: "{start} to {end}",
     windowDays: "{window} · {count} days of data",
     noData: "No data for this period.",
-    noEntry:
-      "No consumption source is set up yet. Add the Electricity Contracts integration first.",
+    preparing: "Preparing the figures… The page updates by itself.",
+    ifItLasts: "If this lasts, see the state of the integration.",
     noContract: "Add a contract to the integration to compare it here.",
     loadFailed: "Loading failed: {error}",
     liveFailed: "The price now could not be loaded: {error}",
@@ -206,6 +206,11 @@ const STRINGS = {
     ranking: "Ranking",
     rankingHint: "Each contract applied to your actual consumption; choose one to see its bill",
     yourContract: "your contract",
+    notCompared: "Not compared yet",
+    waitingPrices: "Priced by hand, without a price period yet: not compared",
+    waitingPrice: "Not compared yet: its prices for {day} are missing",
+    waitingColor: "Not compared yet: the Tempo color of {day} isn't known",
+    addPrices: "Add its prices",
     allIn: "{price}/kWh all in",
     billHint: "What this contract would have billed, on the same consumption",
     billMore: "{amount} more than what you paid ({actual})",
@@ -364,8 +369,8 @@ const STRINGS = {
     window: "Du {start} au {end}",
     windowDays: "{window} · {count} jours de données",
     noData: "Pas de données sur cette période.",
-    noEntry:
-      "Aucune source de consommation n'est configurée. Ajoutez d'abord l'intégration Electricity Contracts.",
+    preparing: "Préparation des calculs… La page se met à jour toute seule.",
+    ifItLasts: "Si cela dure, voyez l'état de l'intégration.",
     noContract: "Ajoutez un contrat à l'intégration pour le comparer ici.",
     loadFailed: "Le chargement a échoué : {error}",
     liveFailed: "Le prix en direct n'a pas pu être chargé : {error}",
@@ -413,6 +418,11 @@ const STRINGS = {
     ranking: "Classement",
     rankingHint: "Chaque contrat appliqué à votre consommation réelle ; choisissez-en un pour voir sa facture",
     yourContract: "votre contrat",
+    notCompared: "Pas encore comparé",
+    waitingPrices: "Prix saisis à la main, sans période de prix pour l'instant : pas encore comparé",
+    waitingPrice: "Pas encore comparé : il manque ses prix du {day}",
+    waitingColor: "Pas encore comparé : la couleur Tempo du {day} n'est pas encore connue",
+    addPrices: "Ajouter ses prix",
     allIn: "{price}/kWh tout compris",
     billHint: "Ce que vous auriez payé avec ce contrat, sur la même consommation",
     billMore: "soit {amount} de plus que ce que vous avez payé ({actual})",
@@ -701,6 +711,7 @@ main {
 }
 .toggle:hover { background: var(--ec-wash); }
 .message { color: var(--ec-text-2); }
+.message a { color: var(--primary-color); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .kpi .label { color: var(--ec-text-2); font-size: 14px; }
 .kpi .value { font-size: 28px; font-weight: 600; margin: 4px 0 2px; line-height: 1.2; overflow-wrap: anywhere; }
@@ -875,6 +886,25 @@ tfoot td { font-weight: 600; border-bottom: none; }
 .rank .fixed { background: var(--ec-money-2); border-radius: 0 4px 4px 0; }
 .rank .total { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
 .rank .total strong { font-size: 18px; font-weight: 500; }
+.rank.pending { cursor: default; }
+.rank.pending:hover { background: transparent; }
+.rank.pending .who { grid-column: 2 / 4; }
+.rank .cta {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--primary-color);
+  border-radius: 18px;
+  color: var(--primary-color);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rank .cta svg { width: 16px; height: 16px; fill: currentColor; }
 .bill-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 14px; }
 .bill-head .big { margin: 0; font-size: 28px; font-variant-numeric: tabular-nums; }
 .bill-head span:last-child { font-size: 15px; }
@@ -963,6 +993,8 @@ tfoot td { font-weight: 600; border-bottom: none; }
   .meters.compact { gap: 12px; }
   .rank { grid-template-columns: 20px minmax(0, 1fr) auto; gap: 4px 10px; }
   .rank .bars { grid-column: 2 / -1; grid-row: 2; }
+  .rank.pending .who, .rank.pending .cta { grid-column: 2 / -1; }
+  .rank.pending .cta { justify-self: start; }
   th, td { padding: 6px 4px; }
 }
 `;
@@ -973,6 +1005,7 @@ const ICONS = {
   check: "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z",
   info: "M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z",
   alert: "M12,2L1,21H23M12,6L19.53,19H4.47M11,10V14H13V10M11,16V18H13V16",
+  plus: "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",
 };
 
 const MEASURES = { cost: "€", energy: "kWh", price: "€/kWh" };
@@ -983,7 +1016,9 @@ const TAB_KEYS = { follow: "tabFollow", understand: "tabUnderstand", compare: "t
 const RED_PEAK_GOAL = 0.03;
 // Past this many nights, the baseload chart shows the lowest of each week.
 const WEEKLY_NIGHTS = 62;
-const PEAK_ON = { blue: "peakOnBlue", white: "peakOnWhite", red: "peakOnRed" };
+// While its source is set up, the page asks again this often.
+const PREPARING_RETRY_MS = 5000;
+const PEAK_ON ={ blue: "peakOnBlue", white: "peakOnWhite", red: "peakOnRed" };
 
 // DOM helpers. Strings become text nodes, so names from the configuration are
 // never parsed as markup.
@@ -1195,6 +1230,7 @@ class ElectricityContractsPanel extends HTMLElement {
 
   disconnectedCallback() {
     clearTimeout(this._outlookTimer);
+    clearTimeout(this._entriesTimer);
     if (this._observer) {
       this._observer.disconnect();
     }
@@ -1276,8 +1312,10 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   async _loadEntries() {
+    clearTimeout(this._entriesTimer);
     try {
       this._entries = await this._hass.callWS({ type: `${DOMAIN}/entries` });
+      this._error = null;
     } catch (error) {
       this._entries = [];
       this._error = error.message || String(error);
@@ -1285,6 +1323,11 @@ class ElectricityContractsPanel extends HTMLElement {
     if (!this._entries.some((entry) => entry.entry_id === this._entryId)) {
       this._entryId = this._entries.length ? this._entries[0].entry_id : null;
       this._resetPeriod();
+    }
+    if (!this._entries.length && !this._error) {
+      // The page stays while its source is set up again, after a restart or a
+      // change of contract: it shows up once ready. Back on the page asks too.
+      this._entriesTimer = setTimeout(() => this.isConnected && this._loadEntries(), PREPARING_RETRY_MS);
     }
     this._renderSources();
     this._refreshOutlook();
@@ -1656,12 +1699,15 @@ class ElectricityContractsPanel extends HTMLElement {
     this._renderHead();
     const entry = this._entry;
     if (this._error) {
-      this._content.replaceChildren(this._errorCard(this._t("title"), this._t("loadFailed", { error: this._error }), () => this._load()));
+      // Listing the sources again finds one that was reloaded meanwhile.
+      this._content.replaceChildren(this._errorCard(this._t("title"), this._t("loadFailed", { error: this._error }), () => this._loadEntries()));
       return;
     }
     let message = null;
     if (!entry) {
-      message = this._entries ? this._t("noEntry") : null;
+      message = this._entries
+        ? [this._t("preparing"), " ", h("a", { href: `/config/integrations/integration/${DOMAIN}` }, this._t("ifItLasts"))]
+        : null;
     } else if (!entry.contracts.length) {
       message = this._t("noContract");
     } else if (!entry.last_day || !this._data || this._data.start === this._data.end) {
@@ -3557,6 +3603,8 @@ class ElectricityContractsPanel extends HTMLElement {
     const actual = this._data.actual;
     const inForce = this._contractsInForce();
     const mine = inForce.length === 1 ? inForce[0].id : null;
+    // Only contracts waiting for their prices: nothing to compare yet.
+    if (!contracts.length) return [this._renderRanking(contracts, actual, mine)];
     if (!contracts.some((contract) => contract.id === this._billContract)) {
       // The cheapest other contract is the first one worth a look.
       this._billContract = (contracts.find((contract) => contract.id !== mine) || contracts[0]).id;
@@ -3658,7 +3706,33 @@ class ElectricityContractsPanel extends HTMLElement {
       h("li", {}, h("span", { class: "swatch", style: { background: "var(--ec-money)" } }), this._t("consumption")),
       h("li", {}, h("span", { class: "swatch", style: { background: "var(--ec-money-2)" } }), this._t("subscription")),
     );
-    return this._card(this._t("ranking"), this._t("rankingHint"), h("div", {}, legend, h("div", { class: "ranking" }, rows)));
+    return this._card(this._t("ranking"), this._t("rankingHint"), h("div", {}, legend, h("div", { class: "ranking" }, rows, this._pendingRanks())));
+  }
+
+  // The contracts not compared yet, and why: one priced by hand waits for its
+  // prices, which the integration's page adds.
+  _pendingRanks() {
+    return this._entry.contracts
+      .filter((contract) => contract.costed === false)
+      .map((contract) => {
+        const waiting = contract.waiting;
+        const day = waiting ? this._dayLabel(waiting.day, { day: "numeric", month: "long", year: "numeric" }) : null;
+        let why = this._t("notCompared");
+        if (!contract.official && !contract.prices.length) {
+          why = this._t("waitingPrices");
+        } else if (waiting) {
+          why = this._t(waiting.reason === "color" ? "waitingColor" : "waitingPrice", { day });
+        }
+        return h(
+          "div",
+          { class: "rank pending" },
+          h("span", { class: "position" }, "–"),
+          h("span", { class: "who" }, h("span", { class: "name" }, contract.name), h("span", { class: "sub" }, why)),
+          contract.official
+            ? null
+            : h("a", { class: "cta", href: `/config/integrations/integration/${DOMAIN}` }, icon(ICONS.plus), this._t("addPrices")),
+        );
+      });
   }
 
   // The chosen contract's bill is asked for as soon as it is shown.

@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import probatio as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import ATTR_CONFIG_ENTRY_ID
+from homeassistant.const import ATTR_CONFIG_ENTRY_ID, Platform
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -35,6 +35,7 @@ from .websocket import async_register_commands
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+PLATFORMS = [Platform.SENSOR]
 
 ATTR_START = "start"
 ATTR_END = "end"
@@ -126,6 +127,9 @@ async def async_setup_entry(
 ) -> bool:
     """Set up a consumption source from a config entry."""
     _async_remove_orphan_price_periods(hass, entry)
+    # Before the first refresh, which takes minutes when a contract was added:
+    # the page tells it is preparing the figures meanwhile.
+    await async_register_panel(hass)
     coordinator = ElectricityContractsCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
@@ -134,20 +138,21 @@ async def async_setup_entry(
     # Contracts, price periods and options change through subentry and options
     # flows; reloading applies them.
     entry.async_on_unload(entry.add_update_listener(_async_reload))
-    await async_register_panel(hass)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> bool:
-    """Unload a config entry, and the Contracts page with the last one."""
-    if not [
-        other
-        for other in hass.config_entries.async_loaded_entries(DOMAIN)
-        if other.entry_id != entry.entry_id
-    ]:
-        async_remove_panel(hass)
+    """Unload a config entry, and the Contracts page with the last enabled one.
+
+    A reload keeps the page: every change of contract reloads the entry.
+    """
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
+    if entry.disabled_by:
+        _async_remove_panel_if_unused(hass, entry)
     return True
 
 
@@ -168,9 +173,25 @@ async def async_remove_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> None:
     """Delete the statistics, the cache and the repair issues of a removed entry."""
+    _async_remove_panel_if_unused(hass, entry)
     await async_remove_statistics(hass, entry.entry_id)
     await cache_store(hass, entry.entry_id).async_remove()
     async_delete_issues(hass, entry.entry_id)
+
+
+@callback
+def _async_remove_panel_if_unused(
+    hass: HomeAssistant, leaving: ElectricityContractsConfigEntry
+) -> None:
+    """Remove the Contracts page when no other enabled entry is left."""
+    if not [
+        other
+        for other in hass.config_entries.async_entries(
+            DOMAIN, include_ignore=False, include_disabled=False
+        )
+        if other.entry_id != leaving.entry_id
+    ]:
+        async_remove_panel(hass)
 
 
 @callback

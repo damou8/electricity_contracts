@@ -11,7 +11,9 @@ DOMAIN: Final = "electricity_contracts"
 CONF_STATISTIC_ID: Final = "statistic_id"
 CONF_RTE_CLIENT_ID: Final = "rte_client_id"
 CONF_RTE_CLIENT_SECRET: Final = "rte_client_secret"  # noqa: S105 - a key
-CONF_TEMPERATURE: Final = "temperature_statistic_id"
+CONF_TEMPERATURE: Final = "temperature"
+# The options' collapsed section of the RTE credentials.
+SECTION_RTE: Final = "rte"
 
 SERVICE_RECOMPUTE: Final = "recompute"
 SERVICE_COMPARE: Final = "compare"
@@ -29,6 +31,8 @@ CONF_OFF_PEAK: Final = "off_peak"
 CONF_WEEKEND_OFF_PEAK: Final = "weekend_off_peak"
 CONF_ACTIVE_FROM: Final = "active_from"
 CONF_ACTIVE_TO: Final = "active_to"
+# The contract form's section of the days it was in force.
+SECTION_ACTIVE: Final = "active_period"
 
 CONF_CONTRACT: Final = "contract"
 CONF_START: Final = "start"
@@ -40,7 +44,15 @@ CONF_PRICES: Final = "prices"
 PRICING_OFFICIAL: Final = "official"
 PRICING_MANUAL: Final = "manual"
 
-DEFAULT_OFF_PEAK: Final = ["22:00-06:00"]
+DEFAULT_KVA: Final = 6
+# The off-peak hours meters most often have, offered in a list; the others are
+# typed in.
+OFF_PEAK_PRESETS: Final = {
+    "22_06": ["22:00-06:00"],
+    "23_07": ["23:00-07:00"],
+    "2230_0630": ["22:30-06:30"],
+}
+OFF_PEAK_OTHER: Final = "other"
 
 # Subscribed powers each regulated offer has had (data.gouv.fr, November 2026).
 OFFERED_KVA: Final[dict[ContractKind, tuple[int, ...]]] = {

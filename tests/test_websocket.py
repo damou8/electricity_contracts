@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from elec_tariffs import ContractKind, PricePeriod, TempoColor, Tranche
 from homeassistant.components import frontend
+from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
@@ -21,6 +22,7 @@ from custom_components.electricity_contracts.panel import PANEL_URL_PATH
 from .conftest import (
     BASE_CONTRACT,
     BASE_PERIODS,
+    MANUAL_CONTRACT,
     OTHER_STATISTIC_ID,
     TEMPERATURE_ID,
     TEMPO_CONTRACT,
@@ -86,6 +88,8 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
                     "active_from": "2024-01-01",
                     "active_to": None,
                     "prices": [prices(period) for period in TEMPO_PERIODS],
+                    "costed": True,
+                    "waiting": None,
                 },
                 {
                     "id": "base0001",
@@ -98,11 +102,27 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
                     "active_from": None,
                     "active_to": None,
                     "prices": [prices(period) for period in BASE_PERIODS],
+                    "costed": True,
+                    "waiting": None,
                 },
             ],
             "actual": True,
         }
     ]
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_entries_with_a_contract_without_prices(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    await setup_entry(hass, make_entry([TEMPO_CONTRACT, MANUAL_CONTRACT]))
+    [entry] = await result(hass_ws_client, hass, type=f"{DOMAIN}/entries")
+    tempo, offer = entry["contracts"]
+    assert tempo["costed"] is True
+    # The offer waits for its prices; the others are still shown.
+    assert offer["costed"] is False
+    assert offer["waiting"] == {"reason": "price", "day": "2026-03-01"}
+    assert entry["last_day"] == "2026-03-03"
 
 
 @pytest.mark.usefixtures("sources")
@@ -361,15 +381,31 @@ async def test_panel_follows_the_entries(hass: HomeAssistant) -> None:
     )
     assert frontend.async_panel_exists(hass, PANEL_URL_PATH)
 
-    await hass.config_entries.async_unload(first.entry_id)
+    # Every change of contract reloads the entry: the page stays meanwhile.
+    for entry in (first, second):
+        await hass.config_entries.async_unload(entry.entry_id)
     assert frontend.async_panel_exists(hass, PANEL_URL_PATH)
-    await hass.config_entries.async_unload(second.entry_id)
+    for entry in (first, second):
+        await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await async_wait_recording_done(hass)
+
+    await hass.config_entries.async_set_disabled_by(
+        first.entry_id, ConfigEntryDisabler.USER
+    )
+    assert frontend.async_panel_exists(hass, PANEL_URL_PATH)
+    await hass.config_entries.async_remove(second.entry_id)
+    await async_wait_recording_done(hass)
     assert not frontend.async_panel_exists(hass, PANEL_URL_PATH)
 
-    await hass.config_entries.async_setup(first.entry_id)
+    await hass.config_entries.async_set_disabled_by(first.entry_id, None)
     await hass.async_block_till_done()
     await async_wait_recording_done(hass)
     assert frontend.async_panel_exists(hass, PANEL_URL_PATH)
+    await hass.config_entries.async_set_disabled_by(
+        first.entry_id, ConfigEntryDisabler.USER
+    )
+    assert not frontend.async_panel_exists(hass, PANEL_URL_PATH)
 
 
 @pytest.mark.usefixtures("statistic", "sources")

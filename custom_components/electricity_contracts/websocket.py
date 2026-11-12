@@ -43,6 +43,7 @@ from .data import (
 )
 from .insights import async_insights
 from .outlook import async_outlook
+from .statistics import SeriesStatus
 
 _HOUR = timedelta(hours=1)
 # Longer windows are split into months.
@@ -98,13 +99,26 @@ def _window(
     return start, end
 
 
-def _contract(contract: Contract, periods: list[PricePeriod]) -> dict[str, Any]:
-    """Describe a contract and the prices it has had, oldest first."""
+def _contract(
+    contract: Contract, periods: list[PricePeriod], series: SeriesStatus | None
+) -> dict[str, Any]:
+    """Describe a contract, the prices it has had, oldest first, and its costing.
+
+    `costed` is false while no hour could be costed: the contract isn't compared,
+    and `waiting` says for what, from which day.
+    """
+    waiting = series.waiting if series else None
     return {
         "id": contract.uid,
         "name": contract.name,
         "kind": contract.kind.value,
         "official": contract.official,
+        "costed": series is not None and series.last_hour is not None,
+        "waiting": (
+            {"reason": waiting.reason, "day": waiting.day.isoformat()}
+            if waiting
+            else None
+        ),
         "kva": contract.kva,
         "off_peak": [format_time_range(item) for item in contract.rules.off_peak],
         "weekend_off_peak": contract.rules.weekend_off_peak,
@@ -153,6 +167,7 @@ def ws_entries(
                         price_periods(
                             contract, manual, coordinator.data.sources.official_prices
                         ),
+                        status.contracts.get(contract.uid),
                     )
                     for contract in entry_contracts
                 ],
