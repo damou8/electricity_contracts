@@ -144,8 +144,6 @@ const STRINGS = {
     pricePerDay: "The average price of a kWh each day, subscription included",
     measure: "Measure",
     partialMonths: "Incomplete months: the data runs from {start} to {end}.",
-    cumulativeHint:
-      "Compared with the actual cost: above zero, the contract would have cost less.",
     partialActual:
       "No contract was in force on part of the period: those days are left out.",
     tranches: "Split by tranche",
@@ -158,12 +156,8 @@ const STRINGS = {
     energy: "Energy",
     cost: "Cost",
     average: "Average price",
-    billIntro: "What a contract would have billed over the period, against what you actually paid.",
-    contract: "Contract",
-    compute: "Compute",
-    computing: "Computing…",
-    cumulativeOf: "Cumulative saving with {name}",
     pricesFrom: "Prices from {start} to {end}",
+    pricesOf: "prices of {date}",
     item: "Item",
     quantity: "Quantity",
     unitPrice: "Unit price",
@@ -173,11 +167,27 @@ const STRINGS = {
     days: "{count} days",
     consumption: "Consumption",
     total: "Total incl. taxes",
-    actualPaid: "Actual cost over the period",
-    difference: "Difference",
-    moreExpensive: "{amount} more than the actual cost",
-    cheaper: "{amount} less than the actual cost",
-    same: "Same as the actual cost",
+    same: "Same as what you paid",
+    verdictMine: "{name} is still the cheapest",
+    verdictActual: "What you paid is still the lowest",
+    verdictBetter: "{name} would have cost {amount} less",
+    verdictCheapest: "The cheapest: {name}",
+    lessThan: "{amount} less than {name}",
+    verdictLess: "{list}, on your consumption from {start} to {end}.",
+    verdictMore: "Than what you paid ({actual}) from {start} to {end}, that is {change}.",
+    verdictOnly: "On your consumption from {start} to {end}.",
+    ranking: "Ranking",
+    rankingHint: "Each contract applied to your actual consumption; choose one to see its bill",
+    yourContract: "your contract",
+    allIn: "{price}/kWh all in",
+    billHint: "What this contract would have billed, on the same consumption",
+    billMore: "{amount} more than what you paid ({actual})",
+    billLess: "{amount} less than what you paid ({actual})",
+    gap: "Gap over time",
+    gapHint: "What your contract saved against {name}, over the period",
+    gapSaved: "{amount} saved since {day}",
+    gapLost: "{amount} more than with {name} since {day}",
+    gapNote: "Above zero, your contract is the cheaper one.",
   },
   fr: {
     title: "Contrats",
@@ -314,8 +324,6 @@ const STRINGS = {
     pricePerDay: "Le prix moyen du kWh de chaque jour, abonnement compris",
     measure: "Mesure",
     partialMonths: "Mois incomplets : les données vont du {start} au {end}.",
-    cumulativeHint:
-      "Par rapport au coût réel : au-dessus de zéro, le contrat aurait coûté moins cher.",
     partialActual:
       "Aucun contrat n'était en vigueur sur une partie de la période : ces jours sont laissés de côté.",
     tranches: "Répartition par tranche",
@@ -328,12 +336,8 @@ const STRINGS = {
     energy: "Énergie",
     cost: "Coût",
     average: "Prix moyen",
-    billIntro: "Ce qu'un contrat vous aurait facturé sur la période, comparé à ce que vous avez payé.",
-    contract: "Contrat",
-    compute: "Calculer",
-    computing: "Calcul…",
-    cumulativeOf: "Économie cumulée avec {name}",
     pricesFrom: "Prix du {start} au {end}",
+    pricesOf: "prix du {date}",
     item: "Libellé",
     quantity: "Quantité",
     unitPrice: "Prix unitaire",
@@ -343,11 +347,27 @@ const STRINGS = {
     days: "{count} jours",
     consumption: "Consommation",
     total: "Total TTC",
-    actualPaid: "Coût réel sur la période",
-    difference: "Différence",
-    moreExpensive: "{amount} de plus que le coût réel",
-    cheaper: "{amount} de moins que le coût réel",
-    same: "Identique au coût réel",
+    same: "Identique à ce que vous avez payé",
+    verdictMine: "{name} reste le moins cher",
+    verdictActual: "Ce que vous avez payé reste le plus bas",
+    verdictBetter: "{name} aurait coûté {amount} de moins",
+    verdictCheapest: "Le moins cher : {name}",
+    lessThan: "{amount} de moins que {name}",
+    verdictLess: "{list}, sur votre consommation du {start} au {end}.",
+    verdictMore: "Que ce que vous avez payé ({actual}) du {start} au {end}, soit {change}.",
+    verdictOnly: "Sur votre consommation du {start} au {end}.",
+    ranking: "Classement",
+    rankingHint: "Chaque contrat appliqué à votre consommation réelle ; choisissez-en un pour voir sa facture",
+    yourContract: "votre contrat",
+    allIn: "{price}/kWh tout compris",
+    billHint: "Ce que vous auriez payé avec ce contrat, sur la même consommation",
+    billMore: "soit {amount} de plus que ce que vous avez payé ({actual})",
+    billLess: "soit {amount} de moins que ce que vous avez payé ({actual})",
+    gap: "Écart cumulé",
+    gapHint: "Ce que votre contrat vous a fait gagner face à {name}, au fil de la période",
+    gapSaved: "{amount} gagnés depuis le {day}",
+    gapLost: "{amount} de plus qu'avec {name} depuis le {day}",
+    gapNote: "Au-dessus de zéro, votre contrat est le moins cher.",
   },
 };
 
@@ -432,6 +452,7 @@ const STYLE = `
   --ec-warn: #a35f00;
   --ec-money: var(--ec-s7);
   --ec-money-soft: rgba(98, 80, 214, 0.35);
+  --ec-money-2: #b9b1f0;
 }
 :host([dark]) {
   --ec-muted: #898781;
@@ -450,6 +471,7 @@ const STYLE = `
   --ec-good: #0ca30c;
   --ec-warn: #e0a030;
   --ec-money-soft: rgba(144, 133, 233, 0.4);
+  --ec-money-2: #4b4578;
 }
 * { box-sizing: border-box; }
 .toolbar {
@@ -752,7 +774,68 @@ tfoot td { font-weight: 600; border-bottom: none; }
   white-space: nowrap;
   overflow: hidden;
 }
-.bill h3 { font-size: 14px; font-weight: 500; margin: 16px 0 4px; color: var(--ec-text-2); }
+.verdict-card { display: flex; gap: 16px; align-items: flex-start; }
+.verdict-card > svg { width: 32px; height: 32px; flex: none; }
+.verdict-card > svg.good { fill: var(--ec-good); }
+.verdict-card > svg.warn { fill: var(--ec-warn); }
+.verdict-card h2 { margin: 0 0 4px; font-size: 20px; font-weight: 500; }
+.verdict-card p { margin: 0; color: var(--ec-text-2); font-size: 15px; line-height: 1.5; }
+.ranking { display: flex; flex-direction: column; gap: 4px; }
+.rank {
+  font: inherit;
+  display: grid;
+  grid-template-columns: 24px minmax(120px, 220px) minmax(0, 1fr) minmax(110px, auto);
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ec-text);
+  text-align: left;
+  cursor: pointer;
+}
+.rank:hover { background: var(--ec-wash); }
+.rank[aria-pressed="true"] { border-color: var(--ec-money); background: color-mix(in srgb, var(--ec-money) 12%, transparent); }
+.rank .position { color: var(--ec-text-2); font-size: 14px; }
+.rank .who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rank .name { font-size: 15px; font-weight: 500; }
+.rank .fact { white-space: nowrap; }
+.rank .bars { display: flex; gap: 2px; height: 18px; }
+.rank .variable { background: var(--ec-money); border-radius: 4px 0 0 4px; }
+.rank .fixed { background: var(--ec-money-2); border-radius: 0 4px 4px 0; }
+.rank .total { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.rank .total strong { font-size: 18px; font-weight: 500; }
+.bill-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 14px; }
+.bill-head .big { margin: 0; font-size: 28px; font-variant-numeric: tabular-nums; }
+.bill-head span:last-child { font-size: 15px; }
+.bill-periods { border: 1px solid var(--divider-color, var(--ec-grid)); border-radius: 10px; overflow: hidden; }
+.bill-period {
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: none;
+  background: var(--ec-wash);
+  color: var(--ec-text);
+  text-align: left;
+  cursor: pointer;
+}
+.bill-period + .table-wrap, .table-wrap + .bill-period, .bill-period + .bill-period { border-top: 1px solid var(--divider-color, var(--ec-grid)); }
+.bill-period svg { width: 20px; height: 20px; fill: currentColor; flex: none; transition: transform 0.15s; }
+.bill-period[aria-expanded="true"] svg { transform: rotate(90deg); }
+.bill-period .what { flex: 1; display: flex; flex-direction: column; gap: 2px; font-weight: 500; }
+.bill-period .what .sub { font-weight: 400; }
+.bill-period .num { font-weight: 500; font-variant-numeric: tabular-nums; }
+.bill-periods .table-wrap td:first-child, .bill-periods .table-wrap th:first-child { padding-left: 14px; white-space: normal; }
+.bill-periods .table-wrap td:last-child, .bill-periods .table-wrap th:last-child { padding-right: 14px; }
+.bill-sum { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 24px; margin-top: 12px; color: var(--ec-text-2); font-size: 14px; font-variant-numeric: tabular-nums; }
+.bill-sum strong { color: var(--ec-text); font-weight: 500; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--divider-color, var(--ec-grid)); }
 .tabs button {
   font: inherit;
@@ -810,6 +893,8 @@ tfoot td { font-weight: 600; border-bottom: none; }
   .filters > .segmented button { flex: none; }
   .filters { gap: 4px 12px; }
   .meters.compact { gap: 12px; }
+  .rank { grid-template-columns: 20px minmax(0, 1fr) auto; gap: 4px 10px; }
+  .rank .bars { grid-column: 2 / -1; grid-row: 2; }
   th, td { padding: 6px 4px; }
 }
 `;
@@ -956,6 +1041,9 @@ class ElectricityContractsPanel extends HTMLElement {
     this._billError = null;
     this._billBusy = false;
     this._billCount = 0;
+    this._billKey = null;
+    // The bill's price periods opened or closed by hand, by position.
+    this._billOpen = {};
     // Which price period each contract card shows, by contract id.
     this._pricePeriods = {};
     this._contractOpen = {};
@@ -1164,10 +1252,11 @@ class ElectricityContractsPanel extends HTMLElement {
 
   async _load() {
     const entry = this._entry;
-    // A bill is only computed when asked for: another period starts afresh.
+    // Another period asks for the bill again.
     this._bill = null;
     this._billError = null;
     this._billBusy = false;
+    this._billKey = null;
     this._billCount++;
     this._renderFilters();
     if (!entry || !entry.last_day || !entry.contracts.length) {
@@ -1503,7 +1592,7 @@ class ElectricityContractsPanel extends HTMLElement {
     this._baseloadChart = null;
     let cards;
     if (this._tab === "compare") {
-      cards = this._renderBillTab();
+      cards = this._renderCompare();
     } else if (this._tab === "understand") {
       cards = this._renderUnderstand();
     } else {
@@ -1890,8 +1979,8 @@ class ElectricityContractsPanel extends HTMLElement {
     if (this._timeChart) {
       this._renderTimeChart();
     }
-    if (this._cumulativeChart && this._bill) {
-      this._renderCumulativeChart(this._bill.contract);
+    if (this._cumulativeChart) {
+      this._renderCumulativeChart(this._data.contracts.find((contract) => contract.id === this._billContract));
     }
     if (this._calendarChart) {
       this._drawCalendar(this._calendarChart, this._insights.days);
@@ -1947,27 +2036,28 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   _renderCumulativeChart(contract) {
-    const cumulative = this._cumulative(contract.id);
+    const gap = this._gap(contract.id);
+    const series = [{ id: ACTUAL, name: contract.name, values: gap.values }];
     if (this._views.cumulative === "chart") {
-      const series = [{ id: contract.id, name: contract.name, values: cumulative.values }];
       this._drawLines(this._cumulativeChart, series, { zero: true });
     } else {
-      this._cumulativeChart.replaceChildren(this._seriesTable((bucket, item, index) => cumulative.values[index], false, [contract]));
+      this._cumulativeChart.replaceChildren(this._seriesTable((bucket, item, index) => gap.values[index], false, series));
     }
-    if (cumulative.partial) {
+    if (gap.partial) {
       this._cumulativeChart.append(h("p", { class: "note" }, this._t("partialActual")));
     }
   }
 
-  // What the contract would have saved on the actual cost, day after day.
-  _cumulative(contractId) {
+  // What the contract would have cost more than what was paid, summed bucket
+  // after bucket: above zero, the contract in force was the cheaper.
+  _gap(contractId) {
     let total = 0;
     let partial = false;
     const values = this._data.series.map((bucket) => {
       if (bucket.actual === null) {
         partial = true;
       } else {
-        total += bucket.actual - (bucket.contracts[contractId] ?? 0);
+        total += (bucket.contracts[contractId] ?? 0) - bucket.actual;
       }
       return Math.round(total * 100) / 100;
     });
@@ -3057,62 +3147,133 @@ class ElectricityContractsPanel extends HTMLElement {
     );
   }
 
-  // Phantom bill ---------------------------------------------------------------
+  // Comparison ----------------------------------------------------------------
 
-  _renderBillTab() {
-    const contracts = this._entry.contracts;
-    const selected = contracts.find((contract) => contract.id === this._billContract) || contracts[0];
-    this._billContract = selected.id;
-    const select = h(
-      "select",
-      {
-        onchange: (event) => {
-          this._billContract = event.target.value;
-          this._bill = null;
-          this._billError = null;
-          this._billBusy = false;
-          this._billCount++;
-          this._renderContent();
-        },
-      },
-      contracts.map((contract) => {
-        const option = h("option", { value: contract.id }, contract.name);
-        option.selected = contract.id === selected.id;
-        return option;
-      }),
-    );
-    const cards = [
-      this._card(
-        this._t("tabBill"),
-        this._t("billIntro"),
-        h(
-          "div",
-          { class: "picker" },
-          h("label", {}, this._t("contract"), select),
-          h("button", { class: "primary", disabled: this._billBusy, onclick: () => this._computeBill() }, this._t(this._billBusy ? "computing" : "compute")),
-        ),
-      ),
+  // Every contract on the period's consumption: a verdict, a ranking, the bill
+  // of the one chosen, and how the gap with it built up.
+  _renderCompare() {
+    const contracts = [...this._data.contracts].sort((first, second) => first.total_cost - second.total_cost);
+    const actual = this._data.actual;
+    const inForce = this._contractsInForce();
+    const mine = inForce.length === 1 ? inForce[0].id : null;
+    if (!contracts.some((contract) => contract.id === this._billContract)) {
+      // The cheapest other contract is the first one worth a look.
+      this._billContract = (contracts.find((contract) => contract.id !== mine) || contracts[0]).id;
+    }
+    this._ensureBill();
+    return [
+      this._renderVerdict(contracts, actual, mine),
+      this._renderRanking(contracts, actual, mine),
+      this._renderBill(),
+      actual && this._billContract !== mine ? this._renderGap() : null,
     ];
-    if (this._billError) {
-      cards.push(h("section", { class: "card message" }, this._t("loadFailed", { error: this._billError })));
+  }
+
+  _renderVerdict(contracts, actual, mine) {
+    const best = contracts[0];
+    const start = this._dayLabel(this._data.start.slice(0, 10), { day: "numeric", month: "long" });
+    const end = this._dayLabel(lastDayOf(this._data.end), { day: "numeric", month: "long" });
+    const list = new Intl.ListFormat(this._locale, { style: "long", type: "conjunction" });
+    let good = true;
+    let title;
+    let text;
+    if (!actual) {
+      title = this._t("verdictCheapest", { name: best.name });
+      text = this._t("verdictOnly", { start, end });
+    } else if (actual.total_cost - best.total_cost < 0.5) {
+      const name = mine && this._data.contracts.find((contract) => contract.id === mine).name;
+      title = name ? this._t("verdictMine", { name }) : this._t("verdictActual");
+      const dearer = contracts.filter((contract) => contract.id !== mine && contract.total_cost - actual.total_cost >= 0.5);
+      text = dearer.length
+        ? this._t("verdictLess", {
+            list: list.format(dearer.map((contract) => this._t("lessThan", { amount: this._money(contract.total_cost - actual.total_cost, 0), name: contract.name }))),
+            start,
+            end,
+          })
+        : this._t("verdictOnly", { start, end });
+    } else {
+      good = false;
+      const saving = actual.total_cost - best.total_cost;
+      title = this._t("verdictBetter", { name: best.name, amount: this._money(saving, 0) });
+      text = this._t("verdictMore", { actual: this._money(actual.total_cost, 0), start, end, change: this._percent(-saving / actual.total_cost) });
     }
-    const bill = this._bill;
-    if (!bill) {
-      return cards;
-    }
-    cards.push(this._card(`${this._t("tabBill")} · ${bill.contract.name}`, this._windowText(bill), h("div", { class: "bill" }, this._billBody(bill))));
-    if (this._data.actual) {
-      this._cumulativeChart = h("div", { class: "chart" });
-      cards.push(this._card(this._t("cumulativeOf", { name: bill.contract.name }), this._t("cumulativeHint"), this._cumulativeChart, this._toggle("cumulative")));
-    }
-    return cards;
+    const mark = icon(good ? ICONS.check : ICONS.alert);
+    mark.classList.add(good ? "good" : "warn");
+    return h("section", { class: "card verdict-card" }, mark, h("div", {}, h("h2", {}, title), h("p", {}, text)));
+  }
+
+  _renderRanking(contracts, actual, mine) {
+    const known = Object.fromEntries(this._entry.contracts.map((contract) => [contract.id, contract]));
+    const most = Math.max(...contracts.map((contract) => contract.total_cost), 0.01);
+    const width = (amount) => `${(Math.max(0, amount) / most) * 100}%`;
+    const signed = new Intl.NumberFormat(this._locale, {
+      style: "currency",
+      currency: (this._hass.config && this._hass.config.currency) || "EUR",
+      maximumFractionDigits: 0,
+      signDisplay: "exceptZero",
+    });
+    const select = (id) => {
+      if (this._billContract === id) return;
+      this._billContract = id;
+      this._renderContent();
+    };
+    const rows = contracts.map((contract, index) => {
+      const info = known[contract.id] || {};
+      const kind = KINDS[this._language][contract.kind] || contract.kind;
+      // Each fact stays on one line; the line breaks between them.
+      const facts = (
+        contract.id === mine
+          ? [this._t("yourContract")]
+          : [kind !== contract.name ? kind : null, ...(info.off_peak || []).map((range) => range.replace("-", "–")), info.kva ? `${info.kva} kVA` : null].filter(Boolean)
+      ).flatMap((fact, position) => [position ? " · " : null, h("span", { class: "fact" }, fact)]);
+      const difference = actual ? contract.total_cost - actual.total_cost : null;
+      const sub =
+        difference === null || Math.abs(difference) < 0.5
+          ? contract.energy
+            ? this._t("allIn", { price: this._average(contract.total_cost / contract.energy) })
+            : ""
+          : `${signed.format(difference)} · ${this._percent(difference / actual.total_cost)}`;
+      return h(
+        "button",
+        { class: "rank", "aria-pressed": String(contract.id === this._billContract), onclick: () => select(contract.id) },
+        h("span", { class: "position" }, String(index + 1)),
+        h("span", { class: "who" }, h("span", { class: "name" }, contract.name), facts.length ? h("span", { class: "sub" }, facts) : null),
+        h(
+          "span",
+          {
+            class: "bars",
+            role: "img",
+            "aria-label": `${this._t("consumption")} ${this._money(contract.variable_cost, 0)}, ${this._t("subscription")} ${this._money(contract.fixed_cost, 0)}`,
+          },
+          h("span", { class: "variable", style: { width: width(contract.variable_cost) } }),
+          h("span", { class: "fixed", style: { width: width(contract.fixed_cost) } }),
+        ),
+        h("span", { class: "total" }, h("strong", {}, this._money(contract.total_cost, 0)), h("span", { class: "sub" }, sub)),
+      );
+    });
+    const legend = h(
+      "ul",
+      { class: "legend" },
+      h("li", {}, h("span", { class: "swatch", style: { background: "var(--ec-money)" } }), this._t("consumption")),
+      h("li", {}, h("span", { class: "swatch", style: { background: "var(--ec-money-2)" } }), this._t("subscription")),
+    );
+    return this._card(this._t("ranking"), this._t("rankingHint"), h("div", {}, legend, h("div", { class: "ranking" }, rows)));
+  }
+
+  // The chosen contract's bill is asked for as soon as it is shown.
+  _ensureBill() {
+    const key = `${this._billContract}|${this._request.start}|${this._request.end}`;
+    if (this._billKey === key && (this._bill || this._billBusy || this._billError)) return;
+    this._billKey = key;
+    this._bill = null;
+    this._billError = null;
+    this._billOpen = {};
+    this._computeBill();
   }
 
   async _computeBill() {
     const count = ++this._billCount;
     this._billBusy = true;
-    this._billError = null;
-    this._renderContent();
     try {
       const bill = await this._hass.callWS({
         type: `${DOMAIN}/bill`,
@@ -3129,80 +3290,135 @@ class ElectricityContractsPanel extends HTMLElement {
       this._billError = error.message || String(error);
     }
     this._billBusy = false;
-    this._renderContent();
+    if (this._tab === "compare") this._renderContent();
   }
 
-  _billBody(bill) {
+  // The bill with its verdict first, then each price period, folded.
+  _renderBill() {
+    const contract = this._data.contracts.find((item) => item.id === this._billContract);
+    const title = `${this._t("tabBill")} · ${contract ? contract.name : ""}`;
+    if (this._billError) {
+      return this._errorCard(title, this._t("loadFailed", { error: this._billError }), () => {
+        this._billKey = null;
+        this._renderContent();
+      });
+    }
+    const bill = this._bill;
+    if (!bill) return this._loadingCard();
     const names = TRANCHES[this._language];
-    const parts = bill.periods.map((period) => {
+    let verdict = null;
+    if (bill.actual !== null) {
+      const amount = this._money(Math.abs(bill.difference));
+      const actual = this._money(bill.actual);
+      if (bill.difference > 0.005) verdict = this._t("billMore", { amount, actual });
+      else if (bill.difference < -0.005) verdict = this._t("billLess", { amount, actual });
+      else verdict = this._t("same");
+    }
+    // The first period is open unless the user chose otherwise.
+    const open = (index) => this._billOpen[index] ?? index === 0;
+    const prices = (this._entry.contracts.find((item) => item.id === bill.contract.id) || {}).prices || [];
+    // The prices of a period date from the change of tariff, before the period.
+    const since = (day) => (prices.find((period) => period.start <= day && (!period.end || period.end >= day)) || { start: day }).start;
+    const periods = bill.periods.map((period, index) => {
       const start = period.start.slice(0, 10);
       const last = lastDayOf(period.end);
       const days = Math.round((dayTime(last) - dayTime(start)) / DAY_MS) + 1;
-      return [
-        h("h3", {}, this._t("pricesFrom", { start: this._dayLabel(start), end: this._dayLabel(last) })),
+      const total = period.subscription + period.lines.reduce((sum, line) => sum + line.cost, 0);
+      const expanded = open(index);
+      const button = h(
+        "button",
+        {
+          class: "bill-period",
+          "aria-expanded": String(expanded),
+          onclick: () => {
+            this._billOpen[index] = !expanded;
+            this._renderContent();
+          },
+        },
+        icon(ICONS.right),
         h(
-          "div",
-          { class: "table-wrap" },
+          "span",
+          { class: "what" },
+          h("span", {}, this._t("window", { start: this._dayLabel(start), end: this._dayLabel(last) })),
+          h("span", { class: "sub" }, this._t("pricesOf", { date: this._dayLabel(since(start)) })),
+        ),
+        h("span", { class: "num" }, this._money(total)),
+      );
+      if (!expanded) return [button];
+      const table = h(
+        "div",
+        { class: "table-wrap" },
+        h(
+          "table",
+          {},
+          h("thead", {}, h("tr", {}, h("th", {}, this._t("item")), h("th", {}, this._t("quantity")), h("th", {}, this._t("unitPrice")), h("th", {}, this._t("amount")))),
           h(
-            "table",
+            "tbody",
             {},
-            h("thead", {}, h("tr", {}, h("th", {}, this._t("item")), h("th", {}, this._t("quantity")), h("th", {}, this._t("unitPrice")), h("th", {}, this._t("amount")))),
-            h(
-              "tbody",
-              {},
-              h(
-                "tr",
-                {},
-                h("td", {}, this._t("subscription")),
-                h("td", {}, this._t("days", { count: days })),
-                h("td", {}, this._t("subscriptionYear", { amount: this._money(period.fixed_per_year) })),
-                h("td", {}, this._money(period.subscription)),
-              ),
-              period.lines.map((line) =>
+            period.lines
+              .filter((line) => line.energy > 0)
+              .map((line) =>
                 h(
                   "tr",
                   {},
-                  h(
-                    "td",
-                    {},
-                    h("span", { class: "swatch", style: { background: (TRANCHE_FILLS[line.tranche] || ["#898781"])[0] } }),
-                    names[line.tranche] || line.tranche,
-                  ),
+                  h("td", {}, h("span", { class: "swatch", style: { background: (TRANCHE_FILLS[line.tranche] || ["#898781"])[0] } }), names[line.tranche] || line.tranche),
                   h("td", {}, this._kwh(line.energy)),
-                  h("td", {}, this._price(line.price)),
+                  h("td", {}, `${this._price(line.price)}/kWh`),
                   h("td", {}, this._money(line.cost)),
                 ),
               ),
+            h(
+              "tr",
+              {},
+              h("td", {}, this._t("subscription")),
+              h("td", {}, this._t("days", { count: days })),
+              h("td", {}, this._t("subscriptionYear", { amount: this._money(period.fixed_per_year) })),
+              h("td", {}, this._money(period.subscription)),
             ),
           ),
         ),
-      ];
-    });
-    const totals = [
-      h("span", {}, `${this._t("consumption")} (${this._kwh(bill.energy)})`),
-      h("span", { class: "num" }, this._money(bill.consumption)),
-      h("span", {}, this._t("subscription")),
-      h("span", { class: "num" }, this._money(bill.subscription)),
-      h("span", { class: "strong" }, this._t("total")),
-      h("span", { class: "num strong" }, this._money(bill.total)),
-    ];
-    if (bill.actual !== null) {
-      let verdict = this._t("same");
-      if (bill.difference > 0) {
-        verdict = this._t("moreExpensive", { amount: this._money(bill.difference) });
-      } else if (bill.difference < 0) {
-        verdict = this._t("cheaper", { amount: this._money(-bill.difference) });
-      }
-      totals.push(
-        h("hr"),
-        h("span", {}, this._t("actualPaid")),
-        h("span", { class: "num" }, this._money(bill.actual)),
-        h("span", {}, this._t("difference")),
-        h("span", { class: "num" }, `${bill.difference > 0 ? "+" : ""}${this._money(bill.difference)}`),
-        h("span", { class: "verdict" }, verdict),
       );
-    }
-    return [...parts.flat(), h("div", { class: "totals" }, totals)];
+      return [button, table];
+    });
+    return this._card(
+      title,
+      this._t("billHint"),
+      h(
+        "div",
+        {},
+        h("div", { class: "bill-head" }, h("span", { class: "big" }, this._money(bill.total)), verdict ? h("span", {}, verdict) : null),
+        h("div", { class: "bill-periods" }, periods.flat()),
+        h(
+          "div",
+          { class: "bill-sum" },
+          h("span", {}, `${this._t("consumption")} ${this._money(bill.consumption)}`),
+          h("span", {}, `${this._t("subscription")} ${this._money(bill.subscription)}`),
+          h("strong", {}, `${this._t("total")} ${this._money(bill.total)}`),
+        ),
+      ),
+    );
+  }
+
+  // How the gap between the chosen contract and what was paid built up.
+  _renderGap() {
+    const contract = this._data.contracts.find((item) => item.id === this._billContract);
+    if (!contract) return null;
+    const gap = this._gap(contract.id);
+    const last = gap.values[gap.values.length - 1] ?? 0;
+    const day = this._dayLabel(this._data.start.slice(0, 10), { day: "numeric", month: "long" });
+    this._cumulativeChart = h("div", { class: "chart" });
+    return this._card(
+      this._t("gap"),
+      this._t("gapHint", { name: contract.name }),
+      h(
+        "div",
+        {},
+        h("div", { class: "big" }, last >= 0 ? this._t("gapSaved", { amount: this._money(last, 0), day }) : this._t("gapLost", { amount: this._money(-last, 0), name: contract.name, day })),
+        this._cumulativeChart,
+        h("p", { class: "note" }, this._t("gapNote")),
+      ),
+      this._toggle("cumulative"),
+    );
   }
 }
 
