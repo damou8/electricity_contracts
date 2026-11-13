@@ -14,7 +14,6 @@ const STRINGS = {
     tabFollow: "Overview",
     tabUnderstand: "Understand",
     tabCompare: "Compare",
-    nowHint: "The price of a kWh over the next 24 hours",
     nowLabel: "Now",
     unknownColor: "Color not published yet",
     perKwh: "{price}/kWh",
@@ -23,7 +22,7 @@ const STRINGS = {
     previousSeason: "Last season: {total}, of which {toDate} at the same date.",
     howComputed: "How is it computed?",
     budgetPartial: "The data starts after 1 September: the season so far is partial.",
-    budgetMethod: "The rest of the season consumes like the same days a year before (a day only known in total is spread like your typical day), at today's prices; the red and white days left go to the days that consumed the most.",
+    budgetMethod: "The forecast assumes you will consume like last year on the same dates, at current prices. The red and white days left are placed on the days you consume the most.",
     budgetNoProjection: "Not enough data a year before to project the rest of the season.",
     spentLegend: "Spent",
     expectedLegend: "Expected",
@@ -34,31 +33,25 @@ const STRINGS = {
     weatherOpen: "Open the options",
     weatherNoData: "No outdoor temperature recorded over this period.",
     weatherFewDays: "Too few days to tell the heating apart.",
-    weatherNote: "Each day sits at its average outdoor temperature. The line is fitted on the degrees below {base}: its slope is what each degree colder uses, its flat part what a day uses without heating. Compare the slope from one winter to the next to see what insulation or a heating setting changed.",
     baseload: "Baseload",
     weekOf: "Week of {day}",
-    profileNote: "Each column is the average consumption of that hour over the days of the period. The shaded hours are the off-peak hours of the contract in force; the share in off-peak hours comes from its tranches, weekends included.",
     hourOfDay: "{hour}:00",
     offPeakBand: "off-peak hours",
     offPeakBandShort: "off-peak",
-    peakByColorHint: "The share of each Tempo day used in peak hours",
     peakOnBlue: "{share} on blue days",
     peakShort: "Peak",
     offPeakShort: "Off-peak",
-    peakByColorNote: "A Tempo day runs from 6:00 to 6:00 the next day: sixteen peak hours, from 6:00 to 22:00, then eight off-peak hours. The share of a color is the energy of its peak hours over that of its whole days, over the chosen period.",
     oneDay: "{count} day",
     dayCount: "{count} days",
     perYear: "{amount} a year",
-    baseloadNote: "Each night keeps its quietest hour between 3:00 and 5:00. The baseload is the level of the quietest 10 % of the nights, as heating or cooling runs on the others. Its yearly cost assumes that level all year round, at the average price of an hour over the last 12 months, subscription excluded.",
+    baseloadNote: "We look at the consumption between 3:00 and 5:00, when almost everything is off, and keep the lowest nights. The yearly cost applies that consumption all year round, at the average price of a kWh, subscription excluded.",
     noHeating: "The consumption doesn't rise with the cold over this period.",
     kwhPerDay: "kWh per day",
     cheaper: "Cheaper",
     dearer: "Dearer",
     calendarKeys: "Calendar: the arrow keys change the day",
-    topDaysHint: "The five days that cost the most, subscription included",
     color: "Color",
     spend: "Where the money goes",
-    spendHint: "Each tranche, as a share of the kWh then of the euros, subscription excluded",
     energyShare: "Share of kWh",
     costShare: "Share of euros",
     averagePaid: "Average price paid",
@@ -66,7 +59,6 @@ const STRINGS = {
     notPublished: "color not published yet",
     season: "Tempo season {season}",
     daysLeft: "{left} left out of {total}",
-    noRedDay: "No red day over this period.",
     topDays: "Most expensive days",
     day: "Day",
     calendar: "Calendar",
@@ -139,12 +131,8 @@ const STRINGS = {
     waitingPrice: "Not compared yet: its prices for {day} are missing",
     waitingColor: "Not compared yet: the Tempo color of {day} isn't known",
     addPrices: "Add its prices",
-    cheapestNow: "Now is the cheapest time of the next 24 hours.",
-    cheaperFrom: "Cheaper from {time}: {price}, that is {change}.",
-    singlePrice: "One price all day: no better time.",
     untilTime: "until {time}",
     tomorrow: "Tomorrow",
-    tomorrowEstimate: "Tomorrow's cost is estimated from your recent {weekday}s: {energy}.",
     seasonHint: "From {start} to {end}, with the {contract} contract.",
     expectedPerMonth: "expected · {amount} a month",
     spent: "spent",
@@ -152,9 +140,8 @@ const STRINGS = {
     seasonExpected: "{expected} expected by 31 August ({energy}).",
     redLeft: "Red left",
     whiteLeft: "White left",
-    withoutHeating: "Without heating, a day uses {energy}.",
-    weatherInfo: "Each dot is a day: its average outdoor temperature and its consumption.",
-    coldShare: "{share} of the consumption comes from the cold.",
+    withHeating: "Above {base}, you use about {energy} a day. Below, heating uses {slope} for each degree less.",
+    weatherInfo: "Each dot is a day with its outdoor temperature and what you consumed.",
     perDegreeBelow: "per degree below {base}",
     ofTheConsumption: "{share} of the consumption",
     aroundTheClock: "around the clock",
@@ -176,7 +163,6 @@ const STRINGS = {
     peakSplitLabel: "{color}: {peak} in peak hours, {offPeak} in off-peak hours",
     calendarTempo: "Tempo calendar",
     spendLead: "of the euros go to {tranche}, for {energy} of the kWh",
-    spendNote: "A tranche whose share of the euros exceeds its share of the kWh costs more than the average.",
     perDayEnergy: "{energy} a day",
     averagePrice: "Average price",
     averageSub: "subscription excluded · {price} all in",
@@ -216,7 +202,6 @@ const STRINGS = {
     tabFollow: "Suivi",
     tabUnderstand: "Comprendre",
     tabCompare: "Comparer",
-    nowHint: "Le prix du kWh sur les prochaines 24 h",
     nowLabel: "Maintenant",
     unknownColor: "Couleur pas encore publiée",
     perKwh: "{price}/kWh",
@@ -225,7 +210,7 @@ const STRINGS = {
     previousSeason: "Saison dernière : {total}, dont {toDate} à la même date.",
     howComputed: "Comment c'est calculé ?",
     budgetPartial: "Les données commencent après le 1er septembre : le début de saison est incomplet.",
-    budgetMethod: "Le reste de la saison consomme comme les mêmes jours l'an dernier (un jour connu seulement en total est réparti selon votre journée type), aux prix d'aujourd'hui ; les jours rouges et blancs restants vont aux jours qui ont le plus consommé.",
+    budgetMethod: "La prévision suppose que vous consommerez comme l'an dernier aux mêmes dates, aux prix actuels. Les jours rouges et blancs restants sont placés sur les jours où vous consommez le plus.",
     budgetNoProjection: "Pas assez de données l'an dernier pour prévoir la fin de la saison.",
     spentLegend: "Dépensé",
     expectedLegend: "Prévu",
@@ -236,31 +221,25 @@ const STRINGS = {
     weatherOpen: "Ouvrir les options",
     weatherNoData: "Aucune température extérieure enregistrée sur cette période.",
     weatherFewDays: "Trop peu de jours pour isoler le chauffage.",
-    weatherNote: "Chaque journée est placée à sa température extérieure moyenne. La droite est ajustée sur les degrés sous {base} : sa pente est ce que consomme chaque degré de froid en plus, son palier ce qu'une journée consomme sans chauffage. Comparez la pente d'un hiver à l'autre pour mesurer l'effet d'une isolation ou d'un réglage du chauffage.",
     baseload: "Talon",
     weekOf: "Semaine du {day}",
-    profileNote: "Chaque colonne est la consommation moyenne de cette heure sur les jours de la période. Les heures grisées sont les heures creuses du contrat en vigueur ; la part en heures creuses vient de ses tranches, week-ends compris.",
     hourOfDay: "{hour} h",
     offPeakBand: "heures creuses",
     offPeakBandShort: "HC",
-    peakByColorHint: "La part de chaque journée Tempo consommée en heures pleines",
     peakOnBlue: "{share} les jours bleus",
     peakShort: "HP",
     offPeakShort: "HC",
-    peakByColorNote: "Une journée Tempo va de 6 h au lendemain 6 h : seize heures pleines, de 6 h à 22 h, puis huit heures creuses. La part d'une couleur est l'énergie de ses heures pleines sur celle de ses journées entières, sur la période choisie.",
     oneDay: "{count} jour",
     dayCount: "{count} jours",
     perYear: "{amount} par an",
-    baseloadNote: "Chaque nuit garde son heure la plus calme entre 3 h et 5 h. Le talon est le niveau des 10 % de nuits les plus calmes, car le chauffage ou la climatisation tournent les autres. Son coût sur un an suppose ce niveau toute l'année, au prix moyen d'une heure sur les 12 derniers mois, hors abonnement.",
+    baseloadNote: "On regarde la consommation entre 3 h et 5 h, quand presque tout est éteint, et on retient les nuits les plus basses. Le coût annuel applique cette consommation toute l'année, au prix moyen du kWh, hors abonnement.",
     noHeating: "La consommation ne monte pas avec le froid sur cette période.",
     kwhPerDay: "kWh par jour",
     cheaper: "Moins cher",
     dearer: "Plus cher",
     calendarKeys: "Calendrier : les flèches changent de jour",
-    topDaysHint: "Les cinq journées qui ont coûté le plus, abonnement compris",
     color: "Couleur",
     spend: "Où partent les euros",
-    spendHint: "Chaque tranche, en part des kWh puis en part des euros, hors abonnement",
     energyShare: "Part des kWh",
     costShare: "Part des euros",
     averagePaid: "Prix moyen payé",
@@ -268,7 +247,6 @@ const STRINGS = {
     notPublished: "couleur pas encore publiée",
     season: "Saison Tempo {season}",
     daysLeft: "{left} restants sur {total}",
-    noRedDay: "Aucun jour rouge sur cette période.",
     topDays: "Jours les plus chers",
     day: "Jour",
     calendar: "Calendrier",
@@ -341,12 +319,8 @@ const STRINGS = {
     waitingPrice: "Pas encore comparé : il manque ses prix du {day}",
     waitingColor: "Pas encore comparé : la couleur Tempo du {day} n'est pas encore connue",
     addPrices: "Ajouter ses prix",
-    cheapestNow: "C'est maintenant le moment le moins cher des prochaines 24 h.",
-    cheaperFrom: "Moins cher à partir de {time} : {price}, soit {change}.",
-    singlePrice: "Un seul prix toute la journée : pas de meilleur moment.",
     untilTime: "jusqu'à {time}",
     tomorrow: "Demain",
-    tomorrowEstimate: "Le coût de demain est estimé d'après vos derniers {weekday}s : {energy}.",
     seasonHint: "Du {start} au {end}, avec le contrat {contract}.",
     expectedPerMonth: "prévus · {amount} par mois",
     spent: "dépensés",
@@ -354,9 +328,8 @@ const STRINGS = {
     seasonExpected: "{expected} prévus d'ici au 31 août ({energy}).",
     redLeft: "Rouges restants",
     whiteLeft: "Blancs restants",
-    withoutHeating: "Sans chauffage, une journée consomme {energy}.",
-    weatherInfo: "Chaque point est une journée : sa température extérieure moyenne et sa consommation.",
-    coldShare: "{share} de la consommation vient du froid.",
+    withHeating: "Au-dessus de {base}, vous consommez environ {energy} par jour. En dessous, le chauffage consomme {slope} par degré de moins.",
+    weatherInfo: "Chaque point est une journée avec sa température extérieure et ce que vous avez consommé.",
     perDegreeBelow: "par degré sous {base}",
     ofTheConsumption: "{share} de la consommation",
     aroundTheClock: "en continu",
@@ -378,7 +351,6 @@ const STRINGS = {
     peakSplitLabel: "{color} : {peak} en heures pleines, {offPeak} en heures creuses",
     calendarTempo: "Calendrier Tempo",
     spendLead: "des euros en {tranche}, pour {energy} des kWh",
-    spendNote: "Une tranche dont la part des euros dépasse celle des kWh coûte plus cher que la moyenne.",
     perDayEnergy: "{energy} par jour",
     averagePrice: "Prix moyen",
     averageSub: "hors abonnement · {price} tout compris",
@@ -2436,15 +2408,9 @@ class ElectricityContractsPanel extends HTMLElement {
     // The cheaper time ahead, written in its block of the ribbon.
     let cheaper = null;
     let cheaperLabel = "";
-    let verdict = null;
-    if (segments.length === 1 && current.price !== null) {
-      verdict = this._t("singlePrice");
-    } else if (current.price !== null && current.price <= cheapest + 1e-9) {
-      verdict = this._t("cheapestNow");
-    } else if (cheapest !== null) {
+    if (cheapest !== null && (current.price === null || current.price > cheapest + 1e-9)) {
       cheaper = priced.find((segment) => segment.price === cheapest);
       const change = current.price ? this._percent(cheapest / current.price - 1) : null;
-      verdict = this._t("cheaperFrom", { time: this._time(cheaper.start), price: perKwh(cheapest), change });
       cheaperLabel = change ? `${this._price(cheapest)} · ${change}` : this._price(cheapest);
     }
     const start = Date.parse(segments[0].start);
@@ -2477,8 +2443,6 @@ class ElectricityContractsPanel extends HTMLElement {
       }),
     );
     const tempo = this._insights && this._insights.tempo;
-    const estimate = tempo && tempo.tomorrow_estimate;
-    const weekday = new Intl.DateTimeFormat(this._locale, { weekday: "long", timeZone: "Europe/Paris" }).format(new Date(Date.now() + DAY_MS));
     const [fill, ink] = current.tranche ? TRANCHE_FILLS[current.tranche] : [];
     return this._card(
       day,
@@ -2495,10 +2459,6 @@ class ElectricityContractsPanel extends HTMLElement {
         ticks,
         tempo ? this._tomorrowLine(tempo) : null,
       ],
-      {
-        info: [this._t("nowHint"), verdict, estimate ? this._t("tomorrowEstimate", { weekday, energy: this._kwh(estimate.energy) }) : null],
-        rerender: () => this._renderHead(),
-      },
     );
   }
 
@@ -2701,7 +2661,7 @@ class ElectricityContractsPanel extends HTMLElement {
           this._offPeakRanges().length ? [h("span", { class: "swatch", style: { background: "var(--ec-wash)", "box-shadow": "inset 0 0 0 1px var(--ec-axis)" } }), capitalize(this._t("offPeakBand"), this._locale)] : null,
         ),
       ],
-      { info: [this._t("profileInfo", { days: this._number(this._insights.days.length) }), this._t("profileNote")] },
+      { info: [this._t("profileInfo", { days: this._number(this._insights.days.length) })] },
     );
   }
 
@@ -2888,7 +2848,6 @@ class ElectricityContractsPanel extends HTMLElement {
           ),
         ),
       ],
-      { info: [this._t("peakByColorHint"), red ? null : this._t("noRedDay"), this._t("peakByColorNote")] },
     );
   }
 
@@ -3043,9 +3002,8 @@ class ElectricityContractsPanel extends HTMLElement {
       ],
       {
         info: [
-          [this._t("weatherInfo"), heating ? this._t("withoutHeating", { energy: this._kwh(Math.max(0, weather.intercept)) }) : null].filter(Boolean).join(" "),
-          heating && weather.heating_share !== null ? this._t("coldShare", { share: this._share(weather.heating_share) }) : null,
-          this._t("weatherNote", { base }),
+          this._t("weatherInfo"),
+          heating ? this._t("withHeating", { base, energy: this._kwh(Math.max(0, weather.intercept)), slope: this._kwh(weather.slope) }) : null,
         ],
       },
     );
@@ -3345,7 +3303,6 @@ class ElectricityContractsPanel extends HTMLElement {
           ),
         ),
       ),
-      { info: [this._t("topDaysHint")] },
     );
   }
 
@@ -3428,7 +3385,7 @@ class ElectricityContractsPanel extends HTMLElement {
         this._lead(share(item.cost / cost), this._t("spendLead", { tranche: names[dearest] || dearest, energy: share(item.energy / energy) })),
         this._views.tranches === "chart" ? [bar("energy", energy, "kWh"), bar("cost", cost, "€")] : table,
       ],
-      { info: [this._t("spendHint"), this._t("spendNote")], tools: this._toggle("tranches") },
+      { tools: this._toggle("tranches") },
     );
   }
 
