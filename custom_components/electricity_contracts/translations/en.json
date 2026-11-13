@@ -258,6 +258,9 @@
     }
   },
   "exceptions": {
+    "recorder_starting": {
+      "message": "Statistics must be written again, once Home Assistant has started. Trying again later."
+    },
     "recorder_busy": {
       "message": "The recorder is still writing earlier statistics. Trying again later."
     },

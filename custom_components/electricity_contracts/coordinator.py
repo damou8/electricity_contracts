@@ -48,7 +48,12 @@ from .const import (
     TOMORROW_RETRY_MINUTES,
 )
 from .data import Contract, contracts, manual_prices
-from .statistics import CostingStatus, SeriesStatus, StatisticsWriter
+from .statistics import (
+    CostingStatus,
+    RecorderNotStartedError,
+    SeriesStatus,
+    StatisticsWriter,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -313,9 +318,14 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         # A first import takes minutes, and a reload meanwhile would queue it
         # again.
         await self._async_wait_for_recorder()
-        costing = await self.costing.async_update(
-            sources.official_prices, sources.calendar
-        )
+        try:
+            costing = await self.costing.async_update(
+                sources.official_prices, sources.calendar
+            )
+        except RecorderNotStartedError as err:
+            raise UpdateFailed(
+                translation_domain=DOMAIN, translation_key="recorder_starting"
+            ) from err
         await self._async_wait_for_recorder()
         self._update_price_issues(costing, contracts(self.config_entry))
         return ElectricityContractsData(sources=sources, costing=costing)

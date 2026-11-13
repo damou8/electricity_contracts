@@ -258,6 +258,9 @@
     }
   },
   "exceptions": {
+    "recorder_starting": {
+      "message": "Des statistiques doivent être réécrites, une fois Home Assistant démarré. Nouvel essai plus tard."
+    },
     "recorder_busy": {
       "message": "L'enregistreur écrit encore des statistiques précédentes. Nouvel essai plus tard."
     },
