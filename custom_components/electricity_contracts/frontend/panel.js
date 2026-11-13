@@ -522,7 +522,7 @@ const STYLE = `
   max-width: 50%;
 }
 .toolbar select option { color: var(--primary-text-color); background: var(--card-background-color); }
-.contract-chips { display: inline-flex; gap: 8px; }
+.contract-chips { display: inline-flex; gap: 8px; min-width: 0; max-width: 60%; }
 .contract-chip {
   font: inherit;
   font-size: 14px;
@@ -537,8 +537,10 @@ const STYLE = `
   color: inherit;
   cursor: pointer;
   white-space: nowrap;
+  min-width: 0;
 }
-.contract-chip strong { font-weight: 500; }
+.contract-chip strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.contract-chip .kva, .contract-chip svg { flex: none; }
 .contract-chip .kva { opacity: 0.75; }
 .contract-chip svg { width: 20px; height: 20px; fill: currentColor; transition: transform 0.15s; }
 .contract-chip[aria-expanded="true"] svg { transform: rotate(180deg); }
@@ -638,7 +640,6 @@ main {
   padding: 16px;
 }
 .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-height: 32px; margin-bottom: 8px; }
-.card-head > div:first-child { flex: 1 1 200px; min-width: 0; }
 /* The title names the card; its figure leads. */
 .card h2 { margin: 0; font-size: 14px; font-weight: 400; color: var(--ec-text-2); }
 .card h2::first-letter { text-transform: uppercase; }
@@ -1167,12 +1168,13 @@ class ElectricityContractsPanel extends HTMLElement {
     return values ? format(text, values) : text;
   }
 
-  _money(value, digits = 2) {
+  _money(value, digits = 2, signDisplay = "auto") {
     return new Intl.NumberFormat(this._locale, {
       style: "currency",
       currency: (this._hass.config && this._hass.config.currency) || "EUR",
       minimumFractionDigits: digits,
       maximumFractionDigits: digits,
+      signDisplay,
     }).format(value);
   }
 
@@ -2518,7 +2520,7 @@ class ElectricityContractsPanel extends HTMLElement {
     if (!season) {
       if (!tempo) return null;
       const label = `${tempo.season.start.slice(0, 4)}-${tempo.season.end.slice(0, 4)}`;
-      return this._card(this._t("season", { season: label }), this._tempoMeters(tempo), { rerender: () => this._renderHead() });
+      return this._card(this._t("season", { season: label }), this._tempoMeters(tempo));
     }
     const label = `${season.start.slice(0, 4)}-${season.end.slice(0, 4)}`;
     const long = { day: "numeric", month: "long", year: "numeric" };
@@ -3430,12 +3432,6 @@ class ElectricityContractsPanel extends HTMLElement {
   _renderRanking(contracts, actual, mine) {
     const known = Object.fromEntries(this._entry.contracts.map((contract) => [contract.id, contract]));
     const most = Math.max(...contracts.map((contract) => contract.total_cost), 0.01);
-    const signed = new Intl.NumberFormat(this._locale, {
-      style: "currency",
-      currency: (this._hass.config && this._hass.config.currency) || "EUR",
-      maximumFractionDigits: 0,
-      signDisplay: "exceptZero",
-    });
     const select = (id) => {
       if (this._billContract === id) return;
       this._billContract = id;
@@ -3451,7 +3447,7 @@ class ElectricityContractsPanel extends HTMLElement {
           : [kind !== contract.name ? kind : null, ...(info.off_peak || []).map((range) => range.replace("-", "–")), info.kva ? `${info.kva} kVA` : null].filter(Boolean)
       ).flatMap((fact, position) => [position ? " · " : null, h("span", { class: "fact" }, fact)]);
       const difference = actual ? contract.total_cost - actual.total_cost : null;
-      const sub = difference === null || Math.abs(difference) < 0.5 ? "" : `${signed.format(difference)} · ${this._percent(difference / actual.total_cost)}`;
+      const sub = difference === null || Math.abs(difference) < 0.5 ? "" : `${this._money(difference, 0, "exceptZero")} · ${this._percent(difference / actual.total_cost)}`;
       return h(
         "button",
         { class: "rank", "aria-pressed": String(contract.id === this._billContract), onclick: () => select(contract.id) },
@@ -3545,13 +3541,7 @@ class ElectricityContractsPanel extends HTMLElement {
     const names = TRANCHES[this._language];
     let verdict = null;
     if (bill.actual !== null) {
-      const signed = new Intl.NumberFormat(this._locale, {
-        style: "currency",
-        currency: (this._hass.config && this._hass.config.currency) || "EUR",
-        minimumFractionDigits: 2,
-        signDisplay: "exceptZero",
-      });
-      verdict = Math.abs(bill.difference) > 0.005 ? this._t("billVsActual", { amount: signed.format(bill.difference) }) : this._t("same");
+      verdict = Math.abs(bill.difference) > 0.005 ? this._t("billVsActual", { amount: this._money(bill.difference, 2, "exceptZero") }) : this._t("same");
     }
     // The first period is open unless the user chose otherwise.
     const open = (index) => this._billOpen[index] ?? index === 0;
