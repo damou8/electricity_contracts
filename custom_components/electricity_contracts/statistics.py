@@ -41,7 +41,7 @@ from homeassistant.components.recorder.statistics import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.storage import Store
 from homeassistant.util import slugify
@@ -123,6 +123,10 @@ _TRANCHE_NAMES: Mapping[str, Mapping[Tranche, str]] = {
         Tranche.RED_HP: "Rouge HP",
     },
 }
+
+
+class RecorderNotStartedError(Exception):
+    """Statistics must be cleared, and the recorder only does it once started."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -539,6 +543,10 @@ class StatisticsWriter:
     async def _async_clear(self, ids: list[str]) -> None:
         if not ids:
             return
+        # The recorder only runs its queue once Home Assistant has started:
+        # waiting for the clear during startup would hold it up until it gives up.
+        if self.hass.state is not CoreState.running:
+            raise RecorderNotStartedError
         done = self.hass.loop.create_future()
 
         def _set_done() -> None:

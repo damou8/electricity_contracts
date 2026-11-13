@@ -331,6 +331,26 @@ async def test_no_wait_while_home_assistant_starts(hass: HomeAssistant) -> None:
         assert await async_wait_for_recorder(hass)
 
 
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_no_clearing_while_home_assistant_starts(hass: HomeAssistant) -> None:
+    # The recorder would only clear once started: the update fails instead of
+    # holding the startup up, and the next one writes everything again.
+    entry = await setup_entry(hass, make_entry([TEMPO_CONTRACT]))
+    coordinator = entry.runtime_data
+    hass.set_state(CoreState.starting)
+    await coordinator.async_recompute()
+    assert not coordinator.last_update_success
+    assert coordinator.last_exception is not None
+    assert coordinator.last_exception.translation_key == "recorder_starting"
+
+    hass.set_state(CoreState.running)
+    await coordinator.async_refresh()
+    await async_wait_recording_done(hass)
+    assert coordinator.last_update_success
+    response = await compare(hass, entry, "2026-03-01", "2026-03-03")
+    assert response["contracts"][0]["energy"] > 0
+
+
 @pytest.mark.parametrize(
     ("idle_waits", "written"),
     [
