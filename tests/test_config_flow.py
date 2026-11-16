@@ -42,6 +42,7 @@ from custom_components.electricity_contracts.const import (
     CONF_UID,
     CONF_WATER_ENERGY,
     CONF_WATER_STATISTIC,
+    CONF_WEATHER,
     CONF_WEEKEND_OFF_PEAK,
     CONTENT_HEATING,
     CONTENT_HEATING_WATER,
@@ -265,6 +266,7 @@ async def test_options_suggest_the_current_values(hass: HomeAssistant) -> None:
     entry = make_entry(
         options={
             CONF_TEMPERATURE: TEMPERATURE_ID,
+            CONF_WEATHER: True,
             CONF_RTE_CLIENT_ID: "my-id",
             CONF_RTE_CLIENT_SECRET: "my-secret",
         }
@@ -273,6 +275,7 @@ async def test_options_suggest_the_current_values(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert suggested(result) == {
         CONF_TEMPERATURE: TEMPERATURE_ID,
+        CONF_WEATHER: True,
         SECTION_HEATING: {},
         SECTION_RTE: {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "my-secret"},
     }
@@ -344,6 +347,18 @@ async def test_options_save_the_temperature(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     # Credentials left empty are removed.
     assert result["data"] == {CONF_TEMPERATURE: TEMPERATURE_ID}
+
+
+async def test_options_save_open_meteo(hass: HomeAssistant) -> None:
+    result = await options_flow(hass, {CONF_WEATHER: True, **credentials()})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {CONF_WEATHER: True}
+
+
+async def test_options_leave_open_meteo_off(hass: HomeAssistant) -> None:
+    result = await options_flow(hass, {CONF_WEATHER: False, **credentials()})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {}
 
 
 @pytest.mark.parametrize(

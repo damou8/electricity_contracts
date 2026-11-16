@@ -83,7 +83,8 @@ const STRINGS = {
     temperatureStrip: "Average outdoor temperature",
     temperature: "Temperature",
     weather: "Weather",
-    weatherSetup: "Choose an outdoor temperature sensor in the integration's options to compare the consumption with the weather.",
+    weatherSetup: "Choose an outdoor temperature sensor, or turn on Open-Meteo weather, in the integration's options to compare the consumption with the weather.",
+    openMeteoCredit: "Outdoor temperature: Open-Meteo.com (CC BY 4.0), at your home's location to about 10 km.",
     weatherOpen: "Open the options",
     weatherNoData: "No outdoor temperature recorded over this period.",
     weatherFewDays: "Too few days to tell the heating apart.",
@@ -327,7 +328,8 @@ const STRINGS = {
     temperatureStrip: "Température extérieure moyenne",
     temperature: "Température",
     weather: "Météo",
-    weatherSetup: "Choisissez un capteur de température extérieure dans les options de l'intégration pour comparer la consommation à la météo.",
+    weatherSetup: "Choisissez un capteur de température extérieure, ou activez la météo Open-Meteo, dans les options de l'intégration pour comparer la consommation à la météo.",
+    openMeteoCredit: "Température extérieure : Open-Meteo.com (CC BY 4.0), à la position de votre maison à 10 km près.",
     weatherOpen: "Ouvrir les options",
     weatherNoData: "Aucune température extérieure enregistrée sur cette période.",
     weatherFewDays: "Trop peu de jours pour isoler le chauffage.",
@@ -1359,6 +1361,11 @@ class ElectricityContractsPanel extends HTMLElement {
     return (this._entries || []).find((entry) => entry.entry_id === this._entryId) || null;
   }
 
+  // Open-Meteo's data is under CC BY 4.0: credit it wherever it is shown.
+  _weatherCredit() {
+    return this._entry && this._entry.outdoor === "open_meteo" ? this._t("openMeteoCredit") : null;
+  }
+
   _color(contractId) {
     const contracts = this._entry ? this._entry.contracts : [];
     const index = contracts.findIndex((contract) => contract.id === contractId);
@@ -1890,7 +1897,7 @@ class ElectricityContractsPanel extends HTMLElement {
     const heating = this._heating;
     const split = heating && heating.totals && (!heating.gas || (heating.water_split && !heating.water_gas)) && this._measure !== "price";
     return this._card(this._t(`${this._measure}By${by}`), this._timeChart, {
-      info: [this._t(`${this._measure}Per${by}`), split ? this._t("heatingSplitInfo") : null],
+      info: [this._t(`${this._measure}Per${by}`), split ? this._t("heatingSplitInfo") : null, this._weatherCredit()],
       tools: [measures, this._toggle("time")],
     });
   }
@@ -3246,6 +3253,7 @@ class ElectricityContractsPanel extends HTMLElement {
         info: [
           this._t("weatherInfo"),
           heating ? this._t("withHeating", { base, energy: this._kwh(Math.max(0, weather.intercept)), slope: this._kwh(weather.slope) }) : null,
+          this._weatherCredit(),
         ],
       },
     );
@@ -4053,7 +4061,7 @@ class ElectricityContractsPanel extends HTMLElement {
       : null;
     const { monthly } = this._heatingBuckets(heating);
     return this._card(this._t(monthly ? "heatingByMonth" : "heatingByDay"), this._heatingDaysChart, {
-      info: [this._t(heating.gas ? "heatingByDayGasInfo" : "heatingByDayInfo"), this._waterNote(heating)],
+      info: [this._t(heating.gas ? "heatingByDayGasInfo" : "heatingByDayInfo"), this._waterNote(heating), this._weatherCredit()],
       tools: measures,
     });
   }
@@ -4268,6 +4276,7 @@ class ElectricityContractsPanel extends HTMLElement {
             ? this._t("heatingWeatherInfo", { base, slope: this._kwh(perDegree.energy), cost: perDegree.cost !== null ? this._money(perDegree.cost) : "—" })
             : this._t("weatherInfo"),
           heating.measured ? this._waterNote(heating) : this._t("estimatedHeatingInfo"),
+          this._weatherCredit(),
         ],
       },
     );

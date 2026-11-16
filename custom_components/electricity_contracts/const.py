@@ -12,6 +12,7 @@ CONF_STATISTIC_ID: Final = "statistic_id"
 CONF_RTE_CLIENT_ID: Final = "rte_client_id"
 CONF_RTE_CLIENT_SECRET: Final = "rte_client_secret"  # noqa: S105 - a key
 CONF_TEMPERATURE: Final = "temperature"
+CONF_WEATHER: Final = "open_meteo"
 # The options' collapsed section of the RTE credentials.
 SECTION_RTE: Final = "rte"
 # The options' section of what heats the home and its water.

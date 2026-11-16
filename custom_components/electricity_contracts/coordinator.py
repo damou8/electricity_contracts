@@ -9,6 +9,7 @@ from typing import Any
 from elec_tariffs import (
     ContractKind,
     FallbackTempoSource,
+    OpenMeteoClient,
     PricePeriod,
     RteOfficialTempoClient,
     RtePublicTempoClient,
@@ -19,6 +20,7 @@ from elec_tariffs import (
     Tranche,
     TrvClient,
     TrvError,
+    WeatherError,
     season_bounds,
     season_of,
 )
@@ -54,11 +56,13 @@ from .statistics import (
     SeriesStatus,
     StatisticsWriter,
 )
+from .weather import WeatherWriter
 
 _LOGGER = logging.getLogger(__name__)
 
 SOURCE_TEMPO = "tempo"
 SOURCE_PRICES = "prices"
+SOURCE_WEATHER = "weather"
 
 type ElectricityContractsConfigEntry = ConfigEntry[ElectricityContractsCoordinator]
 type PricesKey = tuple[ContractKind, int]
@@ -223,12 +227,14 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         self._first_day: date | None = None
         self.last_errors: dict[str, str] = {}
         self.costing = StatisticsWriter(hass, config_entry)
+        self.weather = WeatherWriter(hass, config_entry, OpenMeteoClient(session))
 
     async def _async_setup(self) -> None:
         """Load the cache and find the first day of consumption."""
         self._cache = _Cache.from_store(await self._store.async_load())
         self._first_day = await self._async_first_day()
         await self.costing.async_load()
+        await self.weather.async_load()
 
     async def _async_first_day(self) -> date:
         """Return the day of the first hour of consumption, or today if none."""
@@ -286,10 +292,14 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             changed |= await self._async_refresh_tempo(
                 self._first_day - timedelta(days=1), now
             )
+        changed |= await self._async_refresh_weather(now)
         if changed:
             await self._store.async_save(self._cache.to_store())
         self._update_issues(
-            now, needs_tempo=needs_tempo, needs_prices=bool(needed_prices)
+            now,
+            needs_tempo=needs_tempo,
+            needs_prices=bool(needed_prices),
+            needs_weather=self.weather.enabled,
         )
 
         missing = [
@@ -407,6 +417,21 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             changed = True
         return changed
 
+    async def _async_refresh_weather(self, now: datetime) -> bool:
+        """Write the Open-Meteo temperature; return whether the cache changed.
+
+        The temperature only feeds the charts: a failure doesn't stop the costing.
+        """
+        assert self._first_day is not None
+        try:
+            await self.weather.async_update(self._first_day, now)
+        except RecorderNotStartedError:
+            # Cleared at the next update, once Home Assistant has started.
+            return False
+        except WeatherError as err:
+            return self._record_failure(SOURCE_WEATHER, err, now)
+        return self._record_success(SOURCE_WEATHER)
+
     async def _async_refresh_tempo(self, first_day: date, now: datetime) -> bool:
         today = now.astimezone(FRANCE_TIME_ZONE).date()
         tomorrow = today + timedelta(days=1)
@@ -502,7 +527,12 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     def _update_issues(
-        self, now: datetime, *, needs_tempo: bool, needs_prices: bool
+        self,
+        now: datetime,
+        *,
+        needs_tempo: bool,
+        needs_prices: bool,
+        needs_weather: bool,
     ) -> None:
         threshold = timedelta(hours=SOURCE_ISSUE_AFTER_HOURS)
         for source, needed, translation_key in (
@@ -514,6 +544,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
                 else "tempo_unavailable",
             ),
             (SOURCE_PRICES, needs_prices, "prices_unavailable"),
+            (SOURCE_WEATHER, needs_weather, "weather_unavailable"),
         ):
             issue_id = f"{source}_unavailable_{self.config_entry.entry_id}"
             since = self._cache.failing_since.get(source)
@@ -566,6 +597,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
                 for source, when in self._cache.failing_since.items()
             },
             "last_errors": self.last_errors,
+            "weather": self.weather.enabled,
             "costing": _costing_diagnostics(self.data.costing),
         }
 
@@ -602,6 +634,7 @@ def async_delete_issues(hass: HomeAssistant, entry_id: str) -> None:
         "rte_credentials_refused",
         f"{SOURCE_TEMPO}_unavailable",
         f"{SOURCE_PRICES}_unavailable",
+        f"{SOURCE_WEATHER}_unavailable",
     ):
         ir.async_delete_issue(hass, DOMAIN, f"{prefix}_{entry_id}")
     prefix = f"missing_price_{entry_id}_"

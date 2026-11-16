@@ -79,6 +79,7 @@ from .const import (
     CONF_UID,
     CONF_WATER_ENERGY,
     CONF_WATER_STATISTIC,
+    CONF_WEATHER,
     CONF_WEEKEND_OFF_PEAK,
     CONTENT_HEATING,
     CONTENT_HEATING_WATER,
@@ -156,6 +157,7 @@ OPTIONS_SCHEMA = vol.Schema(
                 domain=SENSOR_DOMAIN, device_class=SensorDeviceClass.TEMPERATURE
             )
         ),
+        vol.Optional(CONF_WEATHER, default=False): BooleanSelector(),
         vol.Required(SECTION_HEATING): section(HEATING_SCHEMA, {"collapsed": False}),
         vol.Required(SECTION_RTE): section(
             vol.Schema(
@@ -428,6 +430,8 @@ class ElectricityContractsOptionsFlow(OptionsFlow):
                 except InvalidStatisticError as err:
                     errors[CONF_TEMPERATURE] = err.reason
                 options[CONF_TEMPERATURE] = temperature
+            if user_input.get(CONF_WEATHER):
+                options[CONF_WEATHER] = True
             heating = await self._validate_heating(
                 user_input.get(SECTION_HEATING, {}), errors
             )
@@ -443,6 +447,16 @@ class ElectricityContractsOptionsFlow(OptionsFlow):
                 options[CONF_RTE_CLIENT_SECRET] = client_secret
             if not errors:
                 return self.async_create_entry(data=options)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                OPTIONS_SCHEMA, user_input or self._suggested()
+            ),
+            errors=errors,
+        )
+
+    def _suggested(self) -> dict[str, Any]:
+        """Return the current options as the form's suggested values."""
         current = self.config_entry.options
         suggested: dict[str, Any] = {
             SECTION_RTE: {
@@ -453,15 +467,10 @@ class ElectricityContractsOptionsFlow(OptionsFlow):
         }
         if current.get(SECTION_HEATING):
             suggested[SECTION_HEATING] = dict(current[SECTION_HEATING])
-        if current.get(CONF_TEMPERATURE):
-            suggested[CONF_TEMPERATURE] = current[CONF_TEMPERATURE]
-        return self.async_show_form(
-            step_id="init",
-            data_schema=self.add_suggested_values_to_schema(
-                OPTIONS_SCHEMA, user_input or suggested
-            ),
-            errors=errors,
-        )
+        for key in (CONF_TEMPERATURE, CONF_WEATHER):
+            if current.get(key):
+                suggested[key] = current[key]
+        return suggested
 
     async def _validate_heating(
         self, heating: dict[str, Any], errors: dict[str, str]

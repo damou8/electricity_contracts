@@ -30,6 +30,7 @@ from .coordinator import (
 from .data import contracts, manual_prices
 from .panel import async_register_panel, async_remove_panel, async_setup_frontend
 from .statistics import async_remove_statistics
+from .weather import async_remove_weather
 from .websocket import async_register_commands
 
 _LOGGER = logging.getLogger(__name__)
@@ -175,6 +176,7 @@ async def async_remove_entry(
     """Delete the statistics, the cache and the repair issues of a removed entry."""
     _async_remove_panel_if_unused(hass, entry)
     await async_remove_statistics(hass, entry.entry_id)
+    await async_remove_weather(hass, entry)
     await cache_store(hass, entry.entry_id).async_remove()
     async_delete_issues(hass, entry.entry_id)
 

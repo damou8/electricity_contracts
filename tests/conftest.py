@@ -347,6 +347,10 @@ class Sources:
         )
         self.official.async_check_credentials = AsyncMock()
         self.official_class = MagicMock(return_value=self.official)
+        self.weather = MagicMock()
+        self.weather.async_hourly_temperatures = AsyncMock(
+            side_effect=self._temperatures
+        )
 
     @staticmethod
     async def _prices(kind: ContractKind, kva: int) -> list[PricePeriod]:
@@ -356,6 +360,20 @@ class Sources:
             ContractKind.BASE: BASE_PERIODS,
             ContractKind.HPHC: HPHC_PERIODS,
         }[kind]
+
+    @staticmethod
+    async def _temperatures(
+        latitude: float, longitude: float, start: date, end: date
+    ) -> dict[datetime, float]:
+        """Give 10 °C from three days before NOW, or `start`, to the end of `end`."""
+        del latitude, longitude
+        first = max(
+            datetime(start.year, start.month, start.day, tzinfo=UTC),
+            NOW - timedelta(days=3),
+        )
+        last = datetime(end.year, end.month, end.day, 23, tzinfo=UTC)
+        hours = int((last - first) / timedelta(hours=1)) + 1
+        return {first + timedelta(hours=hour): 10.0 for hour in range(hours)}
 
     def fail_prices(self) -> None:
         """Make data.gouv.fr unreachable."""
@@ -376,5 +394,6 @@ def sources() -> Generator[Sources]:
         patch(f"{module}.coordinator.RtePublicTempoClient", return_value=mocks.public),
         patch(f"{module}.coordinator.RteOfficialTempoClient", mocks.official_class),
         patch(f"{module}.config_flow.RteOfficialTempoClient", mocks.official_class),
+        patch(f"{module}.coordinator.OpenMeteoClient", return_value=mocks.weather),
     ):
         yield mocks

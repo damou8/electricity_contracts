@@ -541,24 +541,7 @@ class StatisticsWriter:
         return abs(current - state.source_sum) > 1e-6 * max(1.0, abs(state.source_sum))
 
     async def _async_clear(self, ids: list[str]) -> None:
-        if not ids:
-            return
-        # The recorder only runs its queue once Home Assistant has started:
-        # waiting for the clear during startup would hold it up until it gives up.
-        if self.hass.state is not CoreState.running:
-            raise RecorderNotStartedError
-        done = self.hass.loop.create_future()
-
-        def _set_done() -> None:
-            if not done.done():
-                done.set_result(None)
-
-        def _on_done() -> None:
-            # Called from the recorder's thread.
-            self.hass.loop.call_soon_threadsafe(_set_done)
-
-        get_instance(self.hass).async_clear_statistics(ids, on_done=_on_done)
-        await done
+        await async_clear_statistics(self.hass, ids)
 
     async def _async_resume_point(
         self, series: _Series
@@ -700,6 +683,28 @@ def _cost_all(
     costed = {item.uid: cost_contract(item, hours, calendar) for item in inputs}
     actual = cost_actual(inputs, costed, hours) if with_actual else None
     return costed, actual
+
+
+async def async_clear_statistics(hass: HomeAssistant, ids: list[str]) -> None:
+    """Clear statistics and wait until the recorder has done it."""
+    if not ids:
+        return
+    # The recorder only runs its queue once Home Assistant has started:
+    # waiting for the clear during startup would hold it up until it gives up.
+    if hass.state is not CoreState.running:
+        raise RecorderNotStartedError
+    done = hass.loop.create_future()
+
+    def _set_done() -> None:
+        if not done.done():
+            done.set_result(None)
+
+    def _on_done() -> None:
+        # Called from the recorder's thread.
+        hass.loop.call_soon_threadsafe(_set_done)
+
+    get_instance(hass).async_clear_statistics(ids, on_done=_on_done)
+    await done
 
 
 async def async_remove_statistics(hass: HomeAssistant, entry_id: str) -> None:

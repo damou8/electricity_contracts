@@ -41,6 +41,7 @@ from .data import (
     price_periods,
 )
 from .insights import DEGREE_DAY_BASE, daily_means, weather_fit
+from .weather import outdoor_statistic
 
 # kWh below which a day is taken as costed in full.
 _UNCOSTED_TOLERANCE = 0.001
@@ -382,7 +383,9 @@ class _Answer:
         house_ids: tuple[str, str] | None,
     ) -> None:
         self._hass = hass
-        self.heating = Heating.from_options(entry.options)
+        self.heating = Heating.from_options(
+            entry.options, outdoor=outdoor_statistic(entry)
+        )
         self.pricer = _Pricer(entry, contracts(entry))
         self.calendar = entry.runtime_data.data.sources.calendar
         self.read = read
@@ -647,7 +650,7 @@ async def async_heating(
     tabs. Without heating statistics, the heating is estimated from the source's
     consumption and the outdoor temperature.
     """
-    heating = Heating.from_options(entry.options)
+    heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
     coordinator = entry.runtime_data
     status = coordinator.data.costing
     start, end = narrow_window(status, contracts(entry), start, end)
