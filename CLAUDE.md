@@ -19,7 +19,7 @@ To test against an unreleased library, `pip install -e ../../elec-tariffs --no-d
 ## Conventions
 
 - Minimum Home Assistant: `hacs.json` (2026.10.0). `requirements_test.txt` pins the matching phacc. Don't use APIs newer than the minimum (`visible` form fields, `config_entry_id` on issues and `async_unload_platforms_or_raise` are 2026.11).
-- The release tag `vX.Y.Z` is written in `manifest.json` by the release workflow; keep `0.0.0` in the repository.
+- The release tag `vX.Y.Z` (or `vX.Y.Z-beta.N` for a pre-release) is written in `manifest.json` by the release workflow; keep `0.0.0` in the repository.
 - Every change of options or subentries reloads the entry through the update listener: use `async_update_and_abort`, never the reloading variants, in flows.
 - Translations: `en.json` and `fr.json` together. French uses "vous". No `<…>` in strings (hassfest reads them as HTML).
 - Tests mock the library classes where the integration imports them (`tests/conftest.py`, `sources` fixture) and run at a frozen time (7 November 2026, 10:00 in Paris; the test time zone is US/Pacific).

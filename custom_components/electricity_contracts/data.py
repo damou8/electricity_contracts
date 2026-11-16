@@ -20,16 +20,29 @@ from .const import (
     CONF_CONTRACT,
     CONF_END,
     CONF_FIXED_PER_YEAR,
+    CONF_HEATING_CONTENT,
+    CONF_HEATING_ENERGY,
+    CONF_HEATING_STATISTICS,
+    CONF_INDOOR_TEMPERATURES,
     CONF_KIND,
     CONF_KVA,
     CONF_OFF_PEAK,
+    CONF_PRICE,
     CONF_PRICES,
     CONF_PRICING,
     CONF_START,
+    CONF_TEMPERATURE,
     CONF_UID,
+    CONF_WATER_ENERGY,
+    CONF_WATER_STATISTIC,
     CONF_WEEKEND_OFF_PEAK,
+    CONTENT_HEATING_WATER,
+    ENERGY_ELECTRICITY,
+    ENERGY_GAS,
     PRICING_OFFICIAL,
+    SECTION_HEATING,
     SUBENTRY_CONTRACT,
+    SUBENTRY_GAS_PRICE,
     SUBENTRY_PRICE_PERIOD,
 )
 
@@ -184,3 +197,84 @@ def periods_overlap(
     return (first_end is None or second_start <= first_end) and (
         second_end is None or first_start <= second_end
     )
+
+
+@dataclass(frozen=True, kw_only=True)
+class Heating:
+    """What heats the home and its water, from the options."""
+
+    statistics: tuple[str, ...]
+    """Statistics summed as the heating; electric ones are part of the source."""
+    gas: bool
+    with_water: bool
+    """The statistics hold the hot water as well."""
+    water_statistic: str | None
+    water_gas: bool
+    indoor: tuple[str, ...]
+    outdoor: str | None
+
+    @classmethod
+    def from_options(cls, options: Mapping[str, Any]) -> Heating:
+        """Read the heating section of the options; every key is optional."""
+        section: Mapping[str, Any] = options.get(SECTION_HEATING) or {}
+        return cls(
+            statistics=tuple(section.get(CONF_HEATING_STATISTICS) or ()),
+            gas=section.get(CONF_HEATING_ENERGY, ENERGY_ELECTRICITY) == ENERGY_GAS,
+            with_water=section.get(CONF_HEATING_CONTENT) == CONTENT_HEATING_WATER,
+            water_statistic=section.get(CONF_WATER_STATISTIC) or None,
+            water_gas=section.get(CONF_WATER_ENERGY, ENERGY_ELECTRICITY) == ENERGY_GAS,
+            indoor=tuple(section.get(CONF_INDOOR_TEMPERATURES) or ()),
+            outdoor=options.get(CONF_TEMPERATURE) or None,
+        )
+
+    @property
+    def measured(self) -> bool:
+        """Tell whether statistics measure the heating; without, it is estimated."""
+        return bool(self.statistics)
+
+    @property
+    def shown(self) -> bool:
+        """Tell whether there is anything to show about heating."""
+        return self.measured or self.outdoor is not None
+
+
+@dataclass(frozen=True, kw_only=True)
+class GasPrice:
+    """The price of a kWh of gas, from one day to another (None: still in force)."""
+
+    subentry_id: str
+    start: date
+    end: date | None
+    price: float
+
+    @classmethod
+    def from_subentry(cls, subentry: ConfigSubentry) -> GasPrice:
+        """Read a gas price subentry."""
+        data = subentry.data
+        return cls(
+            subentry_id=subentry.subentry_id,
+            start=date.fromisoformat(data[CONF_START]),
+            end=_optional_date(data.get(CONF_END)),
+            price=data[CONF_PRICE],
+        )
+
+    def covers(self, day: date) -> bool:
+        """Tell whether the price was in force on `day`."""
+        return self.start <= day and (self.end is None or day <= self.end)
+
+
+def gas_prices(entry: ConfigEntry) -> list[GasPrice]:
+    """Return the gas prices of an entry, oldest first."""
+    return sorted(
+        (
+            GasPrice.from_subentry(subentry)
+            for subentry in entry.subentries.values()
+            if subentry.subentry_type == SUBENTRY_GAS_PRICE
+        ),
+        key=lambda item: item.start,
+    )
+
+
+def gas_price_on(prices: list[GasPrice], day: date) -> float | None:
+    """Return the price of a kWh of gas on `day`, None if none was entered."""
+    return next((item.price for item in prices if item.covers(day)), None)

@@ -146,7 +146,7 @@ async def async_insights(
         for timestamp, cost in hours.get(statistic_id, []):
             if (costed := days.get(_local(timestamp).date())) is not None:
                 costed["cost"] += cost
-    temperature = _daily_means(temperatures)
+    temperature = daily_means(temperatures)
 
     return {
         "days": [
@@ -186,12 +186,12 @@ async def async_insights(
             energy_id=ids.energy,
         ),
         "weather": (
-            _weather(days, temperature) if temperature_id is not None else None
+            weather_fit(days, temperature) if temperature_id is not None else None
         ),
     }
 
 
-def _daily_means(rows: list[StatisticsRow]) -> dict[date, float]:
+def daily_means(rows: list[StatisticsRow]) -> dict[date, float]:
     """Average the hourly means of each day, French time."""
     by_day: dict[date, list[float]] = {}
     for row in rows:
@@ -241,7 +241,7 @@ def _baseload(  # noqa: PLR0913 - the nights, the window and the year
     }
 
 
-def _weather(
+def weather_fit(
     days: dict[date, dict[str, float]], temperature: dict[date, float]
 ) -> dict[str, Any]:
     """Split the consumption between the cold and the rest.
