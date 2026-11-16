@@ -103,6 +103,20 @@ async def test_the_last_days_are_asked_again(
 
 
 @pytest.mark.usefixtures("statistic")
+async def test_older_data_asks_the_days_before(
+    hass: HomeAssistant, sources: Sources
+) -> None:
+    entry = await setup_entry(hass, weather_entry())
+    coordinator = entry.runtime_data
+    # Older consumption imported, found again at the next setup.
+    coordinator._first_day = date(2026, 1, 1)
+    await coordinator.async_refresh()
+    assert asked(sources)[-1] == (*COORDINATES, date(2025, 12, 31), date(2026, 11, 7))
+    await coordinator.async_refresh()
+    assert asked(sources)[-1][2] == date(2026, 10, 31)
+
+
+@pytest.mark.usefixtures("statistic")
 async def test_a_sensor_comes_first(hass: HomeAssistant, sources: Sources) -> None:
     entry = await setup_entry(hass, weather_entry(**{CONF_TEMPERATURE: TEMPERATURE_ID}))
     assert asked(sources) == []
@@ -122,7 +136,10 @@ async def test_turning_it_off_clears_the_statistic(
 ) -> None:
     entry = await setup_entry(hass, weather_entry())
     store = f"{DOMAIN}.{entry.entry_id}.weather"
-    assert hass_storage[store]["data"] == {"coordinates": list(COORDINATES)}
+    assert hass_storage[store]["data"] == {
+        "coordinates": list(COORDINATES),
+        "first_day": "2026-02-28",
+    }
     hass.config_entries.async_update_entry(entry, options={})
     await hass.async_block_till_done()
     assert await hours(hass) == {}

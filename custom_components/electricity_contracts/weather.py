@@ -97,7 +97,7 @@ class WeatherWriter:
         ]
 
     async def async_load(self) -> None:
-        """Load the location the statistic was written for."""
+        """Load the location and first day the statistic was written for."""
         self._written = await self._store.async_load() or {}
 
     async def async_update(self, first_day: date, now: datetime) -> None:
@@ -120,9 +120,12 @@ class WeatherWriter:
             last = None
         else:
             last = await self._async_last_hour()
+        first = first_day - timedelta(days=1)
+        written_from = self._written.get("first_day")
         start = (
-            first_day - timedelta(days=1)
-            if last is None
+            first
+            # Older data arrived since: the days before are missing.
+            if last is None or (written_from and first.isoformat() < written_from)
             else last.date() - timedelta(days=REVISED_DAYS)
         )
         utc_now = now.astimezone(UTC)
@@ -137,8 +140,12 @@ class WeatherWriter:
         ]
         if rows:
             async_add_external_statistics(self.hass, self._metadata(), rows)
-        if self._written.get("coordinates") != coordinates:
-            self._written = {"coordinates": coordinates}
+        written = {
+            "coordinates": coordinates,
+            "first_day": min(start.isoformat(), written_from or start.isoformat()),
+        }
+        if self._written != written:
+            self._written = written
             await self._store.async_save(self._written)
 
     async def _async_last_hour(self) -> datetime | None:
