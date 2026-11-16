@@ -31,15 +31,16 @@ Le détail des champs et des options est dans [Configuration](docs/configuration
 
 Choisissez la période en haut de chaque onglet : mois, saison (septembre à août), année, 12 derniers mois ou dates.
 
-- **Suivi** : le contrat en cours et ses prix, le prix du kWh maintenant et sur 24 h, ce que demain devrait coûter, le budget de la saison (avec les jours Tempo rouges et blancs restants), puis le coût réel, la consommation et le prix moyen de la période, mois par mois avec la température extérieure.
+- **Suivi** : le contrat en cours et ses prix, le prix du kWh maintenant et sur 24 h, ce que demain devrait coûter, le budget de la saison (avec les jours Tempo rouges et blancs restants), puis le coût réel, la consommation et le prix moyen de la période, mois par mois avec la température extérieure, et la part du chauffage et de l'eau chaude quand leurs statistiques électriques sont renseignées.
 - **Comprendre** : journée type, heures pleines selon la couleur Tempo, talon, consommation selon la température, calendrier, jours les plus chers, part de chaque tranche dans les kWh et les euros.
+- **Chauffage** (avec une température extérieure ou des statistiques de chauffage) : coût et consommation du chauffage, sa part dans la maison, ce que coûte un degré de moins, chauffage par jour avec la température, répartition par radiateur et par tranche, journée type, lien avec la météo, et un simulateur de réglage (température dehors et dedans) qui donne le prix d'une journée à chaque tranche du contrat. Électricité ou gaz, avec ou sans eau chaude. La carte météo de l'onglet Comprendre y est déplacée.
 - **Comparer** : chaque contrat appliqué à votre consommation réelle, sur les mêmes heures, du moins cher au plus cher, et la facture détaillée du contrat choisi.
 
 | Comprendre | Comparer | Sur mobile |
 | --- | --- | --- |
 | ![Onglet Comprendre](https://raw.githubusercontent.com/damou8/electricity_contracts/main/docs/images/understand.webp) | ![Onglet Comparer](https://raw.githubusercontent.com/damou8/electricity_contracts/main/docs/images/compare.webp) | ![Onglet Suivi sur mobile](https://raw.githubusercontent.com/damou8/electricity_contracts/main/docs/images/mobile.webp) |
 
-Le budget de la saison et le coût de demain sont des estimations, d'après vos jours passés. Rien d'estimé n'est écrit dans les statistiques.
+Le budget de la saison et le coût de demain sont des estimations, d'après vos jours passés. Dans l'onglet Chauffage, le chauffage est estimé sans statistiques de chauffage, et l'eau chaude quand elle est comptée avec lui. Rien d'estimé n'est écrit dans les statistiques.
 
 ## Capteurs
 
@@ -112,11 +113,12 @@ Every field and option is described in [Configuration](docs/configuration.md#eng
 
 Pick the period at the top of each tab: month, season (September to August), year, last 12 months or dates.
 
-- **Overview**: the contract in force and its prices, the price of a kWh now and over 24 hours, what tomorrow should cost, the season budget (with the red and white Tempo days left), then the period's actual cost, consumption and average price, month by month with the outdoor temperature.
+- **Overview**: the contract in force and its prices, the price of a kWh now and over 24 hours, what tomorrow should cost, the season budget (with the red and white Tempo days left), then the period's actual cost, consumption and average price, month by month with the outdoor temperature, and the share of heating and hot water when their electric statistics are set.
 - **Understand**: typical day, peak hours by Tempo color, baseload, consumption against temperature, calendar, most expensive days, each tranche's share of kWh and euros.
+- **Heating** (with an outdoor temperature or heating statistics): what heating cost and used, its share of the home, what a degree colder costs, heating by day with the temperature, split by heater and by tranche, typical day, link with the weather, and a setting simulator (outdoor and indoor temperature) giving the price of a day at each tranche of the contract. Electricity or gas, with or without hot water. The Understand tab's weather card moves there.
 - **Compare**: each contract applied to your actual consumption, over the same hours, from cheapest to dearest, and the detailed bill of the chosen one.
 
-The season budget and tomorrow's cost are estimates, from your past days. Nothing estimated is written to the statistics.
+The season budget and tomorrow's cost are estimates, from your past days. In the Heating tab, heating is estimated without heating statistics, and hot water when it is counted with the heating. Nothing estimated is written to the statistics.
 
 ### Sensors
 

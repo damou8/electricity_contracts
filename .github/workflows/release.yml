@@ -21,8 +21,8 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Tag $TAG is not vX.Y.Z" >&2
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+            echo "Tag $TAG is not vX.Y.Z or vX.Y.Z-beta.N" >&2
             exit 1
           fi
           python3 scripts/set_version.py "${TAG#v}"

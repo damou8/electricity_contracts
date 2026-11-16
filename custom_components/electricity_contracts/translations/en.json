@@ -43,9 +43,28 @@
           "temperature": "Outdoor temperature (optional)"
         },
         "data_description": {
-          "temperature": "Puts the consumption next to the weather, in the Understand tab. The sensor must keep statistics."
+          "temperature": "Puts the consumption next to the weather, in the Heating tab. The sensor must keep statistics."
         },
         "sections": {
+          "heating": {
+            "name": "Heating and hot water",
+            "description": "Optional: the statistics that measure your heating. Without them, the Heating tab estimates it from the consumption and the outdoor temperature.",
+            "data": {
+              "heating_statistics": "Heating consumption statistics",
+              "heating_energy": "Energy",
+              "heating_content": "What they measure",
+              "water_statistic": "Water heater (optional)",
+              "water_energy": "Water heater energy",
+              "indoor_temperatures": "Indoor thermometers (optional)"
+            },
+            "data_description": {
+              "heating_statistics": "One or several energy totals (one per heater, or the gas meter); they are summed. Electric ones are already part of the consumption source.",
+              "heating_energy": "Electricity is costed at the prices of your contracts, hour by hour; gas at the gas prices you add as \"Gas price\".",
+              "heating_content": "When the statistics also hold the hot water, it is estimated from the days without heating, unless the water heater has its own statistic.",
+              "water_statistic": "Its own statistic, if it is tracked separately: hot water is then measured.",
+              "indoor_temperatures": "Averaged. The setting simulator starts from this temperature; without it, the simulator is off."
+            }
+          },
           "rte": {
             "name": "Tempo backup: RTE's official API",
             "description": "Optional, for when RTE's public calendar stops answering: create a free application for the \"Tempo Like Supply Contract\" API on data.rte-france.com and enter its credentials.",
@@ -63,7 +82,22 @@
       "statistic_no_mean": "This sensor has no hourly mean: it needs the measurement state class.",
       "incomplete_credentials": "Enter both the client ID and the secret, or neither.",
       "invalid_auth": "RTE refused these credentials.",
-      "cannot_connect": "Could not reach RTE. Try again later."
+      "cannot_connect": "Could not reach RTE. Try again later.",
+      "heating_is_source": "Heating statistics: one of them is the consumption source itself. Choose the statistics of the heating alone.",
+      "heating_statistic_not_found": "Heating statistics: one of them has no statistics.",
+      "heating_statistic_not_energy": "Heating statistics: one of them isn't an energy (Wh, kWh…).",
+      "heating_statistic_no_sum": "Heating statistics: one of them has no running total. Choose consumption statistics.",
+      "heating_statistic_no_data": "Heating statistics: one of them has no data yet.",
+      "water_is_source": "Water heater: this is the consumption source itself. Choose the statistic of the water heater alone.",
+      "water_statistic_not_found": "Water heater: this statistic doesn't exist.",
+      "water_statistic_not_energy": "Water heater: this statistic isn't an energy (Wh, kWh…).",
+      "water_statistic_no_sum": "Water heater: this statistic has no running total. Choose a consumption statistic.",
+      "water_statistic_no_data": "Water heater: this statistic has no data yet.",
+      "water_in_heating": "Water heater: it is already one of the heating statistics.",
+      "water_other_energy": "Water heater: your heating statistics hold the hot water, so the water heater must use the same energy.",
+      "indoor_statistic_not_found": "Indoor thermometers: one of them keeps no statistics. It needs the measurement state class.",
+      "indoor_statistic_not_temperature": "Indoor thermometers: one of them doesn't measure a temperature (°C, °F…).",
+      "indoor_statistic_no_mean": "Indoor thermometers: one of them has no hourly mean. It needs the measurement state class."
     }
   },
   "config_subentries": {
@@ -206,6 +240,45 @@
         "no_manual_contracts": "Add a contract with prices you set yourself first.",
         "contract_not_found": "The contract of this price period no longer exists, or now uses regulated prices."
       }
+    },
+    "gas_price": {
+      "entry_type": "Gas price",
+      "initiate_flow": {
+        "user": "Add a gas price",
+        "reconfigure": "Change the gas price"
+      },
+      "step": {
+        "user": {
+          "title": "New gas price",
+          "description": "The price of a kWh of gas, from one day to another. It turns the gas heating into euros.",
+          "data": {
+            "price": "Price per kWh, taxes included",
+            "start": "First day",
+            "end": "Last day"
+          },
+          "data_description": {
+            "start": "Day the price came into force.",
+            "end": "Leave empty while the price is still in force."
+          }
+        },
+        "reconfigure": {
+          "title": "Change the gas price",
+          "description": "The price of a kWh of gas, from one day to another.",
+          "data": {
+            "price": "Price per kWh, taxes included",
+            "start": "First day",
+            "end": "Last day"
+          },
+          "data_description": {
+            "start": "Day the price came into force.",
+            "end": "Leave empty while the price is still in force."
+          }
+        }
+      },
+      "error": {
+        "end_before_start": "The last day is before the first one.",
+        "overlapping_gas_price": "Another gas price covers some of these days."
+      }
     }
   },
   "selector": {
@@ -228,6 +301,18 @@
         "23_07": "23:00 – 7:00",
         "2230_0630": "22:30 – 6:30",
         "other": "Other hours…"
+      }
+    },
+    "energy": {
+      "options": {
+        "electricity": "Electricity, part of the consumption source",
+        "gas": "Gas, outside the electricity bill"
+      }
+    },
+    "heating_content": {
+      "options": {
+        "heating": "The heating",
+        "heating_water": "The heating and the hot water"
       }
     }
   },

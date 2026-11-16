@@ -48,6 +48,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
     StatisticSelector,
+    StatisticSelectorConfig,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -60,9 +61,14 @@ from .const import (
     CONF_CONTRACT,
     CONF_END,
     CONF_FIXED_PER_YEAR,
+    CONF_HEATING_CONTENT,
+    CONF_HEATING_ENERGY,
+    CONF_HEATING_STATISTICS,
+    CONF_INDOOR_TEMPERATURES,
     CONF_KIND,
     CONF_KVA,
     CONF_OFF_PEAK,
+    CONF_PRICE,
     CONF_PRICES,
     CONF_PRICING,
     CONF_RTE_CLIENT_ID,
@@ -71,23 +77,32 @@ from .const import (
     CONF_STATISTIC_ID,
     CONF_TEMPERATURE,
     CONF_UID,
+    CONF_WATER_ENERGY,
+    CONF_WATER_STATISTIC,
     CONF_WEEKEND_OFF_PEAK,
+    CONTENT_HEATING,
+    CONTENT_HEATING_WATER,
     DEFAULT_KVA,
     DOMAIN,
+    ENERGY_ELECTRICITY,
+    ENERGY_GAS,
     OFF_PEAK_OTHER,
     OFF_PEAK_PRESETS,
     OFFERED_KVA,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
     SECTION_ACTIVE,
+    SECTION_HEATING,
     SECTION_RTE,
     SUBENTRY_CONTRACT,
+    SUBENTRY_GAS_PRICE,
     SUBENTRY_PRICE_PERIOD,
 )
 from .data import (
     Contract,
     contracts,
     format_time_range,
+    gas_prices,
     manual_prices,
     parse_time_range,
     periods_overlap,
@@ -100,6 +115,39 @@ _DAILY_SECONDS = 23 * 3600
 
 STATISTIC_SCHEMA = vol.Schema({vol.Required(CONF_STATISTIC_ID): StatisticSelector()})
 
+ENERGY_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[ENERGY_ELECTRICITY, ENERGY_GAS],
+        translation_key="energy",
+        mode=SelectSelectorMode.LIST,
+    )
+)
+HEATING_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_HEATING_STATISTICS): StatisticSelector(
+            StatisticSelectorConfig(multiple=True)
+        ),
+        vol.Optional(CONF_HEATING_ENERGY, default=ENERGY_ELECTRICITY): ENERGY_SELECTOR,
+        vol.Optional(CONF_HEATING_CONTENT, default=CONTENT_HEATING): SelectSelector(
+            SelectSelectorConfig(
+                options=[CONTENT_HEATING, CONTENT_HEATING_WATER],
+                translation_key=CONF_HEATING_CONTENT,
+                mode=SelectSelectorMode.LIST,
+            )
+        ),
+        vol.Optional(CONF_WATER_STATISTIC): StatisticSelector(),
+        vol.Optional(CONF_WATER_ENERGY, default=ENERGY_ELECTRICITY): ENERGY_SELECTOR,
+        # The statistics of a sensor go by its entity ID.
+        vol.Optional(CONF_INDOOR_TEMPERATURES): EntitySelector(
+            EntitySelectorConfig(
+                domain=SENSOR_DOMAIN,
+                device_class=SensorDeviceClass.TEMPERATURE,
+                multiple=True,
+            )
+        ),
+    }
+)
+
 OPTIONS_SCHEMA = vol.Schema(
     {
         # The statistics of a sensor go by its entity ID.
@@ -108,6 +156,7 @@ OPTIONS_SCHEMA = vol.Schema(
                 domain=SENSOR_DOMAIN, device_class=SensorDeviceClass.TEMPERATURE
             )
         ),
+        vol.Required(SECTION_HEATING): section(HEATING_SCHEMA, {"collapsed": False}),
         vol.Required(SECTION_RTE): section(
             vol.Schema(
                 {
@@ -191,10 +240,13 @@ class InvalidStatisticError(Exception):
         self.reason = reason
 
 
-async def async_validate_statistic(hass: HomeAssistant, statistic_id: str) -> str:
+async def async_validate_statistic(
+    hass: HomeAssistant, statistic_id: str, *, daily: bool = False
+) -> str:
     """Check that a statistic is an energy total with data; return its name.
 
-    Raise InvalidStatisticError otherwise.
+    Only daily values are refused unless `daily` is true. Raise
+    InvalidStatisticError otherwise.
     """
     recorder = get_instance(hass)
     metadata = await recorder.async_add_executor_job(
@@ -215,7 +267,11 @@ async def async_validate_statistic(hass: HomeAssistant, statistic_id: str) -> st
     rows = last.get(statistic_id)
     if not rows:
         raise InvalidStatisticError(reason="statistic_no_data")
-    if len(rows) == 2 and rows[0]["start"] - rows[1]["start"] >= _DAILY_SECONDS:  # noqa: PLR2004
+    if (
+        not daily
+        and len(rows) == 2  # noqa: PLR2004
+        and rows[0]["start"] - rows[1]["start"] >= _DAILY_SECONDS
+    ):
         # Only daily values: they can't be split between off-peak and peak hours.
         raise InvalidStatisticError(reason="statistic_daily")
     return meta["name"] or statistic_id
@@ -349,25 +405,34 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
         return {
             SUBENTRY_CONTRACT: ContractSubentryFlow,
             SUBENTRY_PRICE_PERIOD: PricePeriodSubentryFlow,
+            SUBENTRY_GAS_PRICE: GasPriceSubentryFlow,
         }
 
 
 class ElectricityContractsOptionsFlow(OptionsFlow):
-    """Set the outdoor temperature and the RTE credentials, both optional."""
+    """Set the outdoor temperature, the heating and the RTE credentials.
+
+    All are optional.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Check the temperature and the credentials before saving them."""
+        """Check the temperatures, statistics and credentials before saving them."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            options: dict[str, str] = {}
+            options: dict[str, Any] = {}
             if temperature := user_input.get(CONF_TEMPERATURE):
                 try:
                     await async_validate_temperature(self.hass, temperature)
                 except InvalidStatisticError as err:
                     errors[CONF_TEMPERATURE] = err.reason
                 options[CONF_TEMPERATURE] = temperature
+            heating = await self._validate_heating(
+                user_input.get(SECTION_HEATING, {}), errors
+            )
+            if heating:
+                options[SECTION_HEATING] = heating
             rte = user_input.get(SECTION_RTE, {})
             client_id = rte.get(CONF_RTE_CLIENT_ID, "").strip()
             client_secret = rte.get(CONF_RTE_CLIENT_SECRET, "").strip()
@@ -384,8 +449,10 @@ class ElectricityContractsOptionsFlow(OptionsFlow):
                 key: current[key]
                 for key in (CONF_RTE_CLIENT_ID, CONF_RTE_CLIENT_SECRET)
                 if current.get(key)
-            }
+            },
         }
+        if current.get(SECTION_HEATING):
+            suggested[SECTION_HEATING] = dict(current[SECTION_HEATING])
         if current.get(CONF_TEMPERATURE):
             suggested[CONF_TEMPERATURE] = current[CONF_TEMPERATURE]
         return self.async_show_form(
@@ -395,6 +462,64 @@ class ElectricityContractsOptionsFlow(OptionsFlow):
             ),
             errors=errors,
         )
+
+    async def _validate_heating(
+        self, heating: dict[str, Any], errors: dict[str, str]
+    ) -> dict[str, Any]:
+        """Check the heating section; return what to keep of it.
+
+        Its statistics may hold daily values: those days are only counted in kWh.
+        Errors go to the whole form: the frontend doesn't show those of a field
+        inside a section.
+        """
+        statistics = list(dict.fromkeys(heating.get(CONF_HEATING_STATISTICS) or []))
+        water: str | None = heating.get(CONF_WATER_STATISTIC) or None
+        indoor: list[str] = list(heating.get(CONF_INDOOR_TEMPERATURES) or [])
+        energy = heating.get(CONF_HEATING_ENERGY, ENERGY_ELECTRICITY)
+        content = heating.get(CONF_HEATING_CONTENT, CONTENT_HEATING)
+        water_energy = heating.get(CONF_WATER_ENERGY, ENERGY_ELECTRICITY)
+        if error := await self._energy_error(statistics):
+            errors["base"] = f"heating_{error}"
+        if water and water in statistics:
+            errors["base"] = "water_in_heating"
+        elif water and (error := await self._energy_error([water])):
+            errors["base"] = f"water_{error}"
+        elif (
+            water
+            and statistics
+            and content == CONTENT_HEATING_WATER
+            and water_energy != energy
+        ):
+            # The heating statistics would hold hot water of another energy.
+            errors["base"] = "water_other_energy"
+        for entity_id in indoor:
+            try:
+                await async_validate_temperature(self.hass, entity_id)
+            except InvalidStatisticError as err:
+                errors["base"] = f"indoor_{err.reason}"
+                break
+        kept: dict[str, Any] = {}
+        if statistics:
+            kept[CONF_HEATING_STATISTICS] = statistics
+            kept[CONF_HEATING_ENERGY] = energy
+            kept[CONF_HEATING_CONTENT] = content
+        if water:
+            kept[CONF_WATER_STATISTIC] = water
+            kept[CONF_WATER_ENERGY] = water_energy
+        if indoor:
+            kept[CONF_INDOOR_TEMPERATURES] = indoor
+        return kept
+
+    async def _energy_error(self, statistic_ids: list[str]) -> str | None:
+        """Return why one of the statistics can't be used, None if all can."""
+        for statistic_id in statistic_ids:
+            if statistic_id == self.config_entry.data[CONF_STATISTIC_ID]:
+                return "is_source"
+            try:
+                await async_validate_statistic(self.hass, statistic_id, daily=True)
+            except InvalidStatisticError as err:
+                return err.reason
+        return None
 
     async def _check_credentials(
         self, client_id: str, client_secret: str
@@ -842,3 +967,81 @@ class PricePeriodSubentryFlow(ConfigSubentryFlow):
             CONF_FIXED_PER_YEAR: user_input[CONF_FIXED_PER_YEAR],
         }
         return True
+
+
+class GasPriceSubentryFlow(ConfigSubentryFlow):
+    """Add or change the price of a kWh of gas, from one day to another."""
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Enter a price and the days it applies to."""
+        return await self._async_step_price("user", user_input, exclude=None)
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Change a price or its days."""
+        subentry = self._get_reconfigure_subentry()
+        return await self._async_step_price(
+            "reconfigure", user_input, exclude=subentry.subentry_id
+        )
+
+    async def _async_step_price(
+        self, step_id: str, user_input: dict[str, Any] | None, *, exclude: str | None
+    ) -> SubentryFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            start = date.fromisoformat(user_input[CONF_START])
+            end = _date(user_input.get(CONF_END))
+            if end and end < start:
+                errors[CONF_END] = "end_before_start"
+            elif any(
+                periods_overlap((start, end), (other.start, other.end))
+                for other in gas_prices(self._get_entry())
+                if other.subentry_id != exclude
+            ):
+                errors["base"] = "overlapping_gas_price"
+            else:
+                price = float(user_input[CONF_PRICE])
+                data = {
+                    CONF_START: start.isoformat(),
+                    CONF_END: end.isoformat() if end else None,
+                    CONF_PRICE: price,
+                }
+                title = f"{price:.4f} €/kWh · {start} → {end or '…'}"
+                if exclude is None:
+                    return self.async_create_entry(title=title, data=data)
+                return self.async_update_and_abort(
+                    self._get_entry(),
+                    self._get_reconfigure_subentry(),
+                    title=title,
+                    data=data,
+                )
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_PRICE): NumberSelector(
+                    NumberSelectorConfig(
+                        min=0,
+                        max=10,
+                        step="any",
+                        unit_of_measurement="€/kWh",
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Required(CONF_START): DateSelector(),
+                vol.Optional(CONF_END): DateSelector(),
+            }
+        )
+        suggested = (
+            user_input
+            if user_input is not None
+            else (
+                None if exclude is None else dict(self._get_reconfigure_subentry().data)
+            )
+        )
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            errors=errors,
+        )

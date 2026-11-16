@@ -36,11 +36,13 @@ from .coordinator import (
 )
 from .data import (
     Contract,
+    Heating,
     contracts,
     format_time_range,
     manual_prices,
     price_periods,
 )
+from .heating import async_heating
 from .insights import async_insights
 from .outlook import async_outlook
 from .statistics import SeriesStatus
@@ -62,6 +64,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     async_register_command(hass, ws_compare)
     async_register_command(hass, ws_bill)
     async_register_command(hass, ws_insights)
+    async_register_command(hass, ws_heating)
     async_register_command(hass, ws_outlook)
 
 
@@ -172,6 +175,7 @@ def ws_entries(
                     for contract in entry_contracts
                 ],
                 "actual": status.actual is not None,
+                "heating": _heating(Heating.from_options(entry.options)),
             }
         )
     connection.send_result(msg["id"], result)
@@ -299,6 +303,47 @@ async def ws_insights(
             end=day_start(end + timedelta(days=1)),
         ),
     )
+
+
+@websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/heating",
+        vol.Required(ATTR_ENTRY_ID): cv.string,
+        vol.Required(ATTR_START): cv.date,
+        vol.Required(ATTR_END): cv.date,
+    }
+)
+@async_response
+async def ws_heating(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Describe what heating used and cost from one day to another, both included."""
+    if (entry := _loaded_entry(hass, connection, msg)) is None or (
+        window := _window(connection, msg)
+    ) is None:
+        return
+    start, end = window
+    connection.send_result(
+        msg["id"],
+        await async_heating(
+            hass,
+            entry=entry,
+            start=day_start(start),
+            end=day_start(end + timedelta(days=1)),
+        ),
+    )
+
+
+def _heating(heating: Heating) -> dict[str, Any] | None:
+    """Say what the Heating tab can show, None when it has nothing to show."""
+    if not heating.shown:
+        return None
+    return {
+        "measured": heating.measured,
+        "gas": heating.gas,
+        "with_water": heating.with_water or heating.water_statistic is not None,
+        "indoor": bool(heating.indoor),
+    }
 
 
 @websocket_command(

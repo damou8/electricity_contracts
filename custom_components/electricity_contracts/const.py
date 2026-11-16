@@ -14,12 +14,26 @@ CONF_RTE_CLIENT_SECRET: Final = "rte_client_secret"  # noqa: S105 - a key
 CONF_TEMPERATURE: Final = "temperature"
 # The options' collapsed section of the RTE credentials.
 SECTION_RTE: Final = "rte"
+# The options' section of what heats the home and its water.
+SECTION_HEATING: Final = "heating"
+CONF_HEATING_STATISTICS: Final = "heating_statistics"
+CONF_HEATING_ENERGY: Final = "heating_energy"
+CONF_HEATING_CONTENT: Final = "heating_content"
+CONF_WATER_STATISTIC: Final = "water_statistic"
+CONF_WATER_ENERGY: Final = "water_energy"
+CONF_INDOOR_TEMPERATURES: Final = "indoor_temperatures"
+ENERGY_ELECTRICITY: Final = "electricity"
+ENERGY_GAS: Final = "gas"
+CONTENT_HEATING: Final = "heating"
+CONTENT_HEATING_WATER: Final = "heating_water"
 
 SERVICE_RECOMPUTE: Final = "recompute"
 SERVICE_COMPARE: Final = "compare"
 
 SUBENTRY_CONTRACT: Final = "contract"
 SUBENTRY_PRICE_PERIOD: Final = "price_period"
+SUBENTRY_GAS_PRICE: Final = "gas_price"
+CONF_PRICE: Final = "price"
 # Removed in 0.2: comparisons are made on the Contracts page.
 SUBENTRY_COMPARISON: Final = "comparison"
 

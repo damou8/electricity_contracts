@@ -43,9 +43,28 @@
           "temperature": "Température extérieure (facultatif)"
         },
         "data_description": {
-          "temperature": "Relie la consommation à la météo, dans l'onglet Comprendre. Le capteur doit garder des statistiques."
+          "temperature": "Relie la consommation à la météo, dans l'onglet Chauffage. Le capteur doit garder des statistiques."
         },
         "sections": {
+          "heating": {
+            "name": "Chauffage et eau chaude",
+            "description": "Facultatif : les statistiques qui mesurent votre chauffage. Sans elles, l'onglet Chauffage l'estime à partir de la consommation et de la température extérieure.",
+            "data": {
+              "heating_statistics": "Statistiques de consommation du chauffage",
+              "heating_energy": "Énergie",
+              "heating_content": "Ce qu'elles mesurent",
+              "water_statistic": "Ballon d'eau chaude (facultatif)",
+              "water_energy": "Énergie du ballon",
+              "indoor_temperatures": "Thermomètres intérieurs (facultatif)"
+            },
+            "data_description": {
+              "heating_statistics": "Un ou plusieurs totaux d'énergie (un par radiateur, ou le compteur de gaz), additionnés. L'électricité est déjà comptée dans la source de consommation.",
+              "heating_energy": "L'électricité est valorisée aux prix de vos contrats, heure par heure ; le gaz aux prix du gaz que vous ajoutez dans « Prix du gaz ».",
+              "heating_content": "Quand elles comptent aussi l'eau chaude, celle-ci est estimée à partir des jours sans chauffage, sauf si le ballon a sa propre statistique.",
+              "water_statistic": "Sa propre statistique, s'il est suivi à part : l'eau chaude est alors mesurée.",
+              "indoor_temperatures": "Moyennés. Le simulateur de réglage part de cette température ; sans elle, il est désactivé."
+            }
+          },
           "rte": {
             "name": "Secours Tempo : API officielle RTE",
             "description": "Facultatif, si le calendrier public de RTE ne répond plus : créez une application gratuite pour l'API « Tempo Like Supply Contract » sur data.rte-france.com et saisissez ses identifiants.",
@@ -63,7 +82,22 @@
       "statistic_no_mean": "Ce capteur n'a pas de moyenne horaire : il lui faut la classe d'état measurement.",
       "incomplete_credentials": "Saisissez l'ID client et le secret, ou aucun des deux.",
       "invalid_auth": "RTE a refusé ces identifiants.",
-      "cannot_connect": "Impossible de joindre RTE. Réessayez plus tard."
+      "cannot_connect": "Impossible de joindre RTE. Réessayez plus tard.",
+      "heating_is_source": "Statistiques du chauffage : l'une d'elles est la source de consommation elle-même. Choisissez les statistiques du chauffage seul.",
+      "heating_statistic_not_found": "Statistiques du chauffage : l'une d'elles n'a pas de statistiques.",
+      "heating_statistic_not_energy": "Statistiques du chauffage : l'une d'elles n'est pas une énergie (Wh, kWh…).",
+      "heating_statistic_no_sum": "Statistiques du chauffage : l'une d'elles n'a pas de total cumulé. Choisissez des statistiques de consommation.",
+      "heating_statistic_no_data": "Statistiques du chauffage : l'une d'elles n'a pas encore de données.",
+      "water_is_source": "Ballon d'eau chaude : c'est la source de consommation elle-même. Choisissez la statistique du ballon seul.",
+      "water_statistic_not_found": "Ballon d'eau chaude : cette statistique n'existe pas.",
+      "water_statistic_not_energy": "Ballon d'eau chaude : cette statistique n'est pas une énergie (Wh, kWh…).",
+      "water_statistic_no_sum": "Ballon d'eau chaude : cette statistique n'a pas de total cumulé. Choisissez une statistique de consommation.",
+      "water_statistic_no_data": "Ballon d'eau chaude : cette statistique n'a pas encore de données.",
+      "water_in_heating": "Ballon d'eau chaude : il fait déjà partie des statistiques du chauffage.",
+      "water_other_energy": "Ballon d'eau chaude : vos statistiques du chauffage comptent l'eau chaude, le ballon doit donc avoir la même énergie qu'elles.",
+      "indoor_statistic_not_found": "Thermomètres intérieurs : l'un d'eux ne garde pas de statistiques. Il lui faut la classe d'état measurement.",
+      "indoor_statistic_not_temperature": "Thermomètres intérieurs : l'un d'eux ne mesure pas une température (°C, °F…).",
+      "indoor_statistic_no_mean": "Thermomètres intérieurs : l'un d'eux n'a pas de moyenne horaire. Il lui faut la classe d'état measurement."
     }
   },
   "config_subentries": {
@@ -206,6 +240,45 @@
         "no_manual_contracts": "Ajoutez d'abord un contrat dont vous fixez les prix vous-même.",
         "contract_not_found": "Le contrat de cette période de prix n'existe plus, ou utilise maintenant les tarifs réglementés."
       }
+    },
+    "gas_price": {
+      "entry_type": "Prix du gaz",
+      "initiate_flow": {
+        "user": "Ajouter un prix du gaz",
+        "reconfigure": "Modifier le prix du gaz"
+      },
+      "step": {
+        "user": {
+          "title": "Nouveau prix du gaz",
+          "description": "Le prix d'un kWh de gaz, d'un jour à un autre. Il donne le chauffage au gaz en euros.",
+          "data": {
+            "price": "Prix du kWh, TTC",
+            "start": "Premier jour",
+            "end": "Dernier jour"
+          },
+          "data_description": {
+            "start": "Jour d'entrée en vigueur du prix.",
+            "end": "Laissez vide si le prix est toujours en vigueur."
+          }
+        },
+        "reconfigure": {
+          "title": "Modifier le prix du gaz",
+          "description": "Le prix d'un kWh de gaz, d'un jour à un autre.",
+          "data": {
+            "price": "Prix du kWh, TTC",
+            "start": "Premier jour",
+            "end": "Dernier jour"
+          },
+          "data_description": {
+            "start": "Jour d'entrée en vigueur du prix.",
+            "end": "Laissez vide si le prix est toujours en vigueur."
+          }
+        }
+      },
+      "error": {
+        "end_before_start": "Le dernier jour est avant le premier.",
+        "overlapping_gas_price": "Un autre prix du gaz couvre une partie de ces jours."
+      }
     }
   },
   "selector": {
@@ -228,6 +301,18 @@
         "23_07": "23 h – 7 h",
         "2230_0630": "22 h 30 – 6 h 30",
         "other": "Autres plages…"
+      }
+    },
+    "energy": {
+      "options": {
+        "electricity": "Électricité, comptée dans la source de consommation",
+        "gas": "Gaz, hors facture d'électricité"
+      }
+    },
+    "heating_content": {
+      "options": {
+        "heating": "Le chauffage",
+        "heating_water": "Le chauffage et l'eau chaude"
       }
     }
   },

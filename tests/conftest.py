@@ -90,6 +90,14 @@ TEMPO_PERIODS = [
         },
     ),
 ]
+HPHC_PERIODS = [
+    PricePeriod(
+        start=date(2026, 2, 1),
+        end=None,
+        fixed_per_year=199.0,
+        prices={Tranche.HC: 0.1615, Tranche.HP: 0.2081},
+    ),
+]
 BASE_PERIODS = [
     PricePeriod(
         start=date(2026, 2, 1),
@@ -343,9 +351,11 @@ class Sources:
     @staticmethod
     async def _prices(kind: ContractKind, kva: int) -> list[PricePeriod]:
         del kva
-        return {ContractKind.TEMPO: TEMPO_PERIODS, ContractKind.BASE: BASE_PERIODS}[
-            kind
-        ]
+        return {
+            ContractKind.TEMPO: TEMPO_PERIODS,
+            ContractKind.BASE: BASE_PERIODS,
+            ContractKind.HPHC: HPHC_PERIODS,
+        }[kind]
 
     def fail_prices(self) -> None:
         """Make data.gouv.fr unreachable."""

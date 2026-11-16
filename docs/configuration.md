@@ -36,8 +36,20 @@ Le contrat est comparé dès que ses prix couvrent les jours mesurés. Pour comp
 ## Options
 
 Dans la fenêtre **Configurer** de l'intégration :
-- **Température extérieure** (facultatif) : un capteur de température qui garde des statistiques. Il relie la consommation à la météo dans l'onglet Comprendre, et ajoute la température au graphique d'évolution.
-- **Secours Tempo : API officielle RTE** (section repliée) : voir ci-dessous.
+- **Température extérieure** (facultatif) : un capteur de température qui garde des statistiques. Il relie la consommation à la météo, ajoute la température au graphique d'évolution et fait apparaître l'onglet Chauffage.
+- **Chauffage et eau chaude** : voir ci-dessous.
+- **Secours Tempo : API officielle RTE** (section repliée) : voir plus bas.
+
+## Chauffage et eau chaude (facultatif)
+
+Sans rien de plus que la température extérieure, l'onglet Chauffage estime le chauffage à partir de la consommation de la source et de la météo. Pour le mesurer, renseignez dans la section **Chauffage et eau chaude** :
+- **Statistiques de consommation du chauffage** : un ou plusieurs totaux d'énergie en kWh (un par radiateur, ou le compteur de gaz), additionnés. Des statistiques relevées une fois par jour sont acceptées : ces jours-là sont comptés en kWh, sans journée type.
+- **Énergie** : électricité, déjà comptée dans la source et valorisée aux prix du contrat en vigueur, heure par heure ; ou gaz, hors facture d'électricité.
+- **Ce qu'elles mesurent** : le chauffage, ou le chauffage et l'eau chaude. Dans ce cas, l'eau chaude de chaque jour est estimée à ce que ces statistiques consomment un jour sans chauffage : la médiane des jours à 18 °C ou plus dehors sur les 12 derniers mois, s'il y en a au moins 7.
+- **Ballon d'eau chaude** (facultatif) : sa propre statistique, s'il est suivi à part, et son énergie. L'eau chaude est alors mesurée ; si elle est aussi dans les statistiques du chauffage, elle en est retirée, et le ballon doit avoir la même énergie qu'elles.
+- **Thermomètres intérieurs** (facultatif) : une ou plusieurs températures, moyennées. Le simulateur de réglage part de cette température ; sans elle, il est désactivé.
+
+Pour le gaz, **Ajouter un prix du gaz** pour chaque prix : le prix du kWh TTC, le premier et le dernier jour (vide s'il est toujours en vigueur). Sans prix, le gaz est compté en kWh seulement. Les prix ne peuvent pas se chevaucher.
 
 ## Compte RTE (facultatif)
 
@@ -77,8 +89,18 @@ Les identifiants sont vérifiés à l'enregistrement. Laissez les deux champs vi
 The contract is compared once its prices cover the measured days. To compare an offer over your whole history, its first period can start before the offer existed. Periods of one contract can't overlap. Deleting a contract deletes its price periods.
 
 **Options**, in the integration's **Configure** dialog:
-- **Outdoor temperature** (optional): a temperature sensor that keeps statistics. It relates the consumption to the weather in the Understand tab, and adds the temperature to the trend chart.
-- **Tempo backup: RTE's official API** (a collapsed section): see below.
+- **Outdoor temperature** (optional): a temperature sensor that keeps statistics. It relates the consumption to the weather, adds the temperature to the trend chart and brings the Heating tab.
+- **Heating and hot water**: see below.
+- **Tempo backup: RTE's official API** (a collapsed section): see further down.
+
+**Heating and hot water (optional)**: with nothing but the outdoor temperature, the Heating tab estimates the heating from the source's consumption and the weather. To measure it, fill the **Heating and hot water** section:
+- **Heating consumption statistics**: one or several energy totals in kWh (one per heater, or the gas meter), summed. Statistics read once a day are accepted: those days are counted in kWh, without a typical day.
+- **Energy**: electricity, already part of the source and costed at the prices of the contract in force, hour by hour; or gas, outside the electricity bill.
+- **What they measure**: the heating, or the heating and the hot water. Then each day's hot water is estimated as what these statistics use on a day without heating: the median of the days at 18 °C or more outside over the last 12 months, when there are at least 7.
+- **Water heater** (optional): its own statistic, if it is tracked separately, and its energy. Hot water is then measured; if the heating statistics hold it too, it is taken out of them, and the water heater must use the same energy.
+- **Indoor thermometers** (optional): one or several temperatures, averaged. The setting simulator starts from this temperature; without it, the simulator is off.
+
+For gas, **Add a gas price** for each price: the price per kWh with taxes, the first and last day (empty while in force). Without a price, gas is counted in kWh only. Prices can't overlap.
 
 **RTE account (optional)**: Tempo colors come from RTE's public calendar, which needs no account. If it stops working, the integration can use RTE's official API instead. In the integration's **Configure** dialog, section **Tempo backup: RTE's official API**, enter the client ID and secret of an application created for free:
 1. Create an account on [data.rte-france.com](https://data.rte-france.com).

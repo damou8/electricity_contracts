@@ -107,6 +107,7 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
                 },
             ],
             "actual": True,
+            "heating": None,
         }
     ]
 

@@ -6,7 +6,11 @@ from typing import Any
 import pytest
 from elec_tariffs import ContractKind, TempoAuthError, TempoError
 from homeassistant.components.recorder.models import StatisticMeanType
-from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER
+from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
+    SOURCE_USER,
+    ConfigSubentryData,
+)
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType, section
@@ -20,9 +24,14 @@ from custom_components.electricity_contracts.const import (
     CONF_CONTRACT,
     CONF_END,
     CONF_FIXED_PER_YEAR,
+    CONF_HEATING_CONTENT,
+    CONF_HEATING_ENERGY,
+    CONF_HEATING_STATISTICS,
+    CONF_INDOOR_TEMPERATURES,
     CONF_KIND,
     CONF_KVA,
     CONF_OFF_PEAK,
+    CONF_PRICE,
     CONF_PRICES,
     CONF_PRICING,
     CONF_RTE_CLIENT_ID,
@@ -31,14 +40,22 @@ from custom_components.electricity_contracts.const import (
     CONF_STATISTIC_ID,
     CONF_TEMPERATURE,
     CONF_UID,
+    CONF_WATER_ENERGY,
+    CONF_WATER_STATISTIC,
     CONF_WEEKEND_OFF_PEAK,
+    CONTENT_HEATING,
+    CONTENT_HEATING_WATER,
     DOMAIN,
+    ENERGY_ELECTRICITY,
+    ENERGY_GAS,
     OFF_PEAK_OTHER,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
     SECTION_ACTIVE,
+    SECTION_HEATING,
     SECTION_RTE,
     SUBENTRY_CONTRACT,
+    SUBENTRY_GAS_PRICE,
     SUBENTRY_PRICE_PERIOD,
 )
 
@@ -56,6 +73,7 @@ from .conftest import (
     make_entry,
     price_period_subentry,
 )
+from .test_heating import GAS, HEATER_A, INDOOR, WATER, add_energy, add_indoor
 
 # Source entry.
 
@@ -213,15 +231,19 @@ async def options_flow(hass: HomeAssistant, user_input: dict[str, Any]) -> Any:
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "init"
+    # The frontend always sends every section.
     return await hass.config_entries.options.async_configure(
-        result["flow_id"], user_input
+        result["flow_id"], {SECTION_HEATING: {}, SECTION_RTE: {}, **user_input}
     )
 
 
 def credentials(client_id: str | None = None, secret: str | None = None) -> Any:
     """Fill the RTE section of the options."""
     values = {CONF_RTE_CLIENT_ID: client_id, CONF_RTE_CLIENT_SECRET: secret}
-    return {SECTION_RTE: {key: value for key, value in values.items() if value}}
+    return {
+        SECTION_HEATING: {},
+        SECTION_RTE: {key: value for key, value in values.items() if value},
+    }
 
 
 def suggested(result: Any) -> dict[str, Any]:
@@ -251,6 +273,7 @@ async def test_options_suggest_the_current_values(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert suggested(result) == {
         CONF_TEMPERATURE: TEMPERATURE_ID,
+        SECTION_HEATING: {},
         SECTION_RTE: {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "my-secret"},
     }
 
@@ -350,6 +373,120 @@ async def test_options_temperature_errors(
     assert result["errors"] == {CONF_TEMPERATURE: error}
     # The credentials wait for a valid temperature.
     sources.official.async_check_credentials.assert_not_awaited()
+
+
+async def test_options_save_the_heating(hass: HomeAssistant) -> None:
+    for statistic_id in (HEATER_A, WATER):
+        await add_energy(hass, statistic_id, [1.0, 1.0])
+    await add_indoor(hass, [19.0, 19.5])
+    result = await options_flow(
+        hass,
+        {
+            SECTION_HEATING: {
+                # Twice the same: kept once.
+                CONF_HEATING_STATISTICS: [HEATER_A, HEATER_A],
+                CONF_HEATING_CONTENT: CONTENT_HEATING,
+                CONF_WATER_STATISTIC: WATER,
+                CONF_WATER_ENERGY: ENERGY_GAS,
+                CONF_INDOOR_TEMPERATURES: [INDOOR],
+            },
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {
+        SECTION_HEATING: {
+            CONF_HEATING_STATISTICS: [HEATER_A],
+            CONF_HEATING_ENERGY: ENERGY_ELECTRICITY,
+            CONF_HEATING_CONTENT: CONTENT_HEATING,
+            CONF_WATER_STATISTIC: WATER,
+            CONF_WATER_ENERGY: ENERGY_GAS,
+            CONF_INDOOR_TEMPERATURES: [INDOOR],
+        }
+    }
+
+
+async def test_options_save_only_the_heating_set(hass: HomeAssistant) -> None:
+    await add_energy(hass, GAS, [3.0])
+    result = await options_flow(
+        hass,
+        {
+            SECTION_HEATING: {
+                CONF_HEATING_STATISTICS: [GAS],
+                CONF_HEATING_ENERGY: ENERGY_GAS,
+            },
+        },
+    )
+    assert result["data"] == {
+        SECTION_HEATING: {
+            CONF_HEATING_STATISTICS: [GAS],
+            CONF_HEATING_ENERGY: ENERGY_GAS,
+            CONF_HEATING_CONTENT: CONTENT_HEATING,
+        }
+    }
+
+
+async def test_options_suggest_the_heating(hass: HomeAssistant) -> None:
+    heating = {CONF_HEATING_STATISTICS: [HEATER_A], CONF_HEATING_ENERGY: ENERGY_GAS}
+    entry = make_entry(options={SECTION_HEATING: heating})
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert suggested(result)[SECTION_HEATING] == heating
+
+
+@pytest.mark.parametrize(
+    ("heating", "errors"),
+    [
+        pytest.param(
+            {CONF_HEATING_STATISTICS: [HEATER_A, STATISTIC_ID]},
+            {"base": "heating_is_source"},
+            id="source",
+        ),
+        pytest.param(
+            {CONF_HEATING_STATISTICS: ["sensor.missing"]},
+            {"base": "heating_statistic_not_found"},
+            id="missing",
+        ),
+        pytest.param(
+            {CONF_HEATING_STATISTICS: [HEATER_A], CONF_WATER_STATISTIC: HEATER_A},
+            {"base": "water_in_heating"},
+            id="water_in_heating",
+        ),
+        pytest.param(
+            {CONF_WATER_STATISTIC: "sensor.missing"},
+            {"base": "water_statistic_not_found"},
+            id="water_missing",
+        ),
+        pytest.param(
+            {CONF_WATER_STATISTIC: STATISTIC_ID},
+            {"base": "water_is_source"},
+            id="water_source",
+        ),
+        pytest.param(
+            {
+                CONF_HEATING_STATISTICS: [HEATER_A],
+                CONF_HEATING_ENERGY: ENERGY_GAS,
+                CONF_HEATING_CONTENT: CONTENT_HEATING_WATER,
+                CONF_WATER_STATISTIC: WATER,
+            },
+            {"base": "water_other_energy"},
+            id="water_other_energy",
+        ),
+        pytest.param(
+            {CONF_INDOOR_TEMPERATURES: [INDOOR, HEATER_A]},
+            {"base": "indoor_statistic_not_temperature"},
+            id="indoor",
+        ),
+    ],
+)
+async def test_options_heating_errors(
+    hass: HomeAssistant, heating: dict[str, Any], errors: dict[str, str]
+) -> None:
+    await add_energy(hass, HEATER_A, [1.0])
+    await add_energy(hass, WATER, [1.0])
+    await add_indoor(hass, [19.0])
+    result = await options_flow(hass, {SECTION_HEATING: heating})
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == errors
 
 
 # Contracts.
@@ -858,3 +995,103 @@ async def test_reconfigure_price_period_of_a_deleted_contract(
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "contract_not_found"
+
+
+# Gas prices.
+
+
+async def add_gas_price(
+    hass: HomeAssistant, entry_id: str, price: dict[str, Any]
+) -> Any:
+    result = await start_subentry_flow(hass, entry_id, SUBENTRY_GAS_PRICE)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+    return await hass.config_entries.subentries.async_configure(
+        result["flow_id"], price
+    )
+
+
+async def test_add_gas_price(hass: HomeAssistant) -> None:
+    entry = make_entry([TEMPO_CONTRACT])
+    entry.add_to_hass(hass)
+    result = await add_gas_price(
+        hass, entry.entry_id, {CONF_PRICE: 0.105, CONF_START: "2026-08-01"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "0.1050 €/kWh · 2026-08-01 → …"
+    assert result["data"] == {
+        CONF_START: "2026-08-01",
+        CONF_END: None,
+        CONF_PRICE: 0.105,
+    }
+
+
+@pytest.mark.parametrize(
+    ("price", "errors"),
+    [
+        pytest.param(
+            {CONF_START: "2026-08-01", CONF_END: "2026-07-31"},
+            {CONF_END: "end_before_start"},
+            id="end_before_start",
+        ),
+        pytest.param(
+            {CONF_START: "2026-01-01", CONF_END: "2026-08-01"},
+            {"base": "overlapping_gas_price"},
+            id="overlap",
+        ),
+    ],
+)
+async def test_add_gas_price_errors(
+    hass: HomeAssistant, price: dict[str, str], errors: dict[str, str]
+) -> None:
+    entry = make_entry([gas_price_subentry("2026-08-01")])
+    entry.add_to_hass(hass)
+    result = await add_gas_price(hass, entry.entry_id, {CONF_PRICE: 0.1, **price})
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == errors
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {CONF_PRICE: 0.1, CONF_START: "2026-01-01", CONF_END: "2026-07-31"},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+def gas_price_subentry(start: str, end: str | None = None) -> ConfigSubentryData:
+    return ConfigSubentryData(
+        data={CONF_PRICE: 0.1, CONF_START: start, CONF_END: end},
+        subentry_type=SUBENTRY_GAS_PRICE,
+        title="0.1",
+        unique_id=None,
+    )
+
+
+async def test_reconfigure_gas_price(hass: HomeAssistant) -> None:
+    entry = make_entry(
+        [
+            gas_price_subentry("2025-08-01", "2026-07-31"),
+            gas_price_subentry("2026-08-01"),
+        ]
+    )
+    entry.add_to_hass(hass)
+    subentry = next(
+        subentry
+        for subentry in entry.subentries.values()
+        if subentry.data[CONF_START] == "2026-08-01"
+    )
+    result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    assert suggested(result) == {
+        CONF_PRICE: 0.1,
+        CONF_START: "2026-08-01",
+        CONF_END: None,
+    }
+    # Its own days don't overlap with it.
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_PRICE: 0.12, CONF_START: "2026-08-01"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    updated = entry.subentries[subentry.subentry_id]
+    assert updated.title == "0.1200 €/kWh · 2026-08-01 → …"
+    assert updated.data[CONF_PRICE] == 0.12
