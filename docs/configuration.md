@@ -8,6 +8,8 @@ Choisissez la statistique horaire d'énergie de votre compteur. Il faut une éne
 
 Vous pouvez la changer plus tard avec **Reconfigurer**, par exemple après un changement de compteur. Toutes les statistiques sont alors recalculées.
 
+**Sans compteur**, laissez le champ vide : la source s'appelle « Sans compteur » (une seule possible). Rien n'est valorisé, mais la page Contrats montre le contrat en cours, le prix du kWh maintenant et sur 24 h, la couleur Tempo de demain et les jours rouges et blancs restants. Avec des statistiques de chauffage (un compteur de gaz, des radiateurs), l'onglet Chauffage fonctionne aussi, sans la part dans la maison ; sa période suit ces statistiques. Les onglets Comprendre et Comparer ont besoin du compteur. Reconfigurer avec une statistique les fait apparaître.
+
 ## Contrats
 
 Sur la page de l'intégration, **Ajouter un contrat**, en deux étapes :
@@ -67,6 +69,8 @@ Les identifiants sont vérifiés à l'enregistrement. Laissez les deux champs vi
 ## English
 
 **Consumption source**: choose the hourly energy statistic of your meter. It must be an energy (Wh, kWh…) with a running total and some data, like the statistic the Linky app imports. **Reconfigure** changes it later, for example after a meter change. Every statistic is then computed again.
+
+**Without a meter**, leave the field empty: the source is called "No meter" (only one). Nothing is costed, but the Contracts page shows the contract in force, the price of a kWh now and over 24 hours, tomorrow's Tempo color and the red and white days left. With heating statistics (a gas meter, heaters), the Heating tab works too, without the share of the home; its period follows those statistics. The Understand and Compare tabs need the meter. Reconfiguring with a statistic brings them.
 
 **Contracts**: on the integration's page, **Add contract**, in two steps.
 

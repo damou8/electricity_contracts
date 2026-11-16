@@ -3,22 +3,22 @@
     "step": {
       "user": {
         "title": "Source de consommation",
-        "description": "Choisissez la consommation horaire à valoriser. Ajoutez ensuite les contrats depuis le menu de l'entrée.",
+        "description": "Choisissez la consommation horaire à valoriser. Sans compteur, laissez-la vide : la source montre alors les prix, les couleurs Tempo et le chauffage. Ajoutez ensuite les contrats depuis le menu de l'entrée.",
         "data": {
-          "statistic_id": "Statistique de consommation"
+          "statistic_id": "Statistique de consommation (facultatif)"
         },
         "data_description": {
-          "statistic_id": "Statistique horaire d'énergie du compteur, comme la statistique linky:… importée par l'App Linky (nommée d'après le numéro du compteur)."
+          "statistic_id": "Statistique horaire d'énergie du compteur, comme la statistique linky:… importée par l'App Linky (nommée d'après le numéro du compteur). Les coûts et les comparaisons en ont besoin."
         }
       },
       "reconfigure": {
         "title": "Changer la source de consommation",
-        "description": "Par exemple après un changement de compteur. Tous les contrats sont recalculés sur la nouvelle statistique.",
+        "description": "Par exemple après un changement de compteur. Tous les contrats sont recalculés sur la nouvelle statistique. Laissée vide, la source n'a pas de compteur.",
         "data": {
-          "statistic_id": "Statistique de consommation"
+          "statistic_id": "Statistique de consommation (facultatif)"
         },
         "data_description": {
-          "statistic_id": "Statistique horaire d'énergie du compteur, comme la statistique linky:… importée par l'App Linky (nommée d'après le numéro du compteur)."
+          "statistic_id": "Statistique horaire d'énergie du compteur, comme la statistique linky:… importée par l'App Linky (nommée d'après le numéro du compteur). Les coûts et les comparaisons en ont besoin."
         }
       }
     },
@@ -30,8 +30,7 @@
       "statistic_daily": "Cette statistique n'a que des valeurs quotidiennes : elles ne peuvent pas être réparties entre heures creuses et heures pleines. Activez la courbe de charge (consommation horaire) dans votre espace Enedis et dans l'App Linky."
     },
     "abort": {
-      "already_configured": "Cette statistique est déjà configurée.",
-      "no_statistic": "Aucun total d'énergie n'existe encore. Importez d'abord la consommation, par exemple avec l'App Linky."
+      "already_configured": "Cette statistique est déjà configurée."
     }
   },
   "options": {

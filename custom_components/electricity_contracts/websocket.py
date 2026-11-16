@@ -156,14 +156,21 @@ def ws_entries(
         coordinator: ElectricityContractsCoordinator = entry.runtime_data
         status = coordinator.data.costing
         entry_contracts = contracts(entry)
-        end = data_end(status, entry_contracts)
+        meter = coordinator.statistic_id is not None
+        heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
+        if meter:
+            first = status.first_hour
+            end = data_end(status, entry_contracts)
+        else:
+            # Without a meter, the days are those of the heating statistics.
+            end = coordinator.data.heating_end
+            first = day_start(coordinator.data.sources.first_day) if end else None
         result.append(
             {
                 "entry_id": entry.entry_id,
                 "title": entry.title,
-                "first_day": (
-                    _local_day(status.first_hour) if status.first_hour else None
-                ),
+                "meter": meter,
+                "first_day": _local_day(first) if first else None,
                 "last_day": _local_day(end - _HOUR) if end else None,
                 "contracts": [
                     _contract(
@@ -177,11 +184,8 @@ def ws_entries(
                 ],
                 "actual": status.actual is not None,
                 "outdoor": outdoor_source(entry),
-                "heating": _heating(
-                    Heating.from_options(
-                        entry.options, outdoor=outdoor_statistic(entry)
-                    )
-                ),
+                # Without a meter, the heating can't be estimated: only measured.
+                "heating": _heating(heating) if meter or heating.measured else None,
             }
         )
     connection.send_result(msg["id"], result)

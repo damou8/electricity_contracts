@@ -13,6 +13,7 @@ from elec_tariffs import (
     Tranche,
 )
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
+from homeassistant.util import slugify
 
 from .const import (
     CONF_ACTIVE_FROM,
@@ -31,6 +32,7 @@ from .const import (
     CONF_PRICES,
     CONF_PRICING,
     CONF_START,
+    CONF_STATISTIC_ID,
     CONF_UID,
     CONF_WATER_ENERGY,
     CONF_WATER_STATISTIC,
@@ -38,12 +40,25 @@ from .const import (
     CONTENT_HEATING_WATER,
     ENERGY_ELECTRICITY,
     ENERGY_GAS,
+    NO_METER,
     PRICING_OFFICIAL,
     SECTION_HEATING,
     SUBENTRY_CONTRACT,
     SUBENTRY_GAS_PRICE,
     SUBENTRY_PRICE_PERIOD,
 )
+
+
+def source_statistic(entry: ConfigEntry) -> str | None:
+    """Return the electricity consumption statistic, None for a source without one."""
+    statistic_id: str | None = entry.data.get(CONF_STATISTIC_ID)
+    return statistic_id
+
+
+def source_object(entry: ConfigEntry) -> str:
+    """Return the object part of the IDs of the statistics the entry writes."""
+    statistic_id = source_statistic(entry)
+    return slugify(statistic_id) if statistic_id else NO_METER
 
 
 def parse_time_range(value: str) -> TimeRange:

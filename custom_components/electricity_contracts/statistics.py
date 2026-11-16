@@ -44,10 +44,9 @@ from homeassistant.const import UnitOfEnergy
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.storage import Store
-from homeassistant.util import slugify
 from homeassistant.util.unit_conversion import EnergyConverter
 
-from .const import CONF_STATISTIC_ID, DOMAIN
+from .const import DOMAIN
 from .costing import (
     ActualCosted,
     ContractInput,
@@ -63,6 +62,8 @@ from .data import (
     format_time_range,
     manual_prices,
     price_periods,
+    source_object,
+    source_statistic,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -268,8 +269,8 @@ class StatisticsWriter:
         """Prepare the statistics of an entry."""
         self.hass = hass
         self.entry = entry
-        self.source_id: str = entry.data[CONF_STATISTIC_ID]
-        self.prefix = f"{DOMAIN}:{slugify(self.source_id)}"
+        self.source_id = source_statistic(entry)
+        self.prefix = f"{DOMAIN}:{source_object(entry)}"
         self._store = statistics_store(hass, entry.entry_id)
         self._state = _State()
         self._recompute_all = False
@@ -311,7 +312,8 @@ class StatisticsWriter:
         calendar: DayCalendar,
     ) -> CostingStatus:
         """Cost the hours not costed yet; rewrite what is out of date first."""
-        inputs, series = self._wanted(official_prices)
+        # Without a meter there is nothing to cost.
+        inputs, series = self._wanted(official_prices) if self.source_id else ({}, {})
         await self._async_clear_outdated(series)
         if not series:
             self._state.source_object = self.prefix
@@ -521,7 +523,11 @@ class StatisticsWriter:
     async def _async_source_rewritten(self) -> bool:
         """Tell whether the source changed at the last hour costed before."""
         state = self._state
-        if state.source_start is None or state.source_sum is None:
+        if (
+            self.source_id is None
+            or state.source_start is None
+            or state.source_sum is None
+        ):
             return False
         start = datetime.fromtimestamp(state.source_start, UTC)
         rows = await get_instance(self.hass).async_add_executor_job(
@@ -588,13 +594,16 @@ class StatisticsWriter:
         Rows start a while before `after` (from the first row if None), so that
         daily rows can be recognised.
         """
+        # Only called with series to write, so with a meter.
+        source_id = self.source_id
+        assert source_id is not None
         recorder = get_instance(self.hass)
         metadata = await recorder.async_add_executor_job(
-            lambda: get_metadata(self.hass, statistic_ids={self.source_id})
+            lambda: get_metadata(self.hass, statistic_ids={source_id})
         )
-        if self.source_id not in metadata:
+        if source_id not in metadata:
             return [], None
-        unit = metadata[self.source_id][1]["unit_of_measurement"]
+        unit = metadata[source_id][1]["unit_of_measurement"]
         convert = EnergyConverter.converter_factory(unit, UnitOfEnergy.KILO_WATT_HOUR)
         start = after - _LOOKBACK if after else _EPOCH
         rows = await recorder.async_add_executor_job(
@@ -602,12 +611,12 @@ class StatisticsWriter:
             self.hass,
             start,
             None,
-            {self.source_id},
+            {source_id},
             "hour",
             None,
             {"change", "sum"},
         )
-        series = rows.get(self.source_id, [])
+        series = rows.get(source_id, [])
         values = [
             (datetime.fromtimestamp(row["start"], UTC), convert(change))
             for row in series

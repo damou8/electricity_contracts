@@ -21,7 +21,7 @@ Une intégration Home Assistant qui valorise votre consommation électrique heur
 Home Assistant 2026.10 ou plus récent. L'intégration a besoin du recorder.
 
 Ensuite :
-1. choisissez la statistique horaire de votre compteur ;
+1. choisissez la statistique horaire de votre compteur, ou laissez vide sans compteur (prix, Tempo et chauffage seulement) ;
 2. sur la page de l'intégration, **Ajouter un contrat** pour chacun de vos contrats, passés ou à comparer ;
 3. ouvrez **Contrats** dans le menu latéral.
 
@@ -103,7 +103,7 @@ A Home Assistant integration that costs your hourly electricity consumption unde
 Home Assistant 2026.10 or later. The integration needs the recorder.
 
 Then:
-1. choose the hourly statistic of your meter;
+1. choose the hourly statistic of your meter, or leave it empty without a meter (prices, Tempo and heating only);
 2. on the integration's page, **Add contract** for each of your contracts, past ones or ones to compare;
 3. open **Contracts** in the sidebar.
 

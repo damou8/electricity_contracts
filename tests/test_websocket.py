@@ -73,6 +73,7 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
         {
             "entry_id": entry.entry_id,
             "title": entry.title,
+            "meter": True,
             "first_day": "2026-03-01",
             # The last of the 48 hours is midnight, French time.
             "last_day": "2026-03-03",

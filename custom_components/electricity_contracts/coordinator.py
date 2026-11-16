@@ -24,7 +24,10 @@ from elec_tariffs import (
     season_bounds,
     season_of,
 )
-from homeassistant.components.recorder.statistics import statistics_during_period
+from homeassistant.components.recorder.statistics import (
+    get_last_statistics,
+    statistics_during_period,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
@@ -38,7 +41,6 @@ from .comparison import async_wait_for_recorder
 from .const import (
     CONF_RTE_CLIENT_ID,
     CONF_RTE_CLIENT_SECRET,
-    CONF_STATISTIC_ID,
     DOMAIN,
     FRANCE_TIME_ZONE,
     PRICES_MAX_AGE_HOURS,
@@ -49,7 +51,7 @@ from .const import (
     TOMORROW_PUBLISHED,
     TOMORROW_RETRY_MINUTES,
 )
-from .data import Contract, contracts, manual_prices
+from .data import Contract, Heating, contracts, manual_prices, source_statistic
 from .statistics import (
     CostingStatus,
     RecorderNotStartedError,
@@ -63,6 +65,7 @@ _LOGGER = logging.getLogger(__name__)
 SOURCE_TEMPO = "tempo"
 SOURCE_PRICES = "prices"
 SOURCE_WEATHER = "weather"
+_HOUR = timedelta(hours=1)
 
 type ElectricityContractsConfigEntry = ConfigEntry[ElectricityContractsCoordinator]
 type PricesKey = tuple[ContractKind, int]
@@ -83,6 +86,8 @@ class ElectricityContractsData:
 
     sources: SourcesData
     costing: CostingStatus
+    heating_end: datetime | None = None
+    """Without a meter: the end of the last hour of the heating statistics."""
 
 
 def _prices_key(kind: ContractKind, kva: int) -> str:
@@ -203,7 +208,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             update_interval=timedelta(hours=1),
         )
         session = async_get_clientsession(hass)
-        self.statistic_id: str = config_entry.data[CONF_STATISTIC_ID]
+        self.statistic_id = source_statistic(config_entry)
         self.trv = TrvClient(session)
         sources: list[TempoCalendarSource] = [RtePublicTempoClient(session)]
         options = config_entry.options
@@ -236,38 +241,68 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         await self.costing.async_load()
         await self.weather.async_load()
 
+    def _read_ids(self) -> list[str]:
+        """Return the statistics the data starts with: the meter, or the heating."""
+        if self.statistic_id:
+            return [self.statistic_id]
+        heating = Heating.from_options(self.config_entry.options, outdoor=None)
+        water = [heating.water_statistic] if heating.water_statistic else []
+        return [*heating.statistics, *water]
+
     async def _async_first_day(self) -> date:
-        """Return the day of the first hour of consumption, or today if none."""
+        """Return the day of the first hour of data, or today if none."""
+        days = [
+            day
+            for statistic_id in self._read_ids()
+            if (day := await self._async_statistic_first_day(statistic_id))
+        ]
+        return min(days) if days else dt_util.now(FRANCE_TIME_ZONE).date()
+
+    async def _async_statistic_first_day(self, statistic_id: str) -> date | None:
         recorder = get_instance(self.hass)
         months = await recorder.async_add_executor_job(
             statistics_during_period,
             self.hass,
             datetime(2000, 1, 1, tzinfo=UTC),
             None,
-            {self.statistic_id},
+            {statistic_id},
             "month",
             None,
             {"sum"},
         )
-        if not months.get(self.statistic_id):
-            return dt_util.now(FRANCE_TIME_ZONE).date()
+        if not months.get(statistic_id):
+            return None
         # Months follow the server's time zone: look for the first hour in the
         # first month only.
-        month_start = datetime.fromtimestamp(months[self.statistic_id][0]["start"], UTC)
+        month_start = datetime.fromtimestamp(months[statistic_id][0]["start"], UTC)
         hours = await recorder.async_add_executor_job(
             statistics_during_period,
             self.hass,
             month_start,
             month_start + timedelta(days=32),
-            {self.statistic_id},
+            {statistic_id},
             "hour",
             None,
             {"sum"},
         )
-        first = datetime.fromtimestamp(
-            hours[self.statistic_id][0]["start"], FRANCE_TIME_ZONE
+        start = hours[statistic_id][0]["start"]
+        return datetime.fromtimestamp(start, FRANCE_TIME_ZONE).date()
+
+    async def _async_heating_end(self) -> datetime | None:
+        """Return the end of the last hour of the heating statistics."""
+        ids = self._read_ids()
+        if not ids:
+            return None
+        last = await get_instance(self.hass).async_add_executor_job(
+            lambda: [
+                get_last_statistics(
+                    self.hass, 1, statistic_id, convert_units=False, types={"sum"}
+                ).get(statistic_id)
+                for statistic_id in ids
+            ]
         )
-        return first.date()
+        starts = [rows[0]["start"] for rows in last if rows]
+        return datetime.fromtimestamp(max(starts), UTC) + _HOUR if starts else None
 
     async def _async_update_data(self) -> ElectricityContractsData:
         """Fetch what is missing, then cost the hours not costed yet."""
@@ -338,7 +373,11 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             ) from err
         await self._async_wait_for_recorder()
         self._update_price_issues(costing, contracts(self.config_entry))
-        return ElectricityContractsData(sources=sources, costing=costing)
+        return ElectricityContractsData(
+            sources=sources,
+            costing=costing,
+            heating_end=None if self.statistic_id else await self._async_heating_end(),
+        )
 
     async def _async_wait_for_recorder(self) -> None:
         if not await async_wait_for_recorder(self.hass):

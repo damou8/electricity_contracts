@@ -49,6 +49,7 @@ from custom_components.electricity_contracts.const import (
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
     DOMAIN,
+    NO_METER,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
     SUBENTRY_COMPARISON,
@@ -314,15 +315,15 @@ MANUAL_CONTRACT = contract_subentry(
 def make_entry(
     subentries: list[ConfigSubentryData] | None = None,
     options: dict[str, Any] | None = None,
-    statistic_id: str = STATISTIC_ID,
+    statistic_id: str | None = STATISTIC_ID,
 ) -> MockConfigEntry:
-    """Build the config entry of a consumption source."""
+    """Build the config entry of a consumption source; None for no meter."""
     return MockConfigEntry(
         domain=DOMAIN,
         minor_version=2,
-        title="Linky 00000000000000",
-        unique_id=statistic_id,
-        data={CONF_STATISTIC_ID: statistic_id},
+        title="Linky 00000000000000" if statistic_id else "No meter",
+        unique_id=statistic_id or NO_METER,
+        data={CONF_STATISTIC_ID: statistic_id} if statistic_id else {},
         options=options or {},
         subentries_data=subentries or [],
     )

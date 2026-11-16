@@ -87,6 +87,8 @@ from .const import (
     DOMAIN,
     ENERGY_ELECTRICITY,
     ENERGY_GAS,
+    NO_METER,
+    NO_METER_TITLES,
     OFF_PEAK_OTHER,
     OFF_PEAK_PRESETS,
     OFFERED_KVA,
@@ -114,7 +116,8 @@ _LOGGER = logging.getLogger(__name__)
 # Rows at least 23 hours apart (a day, or a day when the clocks change).
 _DAILY_SECONDS = 23 * 3600
 
-STATISTIC_SCHEMA = vol.Schema({vol.Required(CONF_STATISTIC_ID): StatisticSelector()})
+# Left empty, the source has no meter: prices, Tempo and heating only.
+STATISTIC_SCHEMA = vol.Schema({vol.Optional(CONF_STATISTIC_ID): StatisticSelector()})
 
 ENERGY_SELECTOR = SelectSelector(
     SelectSelectorConfig(
@@ -332,17 +335,14 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose the hourly energy statistic to cost."""
+        """Choose the hourly energy statistic to cost, or none."""
         errors: dict[str, str] = {}
-        candidates = await async_energy_statistics(
-            self.hass, configured=set(self._async_current_ids())
-        )
-        if not candidates:
-            return self.async_abort(reason="no_statistic")
         if user_input is not None:
-            statistic_id = user_input[CONF_STATISTIC_ID]
-            await self.async_set_unique_id(statistic_id)
+            statistic_id = user_input.get(CONF_STATISTIC_ID)
+            await self.async_set_unique_id(statistic_id or NO_METER)
             self._abort_if_unique_id_configured()
+            if not statistic_id:
+                return self.async_create_entry(title=self._no_meter_title(), data={})
             try:
                 title = await async_validate_statistic(self.hass, statistic_id)
             except InvalidStatisticError as err:
@@ -351,36 +351,52 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title=title, data={CONF_STATISTIC_ID: statistic_id}
                 )
-        # The frontend can't show a required statistic selector without a value.
+        configured = set(self._async_current_ids())
+        candidates = await async_energy_statistics(self.hass, configured=configured)
+        # Only a Linky meter not set up yet is suggested: anything else is more
+        # likely gas, or no meter at all.
+        suggested = (
+            {CONF_STATISTIC_ID: candidates[0]}
+            if candidates
+            and candidates[0].startswith("linky:")
+            and candidates[0] not in configured
+            else {}
+        )
         return self.async_show_form(
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(
-                STATISTIC_SCHEMA, user_input or {CONF_STATISTIC_ID: candidates[0]}
+                STATISTIC_SCHEMA, user_input or suggested
             ),
             errors=errors,
         )
 
+    def _no_meter_title(self) -> str:
+        language = self.hass.config.language.split("-")[0]
+        return NO_METER_TITLES.get(language, NO_METER_TITLES["en"])
+
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Use another statistic, for example after a meter change."""
+        """Use another statistic, for example after a meter change, or none."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            statistic_id = user_input[CONF_STATISTIC_ID]
-            if statistic_id != entry.unique_id:
-                await self.async_set_unique_id(statistic_id)
+            statistic_id = user_input.get(CONF_STATISTIC_ID)
+            unique_id = statistic_id or NO_METER
+            if unique_id != entry.unique_id:
+                await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
             try:
-                await async_validate_statistic(self.hass, statistic_id)
+                if statistic_id:
+                    await async_validate_statistic(self.hass, statistic_id)
             except InvalidStatisticError as err:
                 errors[CONF_STATISTIC_ID] = err.reason
             else:
                 # The update listener reloads the entry.
                 return self.async_update_and_abort(
                     entry,
-                    unique_id=statistic_id,
-                    data={CONF_STATISTIC_ID: statistic_id},
+                    unique_id=unique_id,
+                    data={CONF_STATISTIC_ID: statistic_id} if statistic_id else {},
                 )
         return self.async_show_form(
             step_id="reconfigure",
@@ -522,7 +538,7 @@ class ElectricityContractsOptionsFlow(OptionsFlow):
     async def _energy_error(self, statistic_ids: list[str]) -> str | None:
         """Return why one of the statistics can't be used, None if all can."""
         for statistic_id in statistic_ids:
-            if statistic_id == self.config_entry.data[CONF_STATISTIC_ID]:
+            if statistic_id == self.config_entry.data.get(CONF_STATISTIC_ID):
                 return "is_source"
             try:
                 await async_validate_statistic(self.hass, statistic_id, daily=True)
