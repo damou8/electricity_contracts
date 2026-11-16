@@ -74,12 +74,13 @@ async def test_first_setup_downloads_the_seasons_since_the_first_day(
     # Consumption starts on 1 March 2026 at 1:00, in the 28 February Tempo day;
     # it is 10:00 in Paris, before tomorrow's color is published.
     assert calls(sources) == [
-        (date(2026, 2, 28), date(2026, 8, 31)),
+        # Whole seasons, for the colors left.
+        (date(2025, 9, 1), date(2026, 8, 31)),
         (date(2026, 9, 1), TOMORROW),
     ]
     data = coordinator(entry).data.sources
     assert data.first_day == date(2026, 3, 1)
-    assert min(data.calendar) == date(2026, 2, 28)
+    assert min(data.calendar) == date(2025, 9, 1)
     assert max(data.calendar) == TODAY
     assert data.calendar[date(2026, 3, 4)] is color_of(date(2026, 3, 4))
     stored = hass_storage[f"{DOMAIN}.{entry.entry_id}"]["data"]
@@ -156,7 +157,7 @@ async def test_missing_days_of_the_current_season(
         "data": {
             "calendar": {
                 day.isoformat(): color.value
-                for day, color in calendar(date(2026, 2, 28), date(2026, 11, 1)).items()
+                for day, color in calendar(date(2025, 9, 1), date(2026, 11, 1)).items()
             },
             "season_checked": {
                 "2025-2026": "2026-09-02T00:00:00+00:00",
@@ -192,7 +193,7 @@ async def test_missing_days_of_a_past_season(
     freezer: FrozenDateTimeFactory,
 ) -> None:
     entry = make_entry([TEMPO_CONTRACT])
-    calendar = published_calendar(TODAY)(date(2026, 2, 28), TODAY)
+    calendar = published_calendar(TODAY)(date(2025, 9, 1), TODAY)
     del calendar[date(2026, 4, 1)]
     hass_storage[f"{DOMAIN}.{entry.entry_id}"] = {
         "version": 1,
@@ -210,7 +211,7 @@ async def test_missing_days_of_a_past_season(
     assert calls(sources) == []
     freezer.tick(timedelta(hours=6))
     await coordinator(entry).async_refresh()
-    assert calls(sources)[0] == (date(2026, 2, 28), date(2026, 8, 31))
+    assert calls(sources)[0] == (date(2025, 9, 1), date(2026, 8, 31))
     assert date(2026, 4, 1) in coordinator(entry).data.sources.calendar
 
 
@@ -339,7 +340,7 @@ async def test_statistic_without_rows(hass: HomeAssistant, sources: Sources) -> 
     )
     assert entry.state is ConfigEntryState.LOADED
     assert coordinator(entry).data.sources.first_day == TODAY
-    assert calls(sources) == [(TODAY - timedelta(days=1), TOMORROW)]
+    assert calls(sources) == [(date(2026, 9, 1), TOMORROW)]
 
 
 async def test_now_is_frozen() -> None:

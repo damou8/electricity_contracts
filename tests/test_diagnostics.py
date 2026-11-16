@@ -41,7 +41,8 @@ async def test_diagnostics_hide_personal_data(
     sources = result["sources"]
     assert sources["first_day"] == "2026-03-01"
     assert sources["tempo_sources"] == "rte_public+rte_official"
-    assert sources["calendar"]["days"] == 253
+    # Whole seasons: from 1 September 2025 to today.
+    assert sources["calendar"]["days"] == 433
     assert sources["calendar"]["last"] == "2026-11-07"
     assert sources["prices"]["tempo:6"]["periods"] == 2
     costing = sources["costing"]

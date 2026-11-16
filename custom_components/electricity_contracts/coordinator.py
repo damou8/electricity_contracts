@@ -413,8 +413,9 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         changed = False
         try:
             for season in self._seasons(first_day, today):
+                # The whole season: the colors left count the days already placed,
+                # and the first day moves back when older data arrives.
                 start, end = season_bounds(season)
-                start = max(start, first_day)
                 if not self._season_needs_fetch(season, start, min(end, today), now):
                     continue
                 colors = await self.tempo.async_calendar(start, min(end, tomorrow))
