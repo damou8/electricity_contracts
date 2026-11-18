@@ -20,6 +20,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
 from custom_components.electricity_contracts.const import (
+    CONF_STATISTIC_ID,
     CONF_TEMPERATURE,
     CONF_WEATHER,
     DOMAIN,
@@ -30,7 +31,15 @@ from custom_components.electricity_contracts.weather import (
     outdoor_statistic,
 )
 
-from .conftest import NOW, TEMPERATURE_ID, TEMPO_CONTRACT, Sources, make_entry
+from .conftest import (
+    NOW,
+    OTHER_STATISTIC_ID,
+    TEMPERATURE_ID,
+    TEMPO_CONTRACT,
+    Sources,
+    add_statistic,
+    make_entry,
+)
 from .test_comparison import setup_entry
 from .test_websocket import result
 
@@ -43,21 +52,23 @@ def weather_entry(**options: Any) -> MockConfigEntry:
     return make_entry([TEMPO_CONTRACT], options={CONF_WEATHER: True, **options})
 
 
-async def hours(hass: HomeAssistant) -> dict[datetime, float | None]:
+async def hours(
+    hass: HomeAssistant, statistic_id: str = WEATHER_ID
+) -> dict[datetime, float | None]:
     await async_wait_recording_done(hass)
     rows = await get_instance(hass).async_add_executor_job(
         statistics_during_period,
         hass,
         datetime(2026, 1, 1, tzinfo=UTC),
         None,
-        {WEATHER_ID},
+        {statistic_id},
         "hour",
         None,
         {"mean"},
     )
     return {
         datetime.fromtimestamp(row["start"], UTC): row["mean"]
-        for row in rows.get(WEATHER_ID, [])
+        for row in rows.get(statistic_id, [])
     }
 
 
@@ -137,6 +148,7 @@ async def test_turning_it_off_clears_the_statistic(
     entry = await setup_entry(hass, weather_entry())
     store = f"{DOMAIN}.{entry.entry_id}.weather"
     assert hass_storage[store]["data"] == {
+        "statistic_id": WEATHER_ID,
         "coordinates": list(COORDINATES),
         "first_day": "2026-02-28",
     }
@@ -166,6 +178,46 @@ async def test_a_new_location_writes_everything_again(
     written = await hours(hass)
     assert min(written) == NOW - timedelta(hours=24)
     assert set(written.values()) == {5.0}
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_another_meter_clears_the_former_statistic(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    entry = await setup_entry(hass, weather_entry())
+    assert await hours(hass)
+    await add_statistic(hass, OTHER_STATISTIC_ID)
+    # Reconfigured after a meter change: the statistic's ID follows the source.
+    hass.config_entries.async_update_entry(
+        entry,
+        unique_id=OTHER_STATISTIC_ID,
+        data={CONF_STATISTIC_ID: OTHER_STATISTIC_ID},
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert await hours(hass) == {}
+    other = f"{DOMAIN}:linky_11111111111111_outdoor_temperature"
+    assert (
+        hass_storage[f"{DOMAIN}.{entry.entry_id}.weather"]["data"]["statistic_id"]
+        == other
+    )
+    assert await hours(hass, other)
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_removing_after_a_meter_change_clears_both(
+    hass: HomeAssistant,
+) -> None:
+    entry = await setup_entry(hass, weather_entry())
+    await hass.config_entries.async_unload(entry.entry_id)
+    # Reconfigured, then removed before an update wrote the new statistic.
+    hass.config_entries.async_update_entry(
+        entry,
+        unique_id=OTHER_STATISTIC_ID,
+        data={CONF_STATISTIC_ID: OTHER_STATISTIC_ID},
+    )
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hours(hass) == {}
 
 
 @pytest.mark.usefixtures("statistic")

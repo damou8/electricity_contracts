@@ -97,7 +97,7 @@ class WeatherWriter:
         ]
 
     async def async_load(self) -> None:
-        """Load the location and first day the statistic was written for."""
+        """Load the statistic, location and first day written for."""
         self._written = await self._store.async_load() or {}
 
     async def async_update(self, first_day: date, now: datetime) -> None:
@@ -108,10 +108,17 @@ class WeatherWriter:
         when the statistic must be cleared before Home Assistant has started.
         """
         coordinates = self.coordinates
-        if not self.enabled or self._written.get("coordinates") != coordinates:
+        written_id = self._written.get("statistic_id")
+        if (
+            not self.enabled
+            or self._written.get("coordinates") != coordinates
+            or written_id != self.statistic_id
+        ):
             if self._written or self.enabled:
-                # Hours of another place, or of an earlier installation.
-                await async_clear_statistics(self.hass, [self.statistic_id])
+                # Hours of another place, of the source's former statistic (its
+                # ID follows the source), or of an earlier installation.
+                stale = {self.statistic_id, written_id or self.statistic_id}
+                await async_clear_statistics(self.hass, sorted(stale))
             if self._written:
                 self._written = {}
                 await self._store.async_remove()
@@ -141,6 +148,7 @@ class WeatherWriter:
         if rows:
             async_add_external_statistics(self.hass, self._metadata(), rows)
         written = {
+            "statistic_id": self.statistic_id,
             "coordinates": coordinates,
             "first_day": min(start.isoformat(), written_from or start.isoformat()),
         }
@@ -173,6 +181,8 @@ class WeatherWriter:
 async def async_remove_weather(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Clear the Open-Meteo temperature of a removed entry and forget it."""
     store = weather_store(hass, entry.entry_id)
-    if await store.async_load() is not None:
-        get_instance(hass).async_clear_statistics([weather_statistic_id(entry)])
+    if (written := await store.async_load()) is not None:
+        current = weather_statistic_id(entry)
+        stale = {current, written.get("statistic_id") or current}
+        get_instance(hass).async_clear_statistics(sorted(stale))
     await store.async_remove()
