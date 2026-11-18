@@ -105,12 +105,11 @@ const STRINGS = {
     useOutdoor: "Outdoor temperature",
     useIndoor: "Indoor temperature",
     useHistory: "Projection",
-    linkyHourly: "Linky, hourly",
-    meterHourly: "Meter, hourly",
+    hourly: "hourly",
+    meterTag: "Meter",
+    sensorTag: "Sensor",
     rte: "RTE",
     lastYear: "last year's consumption",
-    openMeteo: "Open-Meteo (CC BY 4.0)",
-    sensorNamed: "Sensor · {name}",
     heatersOne: "{count} heater",
     heatersOther: "{count} heaters",
     statisticsOne: "{count} statistic",
@@ -118,7 +117,8 @@ const STRINGS = {
     thermometersOne: "{count} thermometer",
     thermometersOther: "{count} thermometers",
     fromTheHome: "estimated from the consumption",
-    notTracked: "not tracked · estimated",
+    notTracked: "not tracked",
+    estimatedTag: "estimated",
     missing: "missing",
     notEntered: "not entered",
     hintOutdoor: "With an outdoor temperature, from a sensor or Open-Meteo in the integration's options, the temperature of each day shows below.",
@@ -392,12 +392,11 @@ const STRINGS = {
     useOutdoor: "Température extérieure",
     useIndoor: "Température intérieure",
     useHistory: "Projection",
-    linkyHourly: "Linky, horaire",
-    meterHourly: "Compteur, horaire",
+    hourly: "horaire",
+    meterTag: "Compteur",
+    sensorTag: "Capteur",
     rte: "RTE",
     lastYear: "consommation de l'an dernier",
-    openMeteo: "Open-Meteo (CC BY 4.0)",
-    sensorNamed: "Capteur · {name}",
     heatersOne: "{count} radiateur",
     heatersOther: "{count} radiateurs",
     statisticsOne: "{count} statistique",
@@ -405,7 +404,8 @@ const STRINGS = {
     thermometersOne: "{count} thermomètre",
     thermometersOther: "{count} thermomètres",
     fromTheHome: "estimé sur la consommation",
-    notTracked: "non suivi · estimé",
+    notTracked: "non suivi",
+    estimatedTag: "estimé",
     missing: "manquante",
     notEntered: "non saisi",
     hintOutdoor: "Avec une température extérieure, d'un capteur ou d'Open-Meteo dans les options de l'intégration, la température de chaque jour s'affiche dessous.",
@@ -865,13 +865,14 @@ main {
 .method p + p { margin-top: 8px; }
 .method > * + * { margin-top: 10px; }
 .uses h3 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--ec-text-2); }
-.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.tag { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; box-sizing: border-box; padding: 3px 10px 3px 8px; border: 1px solid var(--ec-ring); border-radius: 14px; background: var(--ec-surface); color: var(--ec-text); font-size: 12px; line-height: 1.3; }
-.tag svg { width: 16px; height: 16px; flex: none; fill: var(--ec-text-2); }
-.tag-name { color: var(--ec-text-2); }
-.tag.estimated { border-style: dashed; border-color: var(--ec-axis); background: transparent; }
-.tag.missing { border-color: var(--ec-warn); background: transparent; }
-.tag.missing svg, .tag.missing .tag-value { fill: var(--ec-warn); color: var(--ec-warn); }
+.uses dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; align-items: center; margin: 0; }
+.uses dt { display: inline-flex; align-items: center; gap: 6px; color: var(--ec-text); }
+.uses dt svg { width: 16px; height: 16px; flex: none; fill: var(--ec-text-2); }
+.uses dd { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.tag { display: inline-flex; align-items: center; min-height: 24px; box-sizing: border-box; padding: 2px 9px; border: 1px solid transparent; border-radius: 12px; background: color-mix(in srgb, var(--tag) 22%, transparent); color: var(--ec-text); font-size: 12px; line-height: 1.3; }
+.tag.estimated { border: 1px dashed var(--tag); background: transparent; }
+.tag.missing { border-color: var(--ec-warn); background: transparent; color: var(--ec-warn); }
+@media (max-width: 480px) { .uses dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } .uses dd { margin-bottom: 6px; } }
 .method p.hint { margin-top: 10px; }
 .lead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-bottom: 12px; }
 .lead strong { font-size: 28px; font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
@@ -1897,17 +1898,16 @@ class ElectricityContractsPanel extends HTMLElement {
                   { class: "uses" },
                   h("h3", {}, this._t("yourData")),
                   h(
-                    "ul",
-                    { class: "tags" },
-                    rows.map((row) =>
+                    "dl",
+                    {},
+                    rows.map((row) => [
+                      h("dt", {}, icon(row.path), row.name),
                       h(
-                        "li",
-                        { class: row.state ? `tag ${row.state}` : "tag" },
-                        icon(row.path),
-                        h("span", { class: "tag-name" }, row.name),
-                        h("span", { class: "tag-value" }, row.value),
+                        "dd",
+                        { style: { "--tag": row.hue } },
+                        row.values.map((value) => h("span", { class: row.state ? `tag ${row.state}` : "tag" }, value)),
                       ),
-                    ),
+                    ]),
                   ),
                 )
               : null,
@@ -1917,9 +1917,9 @@ class ElectricityContractsPanel extends HTMLElement {
     );
   }
 
-  // "Your data" of a card: one tag per input it uses, with where it comes from.
-  // Each key gives { path, name, value, state }, state "estimated" or "missing"
-  // when so, or null when it doesn't apply.
+  // "Your data" of a card: one line per input it uses, its icon and name, then
+  // where it comes from in tags. Each key gives { path, hue, name, values,
+  // state }, state "estimated" or "missing" when so, or null when it doesn't apply.
   _uses(...keys) {
     return keys.map((key) => this._use(key)).filter(Boolean);
   }
@@ -1930,12 +1930,14 @@ class ElectricityContractsPanel extends HTMLElement {
     const inputs = entry.inputs || {};
     const heating = entry.heating;
     const named = (id) => this._statisticName(id);
-    const tag = (path, name, value, state = null) => ({ path, name: this._t(name), value, state });
+    // hue: the color of its tags, that of the data in the charts when it has one.
+    const row = (path, hue, name, values, state = null) => ({ path, hue, name: this._t(name), values: values.filter(Boolean), state });
     const contracts = (path, list, one = "useContract") =>
-      list.length ? tag(path, list.length > 1 ? "useContracts" : one, list.map((contract) => this._contractFacts(contract)).join(" ; ")) : null;
+      list.length ? row(path, "var(--ec-s1)", list.length > 1 ? "useContracts" : one, list.flatMap((contract) => this._contractFacts(contract))) : null;
+    const colors = (list) => (list.some((contract) => contract.kind === "tempo") ? row(ICONS.colors, "var(--ec-s5)", "useColors", ["RTE"]) : null);
     switch (key) {
       case "consumption":
-        return entry.meter === false ? null : tag(ICONS.meter, "useConsumption", this._t(inputs.meter === "linky" ? "linkyHourly" : "meterHourly"));
+        return entry.meter === false ? null : row(ICONS.meter, "var(--ec-money)", "useConsumption", [inputs.meter === "linky" ? "Linky" : this._t("meterTag"), this._t("hourly")]);
       case "contract":
         return contracts(ICONS.contract, this._usedContracts());
       case "contractToday":
@@ -1946,36 +1948,40 @@ class ElectricityContractsPanel extends HTMLElement {
       case "chosen":
         return contracts(ICONS.compare, entry.contracts.filter((contract) => contract.id === this._billContract), "useChosen");
       case "colorsToday":
-        return this._contractsToday().some((contract) => contract.kind === "tempo") ? tag(ICONS.colors, "useColors", this._t("rte")) : null;
+        return colors(this._contractsToday());
       case "colors":
-        return this._usedContracts().some((contract) => contract.kind === "tempo") ? tag(ICONS.colors, "useColors", this._t("rte")) : null;
+        return colors(this._usedContracts());
       case "history":
-        return tag(ICONS.history, "useHistory", this._t("lastYear"));
+        return row(ICONS.history, "var(--ec-money)", "useHistory", [this._t("lastYear")]);
       case "heating": {
         if (!heating) return null;
         const path = heating.gas ? ICONS.fire : ICONS.radiator;
         const name = heating.gas ? "useGas" : "useHeating";
-        if (!heating.measured) return tag(path, name, this._t("fromTheHome"), "estimated");
+        if (!heating.measured) return row(path, "var(--ec-s2)", name, [this._t("fromTheHome")], "estimated");
         const ids = inputs.heating || [];
-        if (ids.length === 1) return tag(path, name, named(ids[0]));
-        return tag(path, name, this._count(ids.length, heating.gas ? "statisticsOne" : "heatersOne", heating.gas ? "statisticsOther" : "heatersOther"));
+        const value = ids.length === 1 ? named(ids[0]) : this._count(ids.length, heating.gas ? "statisticsOne" : "heatersOne", heating.gas ? "statisticsOther" : "heatersOther");
+        return row(path, "var(--ec-s2)", name, [value]);
       }
       case "water":
         if (!heating || !heating.with_water) return null;
-        return inputs.water ? tag(ICONS.boiler, "useHotWater", named(inputs.water)) : tag(ICONS.boiler, "useHotWater", this._t("notTracked"), "estimated");
+        return inputs.water
+          ? row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water)])
+          : row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
       case "gasPrice": {
         if (!heating || !heating.gas) return null;
         const price = this._heating && this._heating.simulator ? this._heating.simulator.gas_price : null;
-        return price !== null && price !== undefined ? tag(ICONS.euro, "useGasPrice", `${this._price(price)}/kWh`) : tag(ICONS.euro, "useGasPrice", this._t("notEntered"), "missing");
+        return price !== null && price !== undefined
+          ? row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [`${this._price(price)}/kWh`])
+          : row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [this._t("notEntered")], "missing");
       }
       case "outdoor":
-        if (entry.outdoor === "sensor") return tag(ICONS.thermometer, "useOutdoor", this._t("sensorNamed", { name: named(inputs.outdoor) }));
-        if (entry.outdoor === "open_meteo") return tag(ICONS.cloud, "useOutdoor", this._t("openMeteo"));
-        return tag(ICONS.thermometer, "useOutdoor", this._t("missing"), "missing");
+        if (entry.outdoor === "sensor") return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("sensorTag"), named(inputs.outdoor)]);
+        if (entry.outdoor === "open_meteo") return row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo", "CC BY 4.0"]);
+        return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("missing")], "missing");
       case "indoor": {
         const ids = inputs.indoor || [];
-        if (!ids.length) return tag(ICONS.indoor, "useIndoor", this._t("missing"), "missing");
-        return tag(ICONS.indoor, "useIndoor", ids.length === 1 ? named(ids[0]) : this._count(ids.length, "thermometersOne", "thermometersOther"));
+        if (!ids.length) return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", [this._t("missing")], "missing");
+        return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", [ids.length === 1 ? named(ids[0]) : this._count(ids.length, "thermometersOne", "thermometersOther")]);
       }
       default:
         return null;
@@ -1991,7 +1997,7 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   _contractFacts(contract) {
-    return [contract.name, contract.kva ? `${contract.kva} kVA` : null, this._t(contract.official ? "regulated" : "manualPrices")].filter(Boolean).join(", ");
+    return [contract.name, contract.kva ? `${contract.kva} kVA` : null, this._t(contract.official ? "regulated" : "manualPrices")].filter(Boolean);
   }
 
   // The name of a statistic: its entity's, or the recorder's for one imported.
