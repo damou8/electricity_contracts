@@ -530,6 +530,13 @@ async def test_entries_tell_the_heating(
         "with_water": True,
         "indoor": False,
     }
+    assert entry["inputs"] == {
+        "meter": "linky",
+        "heating": [GAS],
+        "water": None,
+        "outdoor": TEMPERATURE_ID,
+        "indoor": [],
+    }
 
 
 @pytest.mark.usefixtures("sources")

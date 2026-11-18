@@ -79,6 +79,7 @@ async def test_prices_and_tempo_without_a_meter(
     assert listed["first_day"] is None
     assert listed["last_day"] is None
     assert listed["heating"] is None
+    assert listed["inputs"]["meter"] is None
     assert [contract["id"] for contract in listed["contracts"]] == ["tempo001"]
 
     outlook = await result(

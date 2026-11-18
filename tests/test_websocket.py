@@ -109,6 +109,14 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
             ],
             "actual": True,
             "outdoor": None,
+            # The meter is only told as Linky: its ID holds the meter number.
+            "inputs": {
+                "meter": "linky",
+                "heating": [],
+                "water": None,
+                "outdoor": None,
+                "indoor": [],
+            },
             "heating": None,
         }
     ]

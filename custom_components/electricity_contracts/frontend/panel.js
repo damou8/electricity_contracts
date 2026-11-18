@@ -84,7 +84,48 @@ const STRINGS = {
     temperature: "Temperature",
     weather: "Weather",
     weatherSetup: "Choose an outdoor temperature sensor, or turn on Open-Meteo weather, in the integration's options to compare the consumption with the weather.",
-    openMeteoCredit: "Outdoor temperature: Open-Meteo.com (CC BY 4.0), at your home's location to about 10 km.",
+    nowInfo: "The price of a kWh under your contract now and until tomorrow evening, hour by hour, by tranche and Tempo color. Tomorrow's color is unknown until RTE publishes it, around 11:00.",
+    tempoLeftInfo: "The red and white days RTE still has to place this season, out of 22 red and 43 white, from September to August.",
+    peakByColorInfo: "For each Tempo color, the share of the consumption in peak hours. A red day used mostly off-peak shows the consumption is well shifted.",
+    calendarInfo: "Each square is a day of the period. Touch a day to see its consumption and cost.",
+    calendarTempoInfo: "Each square is a day of the period, in the Tempo color RTE published. Touch a day to see its consumption and cost.",
+    topDaysInfo: "The five days that cost the most over the period, each at the price of its tranches, with the day's average outdoor temperature when there is one.",
+    spendInfo: "For each tranche, its share of the kWh against its share of the euros, without the subscription. A tranche that weighs more in euros than in kWh is dear: a kWh saved there saves the most.",
+    simAbout: "The simulator extends the weather line to an outdoor and an indoor temperature of your choice, and gives the price of such a day.",
+    yourData: "Your data",
+    useConsumption: "Consumption",
+    useContract: "Contract",
+    useContracts: "Contracts",
+    useChosen: "Chosen contract",
+    useColors: "Tempo colors",
+    useHeating: "Heating",
+    useGas: "Gas",
+    useGasPrice: "Gas price",
+    useHotWater: "Hot water",
+    useOutdoor: "Outdoor temperature",
+    useIndoor: "Indoor temperature",
+    useHistory: "Projection",
+    linkyHourly: "Linky, hourly",
+    meterHourly: "Meter, hourly",
+    rte: "RTE",
+    lastYear: "last year's consumption",
+    openMeteo: "Open-Meteo.com (CC BY 4.0), to about 10 km",
+    sensorNamed: "Sensor · {name}",
+    heatersOne: "{count} heater",
+    heatersOther: "{count} heaters",
+    statisticsOne: "{count} statistic",
+    statisticsOther: "{count} statistics",
+    thermometersOne: "{count} thermometer",
+    thermometersOther: "{count} thermometers",
+    fromTheHome: "estimated from the consumption",
+    notTracked: "not tracked · estimated",
+    missing: "missing",
+    notEntered: "not entered",
+    hintOutdoor: "With an outdoor temperature, from a sensor or Open-Meteo in the integration's options, the temperature of each day shows below.",
+    hintHeatingStatistics: "With heating statistics, in the heating options, the heating would be measured rather than estimated.",
+    hintWaterHeater: "With a water heater tracked on its own, the hot water would be measured.",
+    hintGasPrice: "With a gas price, the gas would be counted in euros.",
+    hintIndoor: "With indoor thermometers, in the heating options, the simulator starts from your indoor temperature.",
     weatherOpen: "Open the options",
     weatherNoData: "No outdoor temperature recorded over this period.",
     weatherFewDays: "Too few days to tell the heating apart.",
@@ -330,7 +371,48 @@ const STRINGS = {
     temperature: "Température",
     weather: "Météo",
     weatherSetup: "Choisissez un capteur de température extérieure, ou activez la météo Open-Meteo, dans les options de l'intégration pour comparer la consommation à la météo.",
-    openMeteoCredit: "Température extérieure : Open-Meteo.com (CC BY 4.0), à la position de votre maison à 10 km près.",
+    nowInfo: "Le prix du kWh de votre contrat maintenant et jusqu'à demain soir, heure par heure, selon la tranche et la couleur Tempo. La couleur de demain est inconnue jusqu'à sa publication par RTE, vers 11 h.",
+    tempoLeftInfo: "Les jours rouges et blancs que RTE doit encore placer cette saison, sur 22 rouges et 43 blancs, de septembre à août.",
+    peakByColorInfo: "Pour chaque couleur Tempo, la part de la consommation en heures pleines. Un jour rouge consommé surtout en heures creuses montre que la consommation est bien décalée.",
+    calendarInfo: "Chaque carré est un jour de la période. Touchez un jour pour voir sa consommation et son coût.",
+    calendarTempoInfo: "Chaque carré est un jour de la période, dans la couleur Tempo publiée par RTE. Touchez un jour pour voir sa consommation et son coût.",
+    topDaysInfo: "Les cinq jours qui ont coûté le plus sur la période, chacun au prix de ses tranches, avec la température extérieure moyenne du jour quand elle est connue.",
+    spendInfo: "Pour chaque tranche, sa part des kWh face à sa part des euros, hors abonnement. Une tranche qui pèse plus en euros qu'en kWh est chère : c'est là qu'un kWh évité rapporte le plus.",
+    simAbout: "Le simulateur prolonge la droite de la Météo jusqu'à une température extérieure et intérieure de votre choix, et donne le prix d'une telle journée.",
+    yourData: "Vos données",
+    useConsumption: "Consommation",
+    useContract: "Contrat",
+    useContracts: "Contrats",
+    useChosen: "Contrat choisi",
+    useColors: "Couleurs Tempo",
+    useHeating: "Chauffage",
+    useGas: "Gaz",
+    useGasPrice: "Prix du gaz",
+    useHotWater: "Eau chaude",
+    useOutdoor: "Température extérieure",
+    useIndoor: "Température intérieure",
+    useHistory: "Projection",
+    linkyHourly: "Linky, horaire",
+    meterHourly: "Compteur, horaire",
+    rte: "RTE",
+    lastYear: "consommation de l'an dernier",
+    openMeteo: "Open-Meteo.com (CC BY 4.0), à 10 km près",
+    sensorNamed: "Capteur · {name}",
+    heatersOne: "{count} radiateur",
+    heatersOther: "{count} radiateurs",
+    statisticsOne: "{count} statistique",
+    statisticsOther: "{count} statistiques",
+    thermometersOne: "{count} thermomètre",
+    thermometersOther: "{count} thermomètres",
+    fromTheHome: "estimé sur la consommation",
+    notTracked: "non suivi · estimé",
+    missing: "manquante",
+    notEntered: "non saisi",
+    hintOutdoor: "Avec une température extérieure, d'un capteur ou d'Open-Meteo dans les options de l'intégration, la température de chaque jour s'affiche dessous.",
+    hintHeatingStatistics: "Avec des statistiques de chauffage, dans les options du chauffage, le chauffage serait mesuré au lieu d'être estimé.",
+    hintWaterHeater: "Avec un ballon d'eau chaude suivi à part, l'eau chaude serait mesurée.",
+    hintGasPrice: "Avec un prix du gaz, le gaz serait compté en euros.",
+    hintIndoor: "Avec des thermomètres intérieurs, dans les options du chauffage, le simulateur part de votre température intérieure.",
     weatherOpen: "Ouvrir les options",
     weatherNoData: "Aucune température extérieure enregistrée sur cette période.",
     weatherFewDays: "Trop peu de jours pour isoler le chauffage.",
@@ -781,6 +863,13 @@ main {
 .method { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--ec-wash); color: var(--ec-text-2); font-size: 13px; line-height: 1.5; }
 .method p { margin: 0; }
 .method p + p { margin-top: 8px; }
+.method > * + * { margin-top: 10px; }
+.uses h3 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--ec-text-2); }
+.uses dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin: 0; }
+.uses dt { color: var(--ec-text); }
+.uses dd { margin: 0; text-align: right; }
+.uses dd.missing { color: var(--ec-warn); }
+.method p.hint { margin-top: 10px; }
 .lead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-bottom: 12px; }
 .lead strong { font-size: 28px; font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .lead span { color: var(--ec-text-2); font-size: 14px; }
@@ -1363,10 +1452,6 @@ class ElectricityContractsPanel extends HTMLElement {
     return (this._entries || []).find((entry) => entry.entry_id === this._entryId) || null;
   }
 
-  // Open-Meteo's data is under CC BY 4.0: credit it wherever it is shown.
-  _weatherCredit() {
-    return this._entry && this._entry.outdoor === "open_meteo" ? this._t("openMeteoCredit") : null;
-  }
 
   _color(contractId) {
     const contracts = this._entry ? this._entry.contracts : [];
@@ -1395,7 +1480,7 @@ class ElectricityContractsPanel extends HTMLElement {
     }
     this._renderSources();
     this._refreshOutlook();
-    await this._load();
+    await Promise.all([this._loadStatisticNames(), this._load()]);
   }
 
   _resetPeriod() {
@@ -1757,11 +1842,15 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   // A card: its title, the (i) opening what its figures mean, its tools, then
-  // its body. The notes open under the body.
-  _card(title, body, { info = [], tools = null, rerender = () => this._renderContent() } = {}) {
+  // its body. The notes open under the body: how it is computed, the data it
+  // uses ("uses", see _uses) and what more data would bring ("hint").
+  _card(title, body, { info = [], uses = [], hint = null, tools = null, rerender = () => this._renderContent() } = {}) {
     const notes = info.filter(Boolean);
-    const open = notes.length > 0 && Boolean(this._open[title]);
-    const button = notes.length
+    const rows = uses.filter(Boolean);
+    const hints = [hint].flat().filter(Boolean);
+    const explained = notes.length > 0 || rows.length > 0;
+    const open = explained && Boolean(this._open[title]);
+    const button = explained
       ? h(
           "button",
           {
@@ -1782,8 +1871,133 @@ class ElectricityContractsPanel extends HTMLElement {
       { class: "card" },
       h("div", { class: "card-head" }, h("h2", {}, title), tools || button ? h("div", { class: "card-tools" }, tools, button) : null),
       body,
-      open ? h("div", { class: "method" }, notes.map((note) => h("p", {}, note))) : null,
+      open
+        ? h(
+            "div",
+            { class: "method" },
+            notes.map((note) => h("p", {}, note)),
+            rows.length
+              ? h(
+                  "div",
+                  { class: "uses" },
+                  h("h3", {}, this._t("yourData")),
+                  h(
+                    "dl",
+                    {},
+                    rows.map(([name, value, missing]) => [h("dt", {}, name), h("dd", missing ? { class: "missing" } : {}, value)]),
+                  ),
+                )
+              : null,
+            hints.map((note) => h("p", { class: "hint" }, note)),
+          )
+        : null,
     );
+  }
+
+  // "Your data" of a card: one row per input it uses, with where it comes from.
+  // Each key gives [name, value, missing?], or null when it doesn't apply.
+  _uses(...keys) {
+    return keys.map((key) => this._use(key)).filter(Boolean);
+  }
+
+  _use(key) {
+    const entry = this._entry;
+    if (!entry) return null;
+    const inputs = entry.inputs || {};
+    const heating = entry.heating;
+    const named = (id) => this._statisticName(id);
+    switch (key) {
+      case "consumption":
+        return entry.meter === false ? null : [this._t("useConsumption"), this._t(inputs.meter === "linky" ? "linkyHourly" : "meterHourly")];
+      case "contract": {
+        const shown = this._usedContracts();
+        if (!shown.length) return null;
+        return [this._t(shown.length > 1 ? "useContracts" : "useContract"), shown.map((contract) => this._contractFacts(contract)).join(" ; ")];
+      }
+      case "contractToday": {
+        const today = this._contractsToday();
+        return today.length ? [this._t("useContract"), today.map((contract) => this._contractFacts(contract)).join(" ; ")] : null;
+      }
+      case "otherContract": {
+        // The contract in force, beside a chosen one that isn't it.
+        const shown = this._usedContracts().filter((contract) => contract.id !== this._billContract);
+        return shown.length ? [this._t(shown.length > 1 ? "useContracts" : "useContract"), shown.map((contract) => this._contractFacts(contract)).join(" ; ")] : null;
+      }
+      case "chosen": {
+        const chosen = entry.contracts.find((contract) => contract.id === this._billContract);
+        return chosen ? [this._t("useChosen"), this._contractFacts(chosen)] : null;
+      }
+      case "colorsToday":
+        return this._contractsToday().some((contract) => contract.kind === "tempo") ? [this._t("useColors"), this._t("rte")] : null;
+      case "colors":
+        return this._usedContracts().some((contract) => contract.kind === "tempo") ? [this._t("useColors"), this._t("rte")] : null;
+      case "history":
+        return [this._t("useHistory"), this._t("lastYear")];
+      case "heating": {
+        if (!heating) return null;
+        const label = this._t(heating.gas ? "useGas" : "useHeating");
+        if (!heating.measured) return [label, this._t("fromTheHome")];
+        const ids = inputs.heating || [];
+        if (ids.length === 1) return [label, named(ids[0])];
+        return [label, this._count(ids.length, heating.gas ? "statisticsOne" : "heatersOne", heating.gas ? "statisticsOther" : "heatersOther")];
+      }
+      case "water":
+        if (!heating || !heating.with_water) return null;
+        return [this._t("useHotWater"), inputs.water ? named(inputs.water) : this._t("notTracked")];
+      case "gasPrice": {
+        if (!heating || !heating.gas) return null;
+        const price = this._heating && this._heating.simulator ? this._heating.simulator.gas_price : null;
+        return price !== null && price !== undefined ? [this._t("useGasPrice"), `${this._price(price)}/kWh`] : [this._t("useGasPrice"), this._t("notEntered"), true];
+      }
+      case "outdoor":
+        if (entry.outdoor === "sensor") return [this._t("useOutdoor"), this._t("sensorNamed", { name: named(inputs.outdoor) })];
+        if (entry.outdoor === "open_meteo") return [this._t("useOutdoor"), this._t("openMeteo")];
+        return [this._t("useOutdoor"), this._t("missing"), true];
+      case "indoor": {
+        const ids = inputs.indoor || [];
+        if (ids.length === 1) return [this._t("useIndoor"), named(ids[0])];
+        return ids.length ? [this._t("useIndoor"), this._count(ids.length, "thermometersOne", "thermometersOther")] : [this._t("useIndoor"), this._t("missing"), true];
+      }
+      default:
+        return null;
+    }
+  }
+
+  // The contracts a card's figures come from: those in force over the period,
+  // or today's when nothing is costed.
+  _usedContracts() {
+    const entry = this._entry;
+    const ids = this._data && !this._data.meterless ? this._contractsInForce().map((contract) => contract.id) : this._contractsToday().map((contract) => contract.id);
+    return entry.contracts.filter((contract) => ids.includes(contract.id));
+  }
+
+  _contractFacts(contract) {
+    return [contract.name, contract.kva ? `${contract.kva} kVA` : null, this._t(contract.official ? "regulated" : "manualPrices")].filter(Boolean).join(", ");
+  }
+
+  // The name of a statistic: its entity's, or the recorder's for one imported.
+  _statisticName(id) {
+    const state = this._hass && this._hass.states[id];
+    return (state && state.attributes.friendly_name) || (this._statisticNames && this._statisticNames[id]) || id;
+  }
+
+  // The recorder's names of the statistics the cards list, for those without
+  // an entity (a Gazpar import, for example).
+  async _loadStatisticNames() {
+    const ids = new Set();
+    for (const entry of this._entries || []) {
+      const inputs = entry.inputs || {};
+      for (const id of [...(inputs.heating || []), inputs.water, inputs.outdoor, ...(inputs.indoor || [])]) {
+        if (id && !(this._hass.states[id] || (this._statisticNames && id in this._statisticNames))) ids.add(id);
+      }
+    }
+    if (!ids.size) return;
+    try {
+      const found = await this._hass.callWS({ type: "recorder/get_statistics_metadata", statistic_ids: [...ids] });
+      this._statisticNames = { ...this._statisticNames, ...Object.fromEntries(found.filter((item) => item.name).map((item) => [item.statistic_id, item.name])) };
+    } catch (error) {
+      // The IDs stand in for the names.
+    }
   }
 
   _renderContent() {
@@ -1906,7 +2120,9 @@ class ElectricityContractsPanel extends HTMLElement {
     const heating = this._heating;
     const split = heating && heating.totals && (!heating.gas || (heating.water_split && !heating.water_gas)) && this._measure !== "price";
     return this._card(this._t(`${this._measure}By${by}`), this._timeChart, {
-      info: [this._t(`${this._measure}Per${by}`), split ? this._t("heatingSplitInfo") : null, this._weatherCredit()],
+      info: [this._t(`${this._measure}Per${by}`), split ? this._t("heatingSplitInfo") : null],
+      uses: this._uses("consumption", "contract", "colors", split ? "heating" : null, split && heating.water_split ? "water" : null, "outdoor"),
+      hint: this._entry.outdoor ? null : this._t("hintOutdoor"),
       tools: [measures, this._toggle("time")],
     });
   }
@@ -2713,6 +2929,7 @@ class ElectricityContractsPanel extends HTMLElement {
         ticks,
         tempo ? this._tomorrowLine(tempo) : null,
       ],
+      { info: [this._t("nowInfo")], uses: this._uses("contractToday", "colorsToday"), rerender: () => this._renderHead() },
     );
   }
 
@@ -2772,7 +2989,11 @@ class ElectricityContractsPanel extends HTMLElement {
     if (!season) {
       if (!tempo) return null;
       const label = `${tempo.season.start.slice(0, 4)}-${tempo.season.end.slice(0, 4)}`;
-      return this._card(this._t("season", { season: label }), this._tempoMeters(tempo));
+      return this._card(this._t("season", { season: label }), this._tempoMeters(tempo), {
+        info: [this._t("tempoLeftInfo")],
+        uses: this._uses("contractToday", "colorsToday"),
+        rerender: () => this._renderHead(),
+      });
     }
     const label = `${season.start.slice(0, 4)}-${season.end.slice(0, 4)}`;
     const long = { day: "numeric", month: "long", year: "numeric" };
@@ -2823,6 +3044,7 @@ class ElectricityContractsPanel extends HTMLElement {
           season.complete ? null : this._t("budgetPartial"),
           projection ? this._t("budgetMethod") : this._t("budgetNoProjection"),
         ],
+        uses: this._uses("consumption", "contractToday", "colorsToday", projection ? "history" : null),
         rerender: () => this._renderHead(),
       },
     );
@@ -2921,7 +3143,7 @@ class ElectricityContractsPanel extends HTMLElement {
           this._offPeakRanges().length ? [h("span", { class: "swatch", style: { background: "var(--ec-wash)", "box-shadow": "inset 0 0 0 1px var(--ec-axis)" } }), capitalize(this._t("offPeakBand"), this._locale)] : null,
         ),
       ],
-      { info: [this._t("profileInfo", { days: this._number(this._insights.days.length) })] },
+      { info: [this._t("profileInfo", { days: this._number(this._insights.days.length) })], uses: this._uses("consumption", "contract") },
     );
   }
 
@@ -3108,6 +3330,7 @@ class ElectricityContractsPanel extends HTMLElement {
           ),
         ),
       ],
+      { info: [this._t("peakByColorInfo")], uses: this._uses("consumption", "contract", "colors") },
     );
   }
 
@@ -3139,7 +3362,7 @@ class ElectricityContractsPanel extends HTMLElement {
             )
           : null,
       ],
-      { info: [this._t("baseloadInfo", { energy: this._kwh(baseload.annual_energy) }), this._t("baseloadNote")] },
+      { info: [this._t("baseloadInfo", { energy: this._kwh(baseload.annual_energy) }), this._t("baseloadNote")], uses: this._uses("consumption", "contract") },
     );
   }
 
@@ -3264,8 +3487,8 @@ class ElectricityContractsPanel extends HTMLElement {
         info: [
           this._t("weatherInfo"),
           heating ? this._t("withHeating", { base, energy: this._kwh(Math.max(0, weather.intercept)), slope: this._kwh(weather.slope) }) : null,
-          this._weatherCredit(),
         ],
+        uses: this._uses("consumption", "outdoor"),
       },
     );
   }
@@ -3423,7 +3646,11 @@ class ElectricityContractsPanel extends HTMLElement {
         );
     this._calendarChart = h("div", { class: "scroll" });
     this._calendarDetail = h("div", { class: "day-detail", "aria-live": "polite" });
-    return this._card(this._t(tempo ? "calendarTempo" : "calendar"), [this._calendarChart, this._calendarDetail], { tools: legend });
+    return this._card(this._t(tempo ? "calendarTempo" : "calendar"), [this._calendarChart, this._calendarDetail], {
+      info: [this._t(tempo ? "calendarTempoInfo" : "calendarInfo")],
+      uses: this._uses("colors", "consumption", "contract"),
+      tools: legend,
+    });
   }
 
   // One square per day, a column per week from Monday to Sunday: the Tempo color
@@ -3564,6 +3791,7 @@ class ElectricityContractsPanel extends HTMLElement {
           ),
         ),
       ),
+      { info: [this._t("topDaysInfo")], uses: this._uses("consumption", "contract", "colors", weather ? "outdoor" : null) },
     );
   }
 
@@ -3646,7 +3874,7 @@ class ElectricityContractsPanel extends HTMLElement {
         this._lead(share(item.cost / cost), this._t("spendLead", { tranche: names[dearest] || dearest, energy: share(item.energy / energy) })),
         this._views.tranches === "chart" ? [bar("energy", energy, "kWh"), bar("cost", cost, "€")] : table,
       ],
-      { tools: this._toggle("tranches") },
+      { info: [this._t("spendInfo")], uses: this._uses("consumption", "contract"), tools: this._toggle("tranches") },
     );
   }
 
@@ -3723,6 +3951,7 @@ class ElectricityContractsPanel extends HTMLElement {
         contracts.length > 1 ? this._t("rankingChoose") : null,
         yours && yours.energy ? this._t("mineAllIn", { name: yours.name, price: this._average(yours.total_cost / yours.energy) }) : null,
       ],
+      uses: this._uses("consumption", "contract"),
     });
   }
 
@@ -3885,6 +4114,7 @@ class ElectricityContractsPanel extends HTMLElement {
           [this._t("billInfo", { name: contract ? contract.name : "" }), bill.actual !== null ? this._t("billActual", { actual: this._money(bill.actual) }) : null].filter(Boolean).join(" "),
           this._t("billPeriodsInfo"),
         ],
+        uses: this._uses("consumption", "chosen", "otherContract"),
       },
     );
   }
@@ -3907,6 +4137,7 @@ class ElectricityContractsPanel extends HTMLElement {
     const names = { mine: mine || this._t("yourContract"), name: contract.name };
     return this._card(this._t("gapWith", { name: contract.name }), [lead, this._cumulativeChart], {
       info: [this._t("gapInfo", names), this._t("gapNote", names)],
+      uses: this._uses("consumption", "chosen", "otherContract"),
       tools: this._toggle("cumulative"),
     });
   }
@@ -4076,9 +4307,24 @@ class ElectricityContractsPanel extends HTMLElement {
       : null;
     const { monthly } = this._heatingBuckets(heating);
     return this._card(this._t(monthly ? "heatingByMonth" : "heatingByDay"), this._heatingDaysChart, {
-      info: [this._t(heating.gas ? "heatingByDayGasInfo" : "heatingByDayInfo"), this._waterNote(heating), this._weatherCredit()],
+      info: [this._t(heating.gas ? "heatingByDayGasInfo" : "heatingByDayInfo"), this._waterNote(heating)],
+      uses: this._uses("heating", "water", heating.gas ? "gasPrice" : "contract", "outdoor"),
+      hint: this._heatingHints(heating, "water", "gasPrice", "outdoor"),
       tools: measures,
     });
+  }
+
+  // What more data would bring to a heating card.
+  _heatingHints(heating, ...wanted) {
+    const entry = this._entry;
+    const hints = {
+      statistics: !heating.measured ? this._t("hintHeatingStatistics") : null,
+      water: heating.water_split && !heating.water_measured ? this._t("hintWaterHeater") : null,
+      gasPrice: heating.gas && (!heating.simulator || heating.simulator.gas_price === null) ? this._t("hintGasPrice") : null,
+      outdoor: entry.outdoor ? null : this._t("hintOutdoor"),
+      indoor: heating.has_indoor ? null : this._t("hintIndoor"),
+    };
+    return wanted.map((key) => hints[key]);
   }
 
   // How the hot water is told apart from the heating, when it is.
@@ -4186,7 +4432,10 @@ class ElectricityContractsPanel extends HTMLElement {
       );
     }
     if (!parts.length) return null;
-    return this._card(this._t("whereHeatingGoes"), h("div", { class: "heat-split" }, parts), { info: [this._t("whereHeatingInfo")] });
+    return this._card(this._t("whereHeatingGoes"), h("div", { class: "heat-split" }, parts), {
+      info: [this._t("whereHeatingInfo")],
+      uses: this._uses("heating", "contract"),
+    });
   }
 
   _renderHomeEnergy(heating) {
@@ -4218,7 +4467,11 @@ class ElectricityContractsPanel extends HTMLElement {
         ),
         this._keys(...items.map((item) => [h("span", { class: "swatch", style: { background: item.color } }), `${item.name} · ${format(item.value)}`])),
       ],
-      { info: [this._t("homeEnergyInfo"), euros ? null : this._t("homeEnergyKwh"), this._waterNote(heating)] },
+      {
+        info: [this._t("homeEnergyInfo"), euros ? null : this._t("homeEnergyKwh"), this._waterNote(heating)],
+        uses: this._uses("consumption", "contract", "heating", "water", "gasPrice"),
+        hint: this._heatingHints(heating, "water", "gasPrice"),
+      },
     );
   }
 
@@ -4244,7 +4497,11 @@ class ElectricityContractsPanel extends HTMLElement {
           !heating.gas && this._offPeakRanges().length ? [h("span", { class: "swatch", style: { background: "var(--ec-wash)", "box-shadow": "inset 0 0 0 1px var(--ec-axis)" } }), capitalize(this._t("offPeakBand"), this._locale)] : null,
         ),
       ],
-      { info: [this._t("heatingProfileInfo", { days: this._number(hourly) }), this._waterNote(heating)] },
+      {
+        info: [this._t("heatingProfileInfo", { days: this._number(hourly) }), this._waterNote(heating)],
+        uses: this._uses("heating", "water", heating.gas ? null : "contract"),
+        hint: this._heatingHints(heating, "water"),
+      },
     );
   }
 
@@ -4293,8 +4550,9 @@ class ElectricityContractsPanel extends HTMLElement {
             ? this._t("heatingWeatherInfo", { base, slope: this._kwh(perDegree.energy), cost: perDegree.cost !== null ? this._money(perDegree.cost) : "—" })
             : this._t("weatherInfo"),
           heating.measured ? this._waterNote(heating) : this._t("estimatedHeatingInfo"),
-          this._weatherCredit(),
         ],
+        uses: this._uses("outdoor", heating.measured ? "heating" : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
+        hint: this._heatingHints(heating, "statistics", "water"),
       },
     );
   }
@@ -4320,7 +4578,10 @@ class ElectricityContractsPanel extends HTMLElement {
     else if (sim.indoor === null) message = [this._t("simNoIndoorData")];
     else if (!this._perDegree(heating)) message = [this._t("simFewDays")];
     if (message) {
-      return this._card(title, [h("p", { class: "message" }, message[0]), message[1] || null]);
+      return this._card(title, [h("p", { class: "message" }, message[0]), message[1] || null], {
+        info: [this._t("simAbout")],
+        uses: this._uses("outdoor", heating.measured ? "heating" : "consumption", "indoor"),
+      });
     }
     // Tenths, so the sliders start on the measured temperatures.
     const tenth = (value) => Math.round(value * 10) / 10;
@@ -4375,6 +4636,8 @@ class ElectricityContractsPanel extends HTMLElement {
           Number.isFinite(low) && Number.isFinite(highest) ? this._t("simInfoRange", { low: this._degrees(low), high: this._degrees(highest) }) : null,
           heating.measured ? null : this._t("estimatedHeatingInfo"),
         ],
+        uses: this._uses("outdoor", "indoor", heating.measured ? "heating" : "consumption", heating.gas ? "gasPrice" : "contract"),
+        hint: this._heatingHints(heating, "statistics"),
       },
     );
   }

@@ -16,7 +16,7 @@ from homeassistant.components.websocket_api.decorators import (
     async_response,
     websocket_command,
 )
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 
@@ -29,7 +29,7 @@ from .comparison import (
     data_end,
     day_start,
 )
-from .const import DOMAIN, FRANCE_TIME_ZONE
+from .const import CONF_TEMPERATURE, DOMAIN, FRANCE_TIME_ZONE
 from .coordinator import (
     ElectricityContractsConfigEntry,
     ElectricityContractsCoordinator,
@@ -41,6 +41,7 @@ from .data import (
     format_time_range,
     manual_prices,
     price_periods,
+    source_statistic,
 )
 from .heating import async_heating
 from .insights import async_insights
@@ -144,6 +145,21 @@ def _contract(
     }
 
 
+def _inputs(entry: ConfigEntry, heating: Heating) -> dict[str, Any]:
+    """Return the statistics the entry reads, for the panel to name them.
+
+    The consumption is only told as Linky or not: its ID holds the meter number.
+    """
+    source = source_statistic(entry)
+    return {
+        "meter": None if source is None else source.split(":", 1)[0],
+        "heating": list(heating.statistics),
+        "water": heating.water_statistic,
+        "outdoor": entry.options.get(CONF_TEMPERATURE) or None,
+        "indoor": list(heating.indoor),
+    }
+
+
 @websocket_command({vol.Required("type"): f"{DOMAIN}/entries"})
 @callback
 def ws_entries(
@@ -184,6 +200,8 @@ def ws_entries(
                 ],
                 "actual": status.actual is not None,
                 "outdoor": outdoor_source(entry),
+                # What the cards' notes list as "your data".
+                "inputs": _inputs(entry, heating),
                 # Without a meter, the heating can't be estimated: only measured.
                 "heating": _heating(heating) if meter or heating.measured else None,
             }
