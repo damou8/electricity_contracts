@@ -116,7 +116,6 @@ const STRINGS = {
     statisticsOther: "{count} statistics",
     thermometersOne: "{count} thermometer",
     thermometersOther: "{count} thermometers",
-    fromTheHome: "estimated from the consumption",
     notTracked: "not tracked",
     estimatedTag: "estimated",
     missing: "missing",
@@ -403,7 +402,6 @@ const STRINGS = {
     statisticsOther: "{count} statistiques",
     thermometersOne: "{count} thermomètre",
     thermometersOther: "{count} thermomètres",
-    fromTheHome: "estimé sur la consommation",
     notTracked: "non suivi",
     estimatedTag: "estimé",
     missing: "manquante",
@@ -1957,7 +1955,7 @@ class ElectricityContractsPanel extends HTMLElement {
         if (!heating) return null;
         const path = heating.gas ? ICONS.fire : ICONS.radiator;
         const name = heating.gas ? "useGas" : "useHeating";
-        if (!heating.measured) return row(path, "var(--ec-s2)", name, [this._t("fromTheHome")], "estimated");
+        if (!heating.measured) return row(path, "var(--ec-s2)", name, [this._t("notTracked"), this._t("estimatedTag")], "estimated");
         const ids = inputs.heating || [];
         const value = ids.length === 1 ? named(ids[0]) : this._count(ids.length, heating.gas ? "statisticsOne" : "heatersOne", heating.gas ? "statisticsOther" : "heatersOther");
         return row(path, "var(--ec-s2)", name, [value]);
