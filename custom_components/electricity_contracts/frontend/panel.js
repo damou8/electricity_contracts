@@ -149,6 +149,7 @@ const STRINGS = {
     preparing: "Preparing the figures… The page updates by itself.",
     ifItLasts: "If this lasts, see the state of the integration.",
     noContract: "Add a contract to the integration to compare it here.",
+    noMeter: "Without a meter, this source shows the contract in force, its prices and the Tempo colors, and the heating when its statistics are set. To see costs and comparisons, reconfigure the source with a consumption statistic.",
     loadFailed: "Loading failed: {error}",
     liveFailed: "The price now could not be loaded: {error}",
     insightsFailed: "These figures could not be loaded: {error}",
@@ -394,6 +395,7 @@ const STRINGS = {
     preparing: "Préparation des calculs… La page se met à jour toute seule.",
     ifItLasts: "Si cela dure, voyez l'état de l'intégration.",
     noContract: "Ajoutez un contrat à l'intégration pour le comparer ici.",
+    noMeter: "Sans compteur, cette source montre le contrat en cours, ses prix et les couleurs Tempo, et le chauffage quand ses statistiques sont renseignées. Pour voir les coûts et les comparaisons, reconfigurez la source avec une statistique de consommation.",
     loadFailed: "Le chargement a échoué : {error}",
     liveFailed: "Le prix en direct n'a pas pu être chargé : {error}",
     insightsFailed: "Ces chiffres n'ont pas pu être chargés : {error}",
@@ -1413,7 +1415,8 @@ class ElectricityContractsPanel extends HTMLElement {
 
   _window() {
     const entry = this._entry;
-    const last = entry.last_day;
+    // A source without a meter may have no days at all: its window ends today.
+    const last = entry.last_day || dayString(Date.now());
     const [year, month, day] = last.split("-").map(Number);
     if (this._year === null) {
       this._year = year;
@@ -1454,7 +1457,8 @@ class ElectricityContractsPanel extends HTMLElement {
     this._billKey = null;
     this._billCount++;
     this._renderFilters();
-    if (!entry || !entry.last_day || !entry.contracts.length) {
+    const meterless = entry && entry.meter === false;
+    if (!entry || (!entry.last_day && !meterless) || !entry.contracts.length) {
       this._data = null;
       this._renderContent();
       return;
@@ -1477,13 +1481,14 @@ class ElectricityContractsPanel extends HTMLElement {
     try {
       const request = { entry_id: entry.entry_id, start: window.start, end: window.end };
       const [data, insights, heating] = await Promise.all([
-        this._hass.callWS({ type: `${DOMAIN}/compare`, ...request }),
+        // Without a meter, nothing is costed: the insights still give Tempo.
+        meterless ? { meterless: true } : this._hass.callWS({ type: `${DOMAIN}/compare`, ...request }),
         // The page stands without them: their cards tell what went wrong.
         this._hass.callWS({ type: `${DOMAIN}/insights`, ...request }).catch((error) => {
           insightsError = error.message || String(error);
           return null;
         }),
-        entry.heating
+        entry.heating && entry.last_day
           ? this._hass.callWS({ type: `${DOMAIN}/heating`, ...request }).catch((error) => {
               heatingError = error.message || String(error);
               return null;
@@ -1570,6 +1575,7 @@ class ElectricityContractsPanel extends HTMLElement {
       if (this._tab !== tab) {
         this._tab = tab;
         this._renderTabs();
+        this._renderFilters();
         this._renderContent();
       }
       if (focus) this._tabs.querySelector('[aria-selected="true"]').focus();
@@ -1627,7 +1633,7 @@ class ElectricityContractsPanel extends HTMLElement {
 
   _renderFilters() {
     const entry = this._entry;
-    if (!entry || !entry.last_day || !entry.contracts.length) {
+    if (!entry || !entry.last_day || !entry.contracts.length || (entry.meter === false && this._tab !== "heating")) {
       this._filters.replaceChildren();
       return;
     }
@@ -1795,7 +1801,7 @@ class ElectricityContractsPanel extends HTMLElement {
         : null;
     } else if (!entry.contracts.length) {
       message = this._t("noContract");
-    } else if (!entry.last_day || !this._data || this._data.start === this._data.end) {
+    } else if (entry.meter !== false && (!entry.last_day || !this._data || this._data.start === this._data.end)) {
       message = this._data || !entry.last_day ? this._t("noData") : null;
     }
     if (message !== null) {
@@ -1845,6 +1851,9 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   _renderFollow() {
+    if (this._data.meterless) {
+      return [h("section", { class: "card message" }, this._t("noMeter"))];
+    }
     if (!this._data.actual) {
       return [h("section", { class: "card message" }, this._t("noContractInForce"))];
     }
@@ -2136,6 +2145,8 @@ class ElectricityContractsPanel extends HTMLElement {
 
   // The compared contracts that were in force during the period.
   _contractsInForce() {
+    // Without a meter, nothing is compared.
+    if (this._data.meterless) return [];
     const first = this._data.start.slice(0, 10);
     const last = lastDayOf(this._data.end);
     const ids = this._entry.contracts
@@ -3905,7 +3916,9 @@ class ElectricityContractsPanel extends HTMLElement {
   // The tabs of the source: Heating only when there is something to show.
   _tabList() {
     const entry = this._entry;
-    return ALL_TABS.filter((tab) => tab !== "heating" || (entry && entry.heating));
+    // Without a meter, only what doesn't need the consumption.
+    const meterless = entry && entry.meter === false;
+    return ALL_TABS.filter((tab) => (tab === "heating" ? entry && entry.heating : !meterless || tab === "follow"));
   }
 
   _renderHeatingTab() {
@@ -3913,6 +3926,8 @@ class ElectricityContractsPanel extends HTMLElement {
       return [this._errorCard(this._t("tabHeating"), this._t("insightsFailed", { error: this._heatingError }), () => this._load())];
     }
     const heating = this._heating;
+    // A source without a meter has no heating days until its statistics have some.
+    if (!heating && !this._entry.last_day) return [h("section", { class: "card message" }, this._t("heatingNoData"))];
     if (!heating) return [this._loadingCard()];
     if (!heating.measured) {
       return [this._renderHeatingKpis(heating), h("div", { class: "duo" }, this._renderHeatingWeather(heating), this._renderSimulator(heating))];
@@ -4175,6 +4190,8 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   _renderHomeEnergy(heating) {
+    // Without a meter, the rest of the home is unknown.
+    if (this._entry.meter === false) return null;
     const totals = heating.totals;
     const euros = totals.heating_cost !== null && (!heating.water_split || totals.water_cost !== null);
     const water = heating.water_split ? (euros ? totals.water_cost : totals.water) : 0;

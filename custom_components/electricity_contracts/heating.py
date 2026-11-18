@@ -26,7 +26,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.recorder import get_instance
 from homeassistant.util import dt as dt_util
 
-from .comparison import hourly_changes, narrow_window
+from .comparison import day_start, hourly_changes, narrow_window
 from .const import FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
 from .costing import hourly_rows
@@ -39,6 +39,7 @@ from .data import (
     in_force,
     manual_prices,
     price_periods,
+    source_statistic,
 )
 from .insights import DEGREE_DAY_BASE, daily_means, weather_fit
 from .weather import outdoor_statistic
@@ -387,6 +388,7 @@ class _Answer:
             entry.options, outdoor=outdoor_statistic(entry)
         )
         self.pricer = _Pricer(entry, contracts(entry))
+        self.meter = source_statistic(entry) is not None
         self.calendar = entry.runtime_data.data.sources.calendar
         self.read = read
         heating = self.heating
@@ -510,8 +512,16 @@ class _Answer:
         water_gas = heating.water_gas if heating.water_statistic else heating.gas
         # Electric heating is a share of the source's electricity; gas heating, of
         # all the energy of the home, gas hot water included.
-        everything = house_energy + (
-            split.heating + (split.water if water_gas else 0.0) if heating.gas else 0.0
+        # Without a meter, the rest of the home is unknown: no share.
+        everything = (
+            house_energy
+            + (
+                split.heating + (split.water if water_gas else 0.0)
+                if heating.gas
+                else 0.0
+            )
+            if self.meter
+            else 0.0
         )
         average = (
             split.heating_cost / split.heating
@@ -653,7 +663,13 @@ async def async_heating(
     heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
     coordinator = entry.runtime_data
     status = coordinator.data.costing
-    start, end = narrow_window(status, contracts(entry), start, end)
+    if coordinator.statistic_id:
+        start, end = narrow_window(status, contracts(entry), start, end)
+    else:
+        # Without a meter, the window is where the heating statistics are.
+        start = max(start, day_start(coordinator.data.sources.first_day))
+        heating_end = coordinator.data.heating_end
+        end = max(start, min(end, heating_end)) if heating_end else start
     actual = coordinator.costing.actual_statistics() if status.actual else None
     house_ids = (actual.energy, actual.variable) if actual is not None else None
     measured = [*heating.statistics]

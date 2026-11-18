@@ -3,22 +3,22 @@
     "step": {
       "user": {
         "title": "Consumption source",
-        "description": "Choose the hourly consumption to cost. Add the contracts afterwards, from the entry's menu.",
+        "description": "Choose the hourly consumption to cost. Without a meter, leave it empty: the source then shows the prices, the Tempo colors and the heating. Add the contracts afterwards, from the entry's menu.",
         "data": {
-          "statistic_id": "Consumption statistic"
+          "statistic_id": "Consumption statistic (optional)"
         },
         "data_description": {
-          "statistic_id": "Hourly energy statistic of the meter, like the linky:… statistic the Linky app imports (named after the meter number)."
+          "statistic_id": "Hourly energy statistic of the meter, like the linky:… statistic the Linky app imports (named after the meter number). Costs and comparisons need it."
         }
       },
       "reconfigure": {
         "title": "Change the consumption source",
-        "description": "For example after a meter change. Every contract is costed again on the new statistic.",
+        "description": "For example after a meter change. Every contract is costed again on the new statistic. Left empty, the source has no meter.",
         "data": {
-          "statistic_id": "Consumption statistic"
+          "statistic_id": "Consumption statistic (optional)"
         },
         "data_description": {
-          "statistic_id": "Hourly energy statistic of the meter, like the linky:… statistic the Linky app imports (named after the meter number)."
+          "statistic_id": "Hourly energy statistic of the meter, like the linky:… statistic the Linky app imports (named after the meter number). Costs and comparisons need it."
         }
       }
     },
@@ -30,8 +30,7 @@
       "statistic_daily": "This statistic only has daily values: they can't be split between off-peak and peak hours. Enable the load curve (hourly consumption) in your Enedis account and in the Linky app."
     },
     "abort": {
-      "already_configured": "This statistic is already configured.",
-      "no_statistic": "No energy total exists yet. Import the consumption first, for example with the Linky app."
+      "already_configured": "This statistic is already configured."
     }
   },
   "options": {

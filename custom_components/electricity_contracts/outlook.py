@@ -34,9 +34,16 @@ from .comparison import (
     hourly_changes,
     read_changes,
 )
-from .const import CONF_STATISTIC_ID, FRANCE_TIME_ZONE
+from .const import FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
-from .data import Contract, contracts, in_force, manual_prices, price_periods
+from .data import (
+    Contract,
+    contracts,
+    in_force,
+    manual_prices,
+    price_periods,
+    source_statistic,
+)
 
 # RTE places at most this many days of each color in a season.
 RED_DAYS = 22
@@ -193,7 +200,9 @@ async def _async_season(
     )
     year_start = max(available - _YEAR, status.first_hour)
     totals = [actual.variable, actual.fixed, actual.energy]
-    source_id: str = entry.data[CONF_STATISTIC_ID]
+    # Without a meter there is no actual cost, so no season.
+    source_id = source_statistic(entry)
+    assert source_id is not None
 
     def read() -> tuple[
         dict[str, float],

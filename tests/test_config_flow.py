@@ -49,6 +49,7 @@ from custom_components.electricity_contracts.const import (
     DOMAIN,
     ENERGY_ELECTRICITY,
     ENERGY_GAS,
+    NO_METER,
     OFF_PEAK_OTHER,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
@@ -110,19 +111,57 @@ async def test_user_flow_suggests_a_linky_statistic(hass: HomeAssistant) -> None
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
-    # The frontend can't show a required statistic selector without a value.
     schema = result["data_schema"]
     assert schema is not None
     (field,) = schema.schema
     assert field.description == {"suggested_value": OTHER_STATISTIC_ID}
 
 
-async def test_user_flow_without_statistic(hass: HomeAssistant) -> None:
+@pytest.mark.usefixtures("statistic")
+async def test_user_flow_suggests_only_a_new_linky(hass: HomeAssistant) -> None:
+    # Gas, say, and a Linky already set up: no meter is the likelier answer.
+    await add_statistic(hass, "meter:energy")
+    make_entry().add_to_hass(hass)
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
+    schema = result["data_schema"]
+    assert schema is not None
+    (field,) = schema.schema
+    assert field.description is None
+
+
+async def test_user_flow_without_meter(hass: HomeAssistant) -> None:
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    # No statistic to suggest: the field starts empty.
+    schema = result["data_schema"]
+    assert schema is not None
+    (field,) = schema.schema
+    assert field.description is None
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "No meter"
+    assert result["data"] == {}
+    assert result["result"].unique_id == NO_METER
+
+    # Only one source without a meter.
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "no_statistic"
+    assert result["reason"] == "already_configured"
+
+
+async def test_user_flow_without_meter_in_french(hass: HomeAssistant) -> None:
+    hass.config.language = "fr"
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["title"] == "Sans compteur"
 
 
 async def add_bad_statistics(hass: HomeAssistant) -> None:
@@ -195,6 +234,25 @@ async def test_reconfigure_to_another_statistic(hass: HomeAssistant) -> None:
     assert result["reason"] == "reconfigure_successful"
     assert entry.unique_id == OTHER_STATISTIC_ID
     assert entry.data == {CONF_STATISTIC_ID: OTHER_STATISTIC_ID}
+
+
+@pytest.mark.usefixtures("statistic")
+async def test_reconfigure_without_meter_and_back(hass: HomeAssistant) -> None:
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.unique_id == NO_METER
+    assert entry.data == {}
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_STATISTIC_ID: STATISTIC_ID}
+    )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.unique_id == STATISTIC_ID
+    assert entry.data == {CONF_STATISTIC_ID: STATISTIC_ID}
 
 
 @pytest.mark.usefixtures("statistic")

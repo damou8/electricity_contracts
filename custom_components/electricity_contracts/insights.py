@@ -56,22 +56,26 @@ async def async_insights(
     """
     coordinator = entry.runtime_data
     status = coordinator.data.costing
+    entry_contracts = contracts(entry)
+    today = dt_util.now(FRANCE_TIME_ZONE).date()
+    contract = in_force(entry_contracts, today)
+    tempo = contract if contract and contract.kind is ContractKind.TEMPO else None
+    calendar = coordinator.data.sources.calendar
     if status.actual is None:
         return {
             "days": [],
             "profile": [],
             "previous": None,
-            "tempo": None,
+            # Nothing costed yet, or no meter: the colors left still help.
+            "tempo": (
+                _tempo(entry, tempo, calendar, [], today) if tempo is not None else None
+            ),
             "baseload": None,
             "weather": None,
         }
-    entry_contracts = contracts(entry)
     start, end = narrow_window(status, entry_contracts, start, end)
     ids = coordinator.costing.actual_statistics()
     costs = [ids.variable, ids.fixed]
-    today = dt_util.now(FRANCE_TIME_ZONE).date()
-    contract = in_force(entry_contracts, today)
-    tempo = contract if contract and contract.kind is ContractKind.TEMPO else None
     temperature_id = outdoor_statistic(entry)
     previous_start = start - (end - start)
     has_previous = (
@@ -128,7 +132,6 @@ async def async_insights(
     hours, previous, recent, year, temperatures = await get_instance(
         hass
     ).async_add_executor_job(read)
-    calendar = coordinator.data.sources.calendar
 
     days: dict[date, dict[str, float]] = {}
     profile = [[0.0, 0] for _ in range(24)]

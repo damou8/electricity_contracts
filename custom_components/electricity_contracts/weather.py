@@ -25,10 +25,10 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.storage import Store
-from homeassistant.util import slugify
 from homeassistant.util.unit_conversion import TemperatureConverter
 
-from .const import CONF_STATISTIC_ID, CONF_TEMPERATURE, CONF_WEATHER, DOMAIN
+from .const import CONF_TEMPERATURE, CONF_WEATHER, DOMAIN
+from .data import source_object
 from .statistics import async_clear_statistics
 
 STORE_VERSION: Final = 1
@@ -41,7 +41,7 @@ _NAMES: Final = {
 
 def weather_statistic_id(entry: ConfigEntry) -> str:
     """Return the ID of the entry's Open-Meteo temperature statistic."""
-    return f"{DOMAIN}:{slugify(entry.data[CONF_STATISTIC_ID])}_outdoor_temperature"
+    return f"{DOMAIN}:{source_object(entry)}_outdoor_temperature"
 
 
 def uses_weather(entry: ConfigEntry) -> bool:

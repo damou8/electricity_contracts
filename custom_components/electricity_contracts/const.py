@@ -9,6 +9,9 @@ from elec_tariffs import ContractKind
 DOMAIN: Final = "electricity_contracts"
 
 CONF_STATISTIC_ID: Final = "statistic_id"
+# The unique ID and statistic prefix of the source without a meter.
+NO_METER: Final = "no_meter"
+NO_METER_TITLES: Final = {"en": "No meter", "fr": "Sans compteur"}
 CONF_RTE_CLIENT_ID: Final = "rte_client_id"
 CONF_RTE_CLIENT_SECRET: Final = "rte_client_secret"  # noqa: S105 - a key
 CONF_TEMPERATURE: Final = "temperature"
