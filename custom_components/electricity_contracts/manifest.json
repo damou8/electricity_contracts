@@ -24,7 +24,7 @@
     "elec_tariffs"
   ],
   "requirements": [
-    "elec-tariffs==0.2.0"
+    "elec-tariffs==0.3.0"
   ],
   "version": "0.0.0"
 }

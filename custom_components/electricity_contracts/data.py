@@ -31,7 +31,6 @@ from .const import (
     CONF_PRICES,
     CONF_PRICING,
     CONF_START,
-    CONF_TEMPERATURE,
     CONF_UID,
     CONF_WATER_ENERGY,
     CONF_WATER_STATISTIC,
@@ -214,8 +213,13 @@ class Heating:
     outdoor: str | None
 
     @classmethod
-    def from_options(cls, options: Mapping[str, Any]) -> Heating:
-        """Read the heating section of the options; every key is optional."""
+    def from_options(
+        cls, options: Mapping[str, Any], *, outdoor: str | None
+    ) -> Heating:
+        """Read the heating section of the options; every key is optional.
+
+        `outdoor` is the outdoor temperature statistic (see `outdoor_statistic`).
+        """
         section: Mapping[str, Any] = options.get(SECTION_HEATING) or {}
         return cls(
             statistics=tuple(section.get(CONF_HEATING_STATISTICS) or ()),
@@ -224,7 +228,7 @@ class Heating:
             water_statistic=section.get(CONF_WATER_STATISTIC) or None,
             water_gas=section.get(CONF_WATER_ENERGY, ENERGY_ELECTRICITY) == ENERGY_GAS,
             indoor=tuple(section.get(CONF_INDOOR_TEMPERATURES) or ()),
-            outdoor=options.get(CONF_TEMPERATURE) or None,
+            outdoor=outdoor,
         )
 
     @property

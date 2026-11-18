@@ -46,6 +46,7 @@ from .heating import async_heating
 from .insights import async_insights
 from .outlook import async_outlook
 from .statistics import SeriesStatus
+from .weather import outdoor_source, outdoor_statistic
 
 _HOUR = timedelta(hours=1)
 # Longer windows are split into months.
@@ -175,7 +176,12 @@ def ws_entries(
                     for contract in entry_contracts
                 ],
                 "actual": status.actual is not None,
-                "heating": _heating(Heating.from_options(entry.options)),
+                "outdoor": outdoor_source(entry),
+                "heating": _heating(
+                    Heating.from_options(
+                        entry.options, outdoor=outdoor_statistic(entry)
+                    )
+                ),
             }
         )
     connection.send_result(msg["id"], result)

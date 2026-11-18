@@ -20,10 +20,11 @@ from .comparison import (
     narrow_window,
     read_changes,
 )
-from .const import CONF_TEMPERATURE, FRANCE_TIME_ZONE
+from .const import FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
 from .data import Contract, contracts, in_force, manual_prices, price_periods
 from .outlook import RED_DAYS, WHITE_DAYS, placed_days
+from .weather import outdoor_statistic
 
 # Tempo's peak hours, also used to tell day from night for the other contracts.
 _PEAK_HOURS = range(6, 22)
@@ -71,7 +72,7 @@ async def async_insights(
     today = dt_util.now(FRANCE_TIME_ZONE).date()
     contract = in_force(entry_contracts, today)
     tempo = contract if contract and contract.kind is ContractKind.TEMPO else None
-    temperature_id: str | None = entry.options.get(CONF_TEMPERATURE)
+    temperature_id = outdoor_statistic(entry)
     previous_start = start - (end - start)
     has_previous = (
         end > start

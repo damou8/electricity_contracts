@@ -40,10 +40,12 @@
         "title": "Options",
         "description": "Les coûts et les comparaisons sont dans la page [Contrats](/electricity-contracts) du menu latéral.",
         "data": {
-          "temperature": "Température extérieure (facultatif)"
+          "temperature": "Température extérieure (facultatif)",
+          "open_meteo": "Utiliser la météo Open-Meteo"
         },
         "data_description": {
-          "temperature": "Relie la consommation à la météo, dans l'onglet Chauffage. Le capteur doit garder des statistiques."
+          "temperature": "Relie la consommation à la météo, dans l'onglet Chauffage. Le capteur doit garder des statistiques. Il passe avant Open-Meteo.",
+          "open_meteo": "Sans capteur extérieur, prend la température extérieure heure par heure sur Open-Meteo.com, gratuit et sans compte. La position de votre maison, arrondie à environ 10 km, est envoyée à Open-Meteo."
         },
         "sections": {
           "heating": {
@@ -389,6 +391,10 @@
     "missing_price_official": {
       "title": "{contract} n'a pas de tarif réglementé pour le {day}",
       "description": "Les tarifs réglementés n'ont pas de prix pour ce type de contrat à {kva} kVA le {day} : les coûts de {contract} s'arrêtent ce jour-là. Vérifiez la puissance souscrite de {contract}, ou saisissez ses prix à la main."
+    },
+    "weather_unavailable": {
+      "title": "La météo Open-Meteo ne peut pas être mise à jour",
+      "description": "La température extérieure n'a pas pu être téléchargée sur Open-Meteo depuis le {since} ({error}). {title} garde les heures déjà connues, et les coûts n'en dépendent pas."
     }
   },
   "services": {

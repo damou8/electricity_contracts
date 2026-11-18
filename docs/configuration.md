@@ -37,6 +37,7 @@ Le contrat est comparé dès que ses prix couvrent les jours mesurés. Pour comp
 
 Dans la fenêtre **Configurer** de l'intégration :
 - **Température extérieure** (facultatif) : un capteur de température qui garde des statistiques. Il relie la consommation à la météo, ajoute la température au graphique d'évolution et fait apparaître l'onglet Chauffage.
+- **Utiliser la météo Open-Meteo** (facultatif, désactivé par défaut) : sans capteur extérieur, la température vient d'[Open-Meteo](https://open-meteo.com/), gratuit et sans compte, heure par heure depuis le premier jour de consommation. La position de la maison (Paramètres > Système > Général), arrondie à 0,1° (environ 10 km), est envoyée à Open-Meteo. La température est enregistrée comme statistique de l'entrée (« Température extérieure (Open-Meteo) »), et les derniers jours sont redemandés à chaque mise à jour, car Open-Meteo les corrige quelques jours plus tard. Un capteur choisi passe avant. Décocher l'option efface la statistique. Données sous licence CC BY 4.0.
 - **Chauffage et eau chaude** : voir ci-dessous.
 - **Secours Tempo : API officielle RTE** (section repliée) : voir plus bas.
 
@@ -90,6 +91,7 @@ The contract is compared once its prices cover the measured days. To compare an 
 
 **Options**, in the integration's **Configure** dialog:
 - **Outdoor temperature** (optional): a temperature sensor that keeps statistics. It relates the consumption to the weather, adds the temperature to the trend chart and brings the Heating tab.
+- **Use Open-Meteo weather** (optional, off by default): without an outdoor sensor, the temperature comes from [Open-Meteo](https://open-meteo.com/), free and without an account, hour by hour from the first day of consumption. The home's location (Settings > System > General), rounded to 0.1° (about 10 km), is sent to Open-Meteo. The temperature is recorded as a statistic of the entry ("Outdoor temperature (Open-Meteo)"), and the last days are asked again at each update, since Open-Meteo corrects them a few days later. A chosen sensor comes first. Unticking the option clears the statistic. Data under CC BY 4.0.
 - **Heating and hot water**: see below.
 - **Tempo backup: RTE's official API** (a collapsed section): see further down.
 

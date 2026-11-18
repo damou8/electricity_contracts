@@ -40,10 +40,12 @@
         "title": "Options",
         "description": "Costs and comparisons are on the [Contracts](/electricity-contracts) page of the sidebar.",
         "data": {
-          "temperature": "Outdoor temperature (optional)"
+          "temperature": "Outdoor temperature (optional)",
+          "open_meteo": "Use Open-Meteo weather"
         },
         "data_description": {
-          "temperature": "Puts the consumption next to the weather, in the Heating tab. The sensor must keep statistics."
+          "temperature": "Puts the consumption next to the weather, in the Heating tab. The sensor must keep statistics. It takes the place of Open-Meteo.",
+          "open_meteo": "Without an outdoor sensor, takes the hourly outdoor temperature from Open-Meteo.com, free and without an account. Your home's location, rounded to about 10 km, is sent to Open-Meteo."
         },
         "sections": {
           "heating": {
@@ -389,6 +391,10 @@
     "missing_price_official": {
       "title": "{contract} has no regulated price for {day}",
       "description": "The regulated prices have no price for this kind of contract at {kva} kVA on {day}: the costs of {contract} stop on that day. Check the subscribed power of {contract}, or price it by hand."
+    },
+    "weather_unavailable": {
+      "title": "Open-Meteo weather can't be updated",
+      "description": "The outdoor temperature couldn't be downloaded from Open-Meteo since {since} ({error}). {title} keeps the hours it already has, and the costs aren't affected."
     }
   },
   "services": {
