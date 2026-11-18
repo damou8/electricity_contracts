@@ -1974,7 +1974,7 @@ class ElectricityContractsPanel extends HTMLElement {
       }
       case "outdoor":
         if (entry.outdoor === "sensor") return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("sensorTag"), named(inputs.outdoor)]);
-        if (entry.outdoor === "open_meteo") return row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo", "CC BY 4.0"]);
+        if (entry.outdoor === "open_meteo") return row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo"]);
         return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("missing")], "missing");
       case "indoor": {
         const ids = inputs.indoor || [];
