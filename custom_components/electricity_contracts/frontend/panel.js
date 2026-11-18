@@ -95,31 +95,20 @@ const STRINGS = {
     yourData: "Your data",
     useConsumption: "Consumption",
     useContract: "Contract",
-    useContracts: "Contracts",
     useChosen: "Chosen contract",
     useColors: "Tempo colors",
     useHeating: "Heating",
-    useGas: "Gas",
     useGasPrice: "Gas price",
     useHotWater: "Hot water",
     useOutdoor: "Outdoor temperature",
     useIndoor: "Indoor temperature",
-    useHistory: "Projection",
-    hourly: "hourly",
+    useHistory: "History",
     meterTag: "Meter",
-    sensorTag: "Sensor",
     rte: "RTE",
-    lastYear: "last year's consumption",
-    heatersOne: "{count} heater",
-    heatersOther: "{count} heaters",
-    statisticsOne: "{count} statistic",
-    statisticsOther: "{count} statistics",
-    thermometersOne: "{count} thermometer",
-    thermometersOther: "{count} thermometers",
+    lastYear: "last year",
     notTracked: "not tracked",
     estimatedTag: "estimated",
-    missing: "missing",
-    notEntered: "not entered",
+    missing: "to set",
     hintOutdoor: "With an outdoor temperature, from a sensor or Open-Meteo in the integration's options, the temperature of each day shows below.",
     hintHeatingStatistics: "With heating statistics, in the heating options, the heating would be measured rather than estimated.",
     hintWaterHeater: "With a water heater tracked on its own, the hot water would be measured.",
@@ -381,31 +370,20 @@ const STRINGS = {
     yourData: "Vos données",
     useConsumption: "Consommation",
     useContract: "Contrat",
-    useContracts: "Contrats",
     useChosen: "Contrat choisi",
     useColors: "Couleurs Tempo",
     useHeating: "Chauffage",
-    useGas: "Gaz",
     useGasPrice: "Prix du gaz",
     useHotWater: "Eau chaude",
     useOutdoor: "Température extérieure",
     useIndoor: "Température intérieure",
-    useHistory: "Projection",
-    hourly: "horaire",
+    useHistory: "Historique",
     meterTag: "Compteur",
-    sensorTag: "Capteur",
     rte: "RTE",
-    lastYear: "consommation de l'an dernier",
-    heatersOne: "{count} radiateur",
-    heatersOther: "{count} radiateurs",
-    statisticsOne: "{count} statistique",
-    statisticsOther: "{count} statistiques",
-    thermometersOne: "{count} thermomètre",
-    thermometersOther: "{count} thermomètres",
+    lastYear: "l'an dernier",
     notTracked: "non suivi",
     estimatedTag: "estimé",
-    missing: "manquante",
-    notEntered: "non saisi",
+    missing: "à renseigner",
     hintOutdoor: "Avec une température extérieure, d'un capteur ou d'Open-Meteo dans les options de l'intégration, la température de chaque jour s'affiche dessous.",
     hintHeatingStatistics: "Avec des statistiques de chauffage, dans les options du chauffage, le chauffage serait mesuré au lieu d'être estimé.",
     hintWaterHeater: "Avec un ballon d'eau chaude suivi à part, l'eau chaude serait mesurée.",
@@ -1143,6 +1121,9 @@ tfoot td { font-weight: 600; border-bottom: none; }
   th, td { padding: 6px 4px; }
 }
 `;
+
+// The order of the lines of "Your data", the same on every card.
+const USE_ORDER = ["consumption", "heating", "water", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
 
 const ICONS = {
   meter: "M7,2V13H10V22L17,10H13L17,2H7Z",
@@ -1919,7 +1900,12 @@ class ElectricityContractsPanel extends HTMLElement {
   // where it comes from in tags. Each key gives { path, hue, name, values,
   // state }, state "estimated" or "missing" when so, or null when it doesn't apply.
   _uses(...keys) {
-    return keys.map((key) => this._use(key)).filter(Boolean);
+    const rank = (key) => USE_ORDER.indexOf(key);
+    return keys
+      .filter(Boolean)
+      .sort((first, second) => rank(first) - rank(second))
+      .flatMap((key) => this._use(key))
+      .filter(Boolean);
   }
 
   _use(key) {
@@ -1930,12 +1916,12 @@ class ElectricityContractsPanel extends HTMLElement {
     const named = (id) => this._statisticName(id);
     // hue: the color of its tags, that of the data in the charts when it has one.
     const row = (path, hue, name, values, state = null) => ({ path, hue, name: this._t(name), values: values.filter(Boolean), state });
-    const contracts = (path, list, one = "useContract") =>
-      list.length ? row(path, "var(--ec-s1)", list.length > 1 ? "useContracts" : one, list.flatMap((contract) => this._contractFacts(contract))) : null;
+    // One line per contract, so their tags don't mix.
+    const contracts = (path, list, name = "useContract") => list.map((contract) => row(path, "var(--ec-s1)", name, this._contractFacts(contract)));
     const colors = (list) => (list.some((contract) => contract.kind === "tempo") ? row(ICONS.colors, "var(--ec-s5)", "useColors", ["RTE"]) : null);
     switch (key) {
       case "consumption":
-        return entry.meter === false ? null : row(ICONS.meter, "var(--ec-money)", "useConsumption", [inputs.meter === "linky" ? "Linky" : this._t("meterTag"), this._t("hourly")]);
+        return entry.meter === false ? null : row(ICONS.meter, "var(--ec-money)", "useConsumption", [inputs.meter === "linky" ? "Linky" : this._t("meterTag")]);
       case "contract":
         return contracts(ICONS.contract, this._usedContracts());
       case "contractToday":
@@ -1954,11 +1940,8 @@ class ElectricityContractsPanel extends HTMLElement {
       case "heating": {
         if (!heating) return null;
         const path = heating.gas ? ICONS.fire : ICONS.radiator;
-        const name = heating.gas ? "useGas" : "useHeating";
-        if (!heating.measured) return row(path, "var(--ec-s2)", name, [this._t("notTracked"), this._t("estimatedTag")], "estimated");
-        const ids = inputs.heating || [];
-        const value = ids.length === 1 ? named(ids[0]) : this._count(ids.length, heating.gas ? "statisticsOne" : "heatersOne", heating.gas ? "statisticsOther" : "heatersOther");
-        return row(path, "var(--ec-s2)", name, [value]);
+        if (!heating.measured) return row(path, "var(--ec-s2)", "useHeating", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
+        return row(path, "var(--ec-s2)", "useHeating", (inputs.heating || []).map(named));
       }
       case "water":
         if (!heating || !heating.with_water) return null;
@@ -1970,16 +1953,16 @@ class ElectricityContractsPanel extends HTMLElement {
         const price = this._heating && this._heating.simulator ? this._heating.simulator.gas_price : null;
         return price !== null && price !== undefined
           ? row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [`${this._price(price)}/kWh`])
-          : row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [this._t("notEntered")], "missing");
+          : row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [this._t("missing")], "missing");
       }
       case "outdoor":
-        if (entry.outdoor === "sensor") return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("sensorTag"), named(inputs.outdoor)]);
+        if (entry.outdoor === "sensor") return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [named(inputs.outdoor)]);
         if (entry.outdoor === "open_meteo") return row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo"]);
         return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("missing")], "missing");
       case "indoor": {
         const ids = inputs.indoor || [];
         if (!ids.length) return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", [this._t("missing")], "missing");
-        return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", [ids.length === 1 ? named(ids[0]) : this._count(ids.length, "thermometersOne", "thermometersOther")]);
+        return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", ids.map(named));
       }
       default:
         return null;
@@ -4659,7 +4642,7 @@ class ElectricityContractsPanel extends HTMLElement {
           Number.isFinite(low) && Number.isFinite(highest) ? this._t("simInfoRange", { low: this._degrees(low), high: this._degrees(highest) }) : null,
           heating.measured ? null : this._t("estimatedHeatingInfo"),
         ],
-        uses: this._uses("outdoor", "indoor", "heating", heating.measured ? null : "consumption", heating.gas ? "gasPrice" : "contract"),
+        uses: this._uses("outdoor", "indoor", "heating", heating.measured ? null : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
         hint: this._heatingHints(heating, "statistics"),
       },
     );
