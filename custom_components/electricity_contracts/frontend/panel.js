@@ -32,20 +32,20 @@ const STRINGS = {
     heatingTile: "{share} {of} · {energy}",
     heatingByDay: "Heating by day",
     heatingByMonth: "Heating by month",
-    heatingByDayInfo: "What the heating used each day, each hour at the price of its tranche. Below, the average outdoor temperature.",
-    heatingByDayGasInfo: "What the heating used each day, at the gas price of the day. Below, the average outdoor temperature.",
+    heatingByDayInfo: "What the heating used each day, each hour at the price of its tranche. Below, the average outdoor temperature of each day.",
+    heatingByDayGasInfo: "What the heating used each day, at the gas price of that day. Below, the average outdoor temperature of each day.",
     whereHeatingGoes: "Where the heating goes",
     byHeater: "By heater",
     byTranche: "By tranche",
-    whereHeatingInfo: "Your heating statistics summed hour by hour. Each hour is costed at the price of its tranche; days known only in total count in kWh.",
+    whereHeatingInfo: "Your heating statistics added up hour by hour, each hour at the price of its tranche. Days known only by their total count in kWh, without a price.",
     homeEnergy: "The home's energy",
-    homeEnergyInfo: "What the home spent on energy over the period, excluding subscriptions: gas for the heating and the hot water, and electricity.",
+    homeEnergyInfo: "What the home spent on energy over the period, excluding the subscriptions: gas for the heating and the hot water, and electricity.",
     homeEnergyKwh: "Without a gas price, in kWh.",
     heatingProfile: "Heating, typical day",
     heatingProfileInfo: "What the heating uses at each hour of the day, on average over the {days} days with hourly values.",
     heatingWeatherInfo: "Each dot is a day with its outdoor temperature and what the heating used. Below {base}, it uses {slope} more a day per degree colder, {cost} at the average price of your heating.",
-    estimatedHeatingInfo: "Without heating statistics, the heating is estimated from the whole consumption: what it rises by on cold days.",
-    waterEstimatedInfo: "Your statistics hold the hot water: it is estimated, each day, as what they use on a day without heating ({energy}, the median of the days at 18 °C or more outside over the last 12 months).",
+    estimatedHeatingInfo: "Without heating statistics, the heating is estimated from the whole consumption: how much it rises on cold days.",
+    waterEstimatedInfo: "Your heating statistics include the hot water: it is estimated, each day, as what they use on a day without heating ({energy}, the median of the days at 18 °C or more outside over the last 12 months).",
     waterMeasuredInfo: "The hot water is your water heater's statistic.",
     simulator: "Simulate a setting",
     simOutdoor: "Outdoor temperature",
@@ -62,8 +62,8 @@ const STRINGS = {
     simDelta: "{cost} a day compared with {temperature} ({energy}).",
     simDeltaEnergy: "{energy} a day compared with {temperature}.",
     simCurrent: "Your current temperature.",
-    simInfo: "The simulator extends the weather line: each degree warmer inside counts as a degree colder outside. It starts from {indoor}, the average of your thermometers over the period.",
-    simInfoPrices: "The kWh are split like {source}, {share} in off-peak hours, at today's prices, excluding subscription.",
+    simInfo: "The simulator extends the line of the Weather card: each degree warmer inside counts as a degree colder outside. It starts from {indoor}, the average of your thermometers over the period.",
+    simInfoPrices: "The kWh are split like {source}: {share} in off-peak hours, at current prices, excluding the subscription.",
     simSourceHeating: "your heating's",
     simSourceHome: "the home's consumption",
     simInfoRange: "The line was drawn between {low} and {high} outside; beyond, it is extended.",
@@ -76,7 +76,7 @@ const STRINGS = {
     previousSeason: "Last season: {total}, of which {toDate} at the same date.",
     howComputed: "How is it computed?",
     budgetPartial: "The data starts after 1 September: the season so far is partial.",
-    budgetMethod: "The forecast assumes you will consume like last year on the same dates, at current prices. The red and white days left are placed on the days you consume the most.",
+    budgetMethod: "The forecast assumes you will consume like last year on the same dates, at current prices. The red and white days left are placed where you consume the most.",
     budgetNoProjection: "Not enough data a year before to project the rest of the season.",
     spentLegend: "Spent",
     expectedLegend: "Expected",
@@ -84,7 +84,37 @@ const STRINGS = {
     temperature: "Temperature",
     weather: "Weather",
     weatherSetup: "Choose an outdoor temperature sensor, or turn on Open-Meteo weather, in the integration's options to compare the consumption with the weather.",
-    openMeteoCredit: "Outdoor temperature: Open-Meteo.com (CC BY 4.0), at your home's location to about 10 km.",
+    nowInfo: "The price of a kWh under your contract now and until tomorrow evening, hour by hour, by tranche and Tempo color. Tomorrow's color is unknown until RTE publishes it, around 11:00.",
+    tempoLeftInfo: "The red and white days RTE still has to place this season, out of 22 red and 43 white, from September to August.",
+    peakByColorInfo: "For each Tempo color, the share of the consumption in peak hours. A red day used mostly off-peak shows the consumption is well shifted.",
+    calendarInfo: "Each square is a day of the period. Choose a day to see its consumption and cost.",
+    calendarTempoInfo: "Each square is a day of the period, in the Tempo color RTE published. Choose a day to see its consumption and cost.",
+    topDaysInfo: "The five days that cost the most over the period, each at the price of its tranches, with the day's average outdoor temperature when there is one.",
+    spendInfo: "For each tranche, its share of the kWh against its share of the euros, excluding the subscription. A tranche that weighs more in euros than in kWh is dear: a kWh saved there saves the most.",
+    simAbout: "The simulator extends the line of the Weather card to the outdoor and indoor temperatures of your choice, and gives the price of such a day.",
+    yourData: "Your data",
+    useConsumption: "Consumption",
+    useContract: "Contract",
+    useChosen: "Chosen contract",
+    useColors: "Tempo colors",
+    useHeating: "Heating",
+    useGasPrice: "Gas price",
+    useHotWater: "Hot water",
+    useOutdoor: "Outdoor temperature",
+    useIndoor: "Indoor temperature",
+    useHistory: "History",
+    meterTag: "Meter",
+    stepHour: "hourly",
+    stepDay: "daily",
+    rte: "RTE",
+    lastYear: "last year",
+    notTracked: "not tracked",
+    estimatedTag: "estimated",
+    missing: "to set",
+    hintOutdoor: "With an outdoor temperature, from a sensor or Open-Meteo, in the integration's options, the temperature of each day would show below.",
+    hintHeatingStatistics: "With heating statistics, in the heating options, the heating would be measured rather than estimated.",
+    hintWaterHeater: "With a water heater tracked on its own, in the heating options, the hot water would be measured.",
+    hintGasPrice: "With a gas price, added on the integration's page, the gas would be counted in euros.",
     weatherOpen: "Open the options",
     weatherNoData: "No outdoor temperature recorded over this period.",
     weatherFewDays: "Too few days to tell the heating apart.",
@@ -99,7 +129,7 @@ const STRINGS = {
     oneDay: "{count} day",
     dayCount: "{count} days",
     perYear: "{amount} a year",
-    baseloadNote: "We look at the consumption between 3:00 and 5:00, when almost everything is off, and keep the lowest nights. The yearly cost applies that consumption all year round, at the average price of a kWh, subscription excluded.",
+    baseloadNote: "The consumption is read between 3:00 and 5:00, when almost everything is off, and the lowest nights are kept. The yearly cost applies that consumption all year round, at the average price of a kWh, excluding the subscription.",
     noHeating: "The consumption doesn't rise with the cold over this period.",
     kwhPerDay: "kWh per day",
     cheaper: "Cheaper",
@@ -155,12 +185,12 @@ const STRINGS = {
     insightsFailed: "These figures could not be loaded: {error}",
     retry: "Retry",
     actualCost: "Actual cost",
-    costPerMonth: "The cost of each month, subscription included",
-    costPerDay: "The cost of each day, subscription included",
-    energyPerMonth: "The consumption of each month",
-    energyPerDay: "The consumption of each day",
-    pricePerMonth: "The average price of a kWh each month, subscription included",
-    pricePerDay: "The average price of a kWh each day, subscription included",
+    costPerMonth: "The cost of each month, subscription included.",
+    costPerDay: "The cost of each day, subscription included.",
+    energyPerMonth: "The consumption of each month.",
+    energyPerDay: "The consumption of each day.",
+    pricePerMonth: "The average price of a kWh each month, subscription included.",
+    pricePerDay: "The average price of a kWh each day, subscription included.",
     measure: "Measure",
     partialActual:
       "No contract was in force on part of the period: those days are left out.",
@@ -196,7 +226,7 @@ const STRINGS = {
     seasonExpected: "{expected} expected by 31 August ({energy}).",
     redLeft: "Red left",
     whiteLeft: "White left",
-    withHeating: "Above {base}, you use about {energy} a day. Below, heating uses {slope} for each degree less.",
+    withHeating: "Above {base}, you use about {energy} a day. Below, the heating uses {slope} more a day per degree colder.",
     weatherInfo: "Each dot is a day with its outdoor temperature and what you consumed.",
     perDegreeBelow: "per degree below {base}",
     ofTheConsumption: "{share} of the consumption",
@@ -278,20 +308,20 @@ const STRINGS = {
     heatingTile: "{share} {of} · {energy}",
     heatingByDay: "Chauffage par jour",
     heatingByMonth: "Chauffage par mois",
-    heatingByDayInfo: "Ce que le chauffage a consommé chaque jour, chaque heure au prix de sa tranche. Dessous, la température extérieure moyenne.",
-    heatingByDayGasInfo: "Ce que le chauffage a consommé chaque jour, au prix du gaz du jour. Dessous, la température extérieure moyenne.",
+    heatingByDayInfo: "Ce que le chauffage a consommé chaque jour, chaque heure au prix de sa tranche. Dessous, la température extérieure moyenne de chaque jour.",
+    heatingByDayGasInfo: "Ce que le chauffage a consommé chaque jour, au prix du gaz de ce jour. Dessous, la température extérieure moyenne de chaque jour.",
     whereHeatingGoes: "Où va le chauffage",
     byHeater: "Par radiateur",
     byTranche: "Par tranche",
-    whereHeatingInfo: "Vos statistiques de chauffage additionnées heure par heure. Chaque heure est valorisée au prix de sa tranche ; les jours connus seulement en total comptent en kWh.",
+    whereHeatingInfo: "Vos statistiques de chauffage additionnées heure par heure, chaque heure au prix de sa tranche. Les jours connus seulement par leur total comptent en kWh, sans prix.",
     homeEnergy: "Énergie de la maison",
     homeEnergyInfo: "Ce que la maison a dépensé en énergie sur la période, hors abonnements : le gaz du chauffage et de l'eau chaude, et l'électricité.",
     homeEnergyKwh: "Sans prix du gaz, en kWh.",
     heatingProfile: "Journée type du chauffage",
     heatingProfileInfo: "Ce que le chauffage consomme à chaque heure de la journée, en moyenne sur les {days} jours connus heure par heure.",
     heatingWeatherInfo: "Chaque point est une journée avec sa température extérieure et ce que le chauffage a consommé. Sous {base}, il consomme {slope} de plus par jour et par degré de moins, soit {cost} au prix moyen de votre chauffage.",
-    estimatedHeatingInfo: "Sans statistique de chauffage, le chauffage est estimé à partir de toute la consommation : ce qu'elle gagne les jours froids.",
-    waterEstimatedInfo: "Vos statistiques comptent l'eau chaude : elle est estimée chaque jour à ce qu'elles consomment un jour sans chauffage ({energy}, la médiane des jours à 18 °C ou plus dehors sur les 12 derniers mois).",
+    estimatedHeatingInfo: "Sans statistique de chauffage, le chauffage est estimé à partir de toute la consommation : ce qu'elle augmente les jours froids.",
+    waterEstimatedInfo: "Vos statistiques de chauffage incluent l'eau chaude : elle est estimée chaque jour à ce qu'elles consomment un jour sans chauffage ({energy}, la médiane des jours à 18 °C ou plus dehors sur les 12 derniers mois).",
     waterMeasuredInfo: "L'eau chaude est la statistique de votre ballon.",
     simulator: "Simuler un réglage",
     simOutdoor: "Température extérieure",
@@ -308,8 +338,8 @@ const STRINGS = {
     simDelta: "{cost} par jour par rapport à {temperature} ({energy}).",
     simDeltaEnergy: "{energy} par jour par rapport à {temperature}.",
     simCurrent: "Votre température actuelle.",
-    simInfo: "Le simulateur prolonge la droite de la Météo : chaque degré de plus dedans compte comme un degré de moins dehors. Il part de {indoor}, la moyenne de vos thermomètres sur la période.",
-    simInfoPrices: "Les kWh sont partagés comme {source}, {share} en heures creuses, aux prix d'aujourd'hui, hors abonnement.",
+    simInfo: "Le simulateur prolonge la droite de la carte Météo : chaque degré de plus dedans compte comme un degré de moins dehors. Il part de {indoor}, la moyenne de vos thermomètres sur la période.",
+    simInfoPrices: "Les kWh sont partagés comme {source} : {share} en heures creuses, aux prix actuels, hors abonnement.",
     simSourceHeating: "ceux de votre chauffage",
     simSourceHome: "la consommation de la maison",
     simInfoRange: "La droite a été tracée entre {low} et {high} dehors ; au-delà, elle est prolongée.",
@@ -322,7 +352,7 @@ const STRINGS = {
     previousSeason: "Saison dernière : {total}, dont {toDate} à la même date.",
     howComputed: "Comment c'est calculé ?",
     budgetPartial: "Les données commencent après le 1er septembre : le début de saison est incomplet.",
-    budgetMethod: "La prévision suppose que vous consommerez comme l'an dernier aux mêmes dates, aux prix actuels. Les jours rouges et blancs restants sont placés sur les jours où vous consommez le plus.",
+    budgetMethod: "La prévision suppose que vous consommerez comme l'an dernier aux mêmes dates, aux prix actuels. Les jours rouges et blancs restants sont placés là où vous consommez le plus.",
     budgetNoProjection: "Pas assez de données l'an dernier pour prévoir la fin de la saison.",
     spentLegend: "Dépensé",
     expectedLegend: "Prévu",
@@ -330,7 +360,37 @@ const STRINGS = {
     temperature: "Température",
     weather: "Météo",
     weatherSetup: "Choisissez un capteur de température extérieure, ou activez la météo Open-Meteo, dans les options de l'intégration pour comparer la consommation à la météo.",
-    openMeteoCredit: "Température extérieure : Open-Meteo.com (CC BY 4.0), à la position de votre maison à 10 km près.",
+    nowInfo: "Le prix du kWh de votre contrat maintenant et jusqu'à demain soir, heure par heure, selon la tranche et la couleur Tempo. La couleur de demain est inconnue jusqu'à sa publication par RTE, vers 11 h.",
+    tempoLeftInfo: "Les jours rouges et blancs que RTE doit encore placer cette saison, sur 22 rouges et 43 blancs, de septembre à août.",
+    peakByColorInfo: "Pour chaque couleur Tempo, la part de la consommation en heures pleines. Un jour rouge consommé surtout en heures creuses montre que la consommation est bien décalée.",
+    calendarInfo: "Chaque carré est un jour de la période. Choisissez un jour pour voir sa consommation et son coût.",
+    calendarTempoInfo: "Chaque carré est un jour de la période, dans la couleur Tempo publiée par RTE. Choisissez un jour pour voir sa consommation et son coût.",
+    topDaysInfo: "Les cinq jours qui ont coûté le plus sur la période, chacun au prix de ses tranches, avec la température extérieure moyenne du jour quand elle est connue.",
+    spendInfo: "Pour chaque tranche, sa part des kWh face à sa part des euros, hors abonnement. Une tranche qui pèse plus en euros qu'en kWh est chère : c'est là qu'un kWh évité rapporte le plus.",
+    simAbout: "Le simulateur prolonge la droite de la carte Météo jusqu'à la température extérieure et intérieure de votre choix, et donne le prix d'une telle journée.",
+    yourData: "Vos données",
+    useConsumption: "Consommation",
+    useContract: "Contrat",
+    useChosen: "Contrat choisi",
+    useColors: "Couleurs Tempo",
+    useHeating: "Chauffage",
+    useGasPrice: "Prix du gaz",
+    useHotWater: "Eau chaude",
+    useOutdoor: "Température extérieure",
+    useIndoor: "Température intérieure",
+    useHistory: "Historique",
+    meterTag: "Compteur",
+    stepHour: "horaire",
+    stepDay: "journalier",
+    rte: "RTE",
+    lastYear: "l'an dernier",
+    notTracked: "non suivi",
+    estimatedTag: "estimé",
+    missing: "à renseigner",
+    hintOutdoor: "Avec une température extérieure, d'un capteur ou d'Open-Meteo, dans les options de l'intégration, la température de chaque jour s'afficherait dessous.",
+    hintHeatingStatistics: "Avec des statistiques de chauffage, dans les options du chauffage, le chauffage serait mesuré au lieu d'être estimé.",
+    hintWaterHeater: "Avec un ballon d'eau chaude suivi à part, dans les options du chauffage, l'eau chaude serait mesurée.",
+    hintGasPrice: "Avec un prix du gaz, ajouté sur la page de l'intégration, le gaz serait compté en euros.",
     weatherOpen: "Ouvrir les options",
     weatherNoData: "Aucune température extérieure enregistrée sur cette période.",
     weatherFewDays: "Trop peu de jours pour isoler le chauffage.",
@@ -345,7 +405,7 @@ const STRINGS = {
     oneDay: "{count} jour",
     dayCount: "{count} jours",
     perYear: "{amount} par an",
-    baseloadNote: "On regarde la consommation entre 3 h et 5 h, quand presque tout est éteint, et on retient les nuits les plus basses. Le coût annuel applique cette consommation toute l'année, au prix moyen du kWh, hors abonnement.",
+    baseloadNote: "La consommation est relevée entre 3 h et 5 h, quand presque tout est éteint, et les nuits les plus basses sont retenues. Le coût annuel applique cette consommation toute l'année, au prix moyen du kWh, hors abonnement.",
     noHeating: "La consommation ne monte pas avec le froid sur cette période.",
     kwhPerDay: "kWh par jour",
     cheaper: "Moins cher",
@@ -401,12 +461,12 @@ const STRINGS = {
     insightsFailed: "Ces chiffres n'ont pas pu être chargés : {error}",
     retry: "Réessayer",
     actualCost: "Coût réel",
-    costPerMonth: "Le coût de chaque mois, abonnement compris",
-    costPerDay: "Le coût de chaque jour, abonnement compris",
-    energyPerMonth: "La consommation de chaque mois",
-    energyPerDay: "La consommation de chaque jour",
-    pricePerMonth: "Le prix moyen du kWh de chaque mois, abonnement compris",
-    pricePerDay: "Le prix moyen du kWh de chaque jour, abonnement compris",
+    costPerMonth: "Le coût de chaque mois, abonnement compris.",
+    costPerDay: "Le coût de chaque jour, abonnement compris.",
+    energyPerMonth: "La consommation de chaque mois.",
+    energyPerDay: "La consommation de chaque jour.",
+    pricePerMonth: "Le prix moyen du kWh de chaque mois, abonnement compris.",
+    pricePerDay: "Le prix moyen du kWh de chaque jour, abonnement compris.",
     measure: "Mesure",
     partialActual:
       "Aucun contrat n'était en vigueur sur une partie de la période : ces jours sont laissés de côté.",
@@ -442,7 +502,7 @@ const STRINGS = {
     seasonExpected: "{expected} prévus d'ici au 31 août ({energy}).",
     redLeft: "Rouges restants",
     whiteLeft: "Blancs restants",
-    withHeating: "Au-dessus de {base}, vous consommez environ {energy} par jour. En dessous, le chauffage consomme {slope} par degré de moins.",
+    withHeating: "Au-dessus de {base}, vous consommez environ {energy} par jour. En dessous, le chauffage consomme {slope} de plus par jour et par degré de moins.",
     weatherInfo: "Chaque point est une journée avec sa température extérieure et ce que vous avez consommé.",
     perDegreeBelow: "par degré sous {base}",
     ofTheConsumption: "{share} de la consommation",
@@ -487,7 +547,7 @@ const STRINGS = {
     mineAllIn: "{name}, votre contrat : {price}/kWh abonnement compris.",
     billInfo: "Ce que vous auriez payé avec {name}, sur la même consommation.",
     billActual: "Votre facture réelle : {actual}.",
-    billPeriodsInfo: "Une ligne par période de prix : chacune garde les tarifs en vigueur à ses dates.",
+    billPeriodsInfo: "Une ligne par période de prix : chacune garde les prix en vigueur à ses dates.",
     billVsActual: "{amount} par rapport à votre facture",
     range: "{start} → {end}",
     price: "Prix",
@@ -781,6 +841,17 @@ main {
 .method { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--ec-wash); color: var(--ec-text-2); font-size: 13px; line-height: 1.5; }
 .method p { margin: 0; }
 .method p + p { margin-top: 8px; }
+.method > * + * { margin-top: 10px; }
+.uses h3 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--ec-text-2); }
+.uses dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; align-items: center; margin: 0; }
+.uses dt { display: inline-flex; align-items: center; gap: 6px; color: var(--ec-text); }
+.uses dt svg { width: 16px; height: 16px; flex: none; fill: var(--ec-text-2); }
+.uses dd { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.tag { display: inline-flex; align-items: center; min-height: 24px; box-sizing: border-box; padding: 2px 9px; border: 1px solid transparent; border-radius: 12px; background: color-mix(in srgb, var(--tag) 22%, transparent); color: var(--ec-text); font-size: 12px; line-height: 1.3; }
+.tag.estimated { border: 1px dashed var(--tag); background: transparent; }
+.tag.missing { border-color: var(--ec-warn); background: transparent; color: var(--ec-warn); }
+@media (max-width: 480px) { .uses dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } .uses dd { margin-bottom: 6px; } }
+.method p.hint { margin-top: 10px; }
 .lead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-bottom: 12px; }
 .lead strong { font-size: 28px; font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .lead span { color: var(--ec-text-2); font-size: 14px; }
@@ -1053,7 +1124,22 @@ tfoot td { font-weight: 600; border-bottom: none; }
 }
 `;
 
+// The order of the lines of "Your data", the same on every card.
+const USE_ORDER = ["consumption", "heating", "water", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
+
 const ICONS = {
+  meter: "M7,2V13H10V22L17,10H13L17,2H7Z",
+  contract: "M6,2A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6M6,4H13V9H18V20H6V4M8,12V14H16V12H8M8,16V18H13V16H8Z",
+  compare: "M12,3C10.73,3 9.6,3.8 9.18,5H3V7H4.95L2,14C1.53,16 3,17 5.5,17C8,17 9.56,16 9,14L6.05,7H9.17C9.5,7.85 10.15,8.5 11,8.83V20H2V22H22V20H13V8.82C13.85,8.5 14.5,7.85 14.82,7H17.95L15,14C14.53,16 16,17 18.5,17C21,17 22.56,16 22,14L19.05,7H21V5H14.83C14.4,3.8 13.27,3 12,3M12,5A1,1 0 0,1 13,6A1,1 0 0,1 12,7A1,1 0 0,1 11,6A1,1 0 0,1 12,5M5.5,10.25L7,14H4L5.5,10.25M18.5,10.25L20,14H17L18.5,10.25Z",
+  colors: "M17.5,12A1.5,1.5 0 0,1 16,10.5A1.5,1.5 0 0,1 17.5,9A1.5,1.5 0 0,1 19,10.5A1.5,1.5 0 0,1 17.5,12M14.5,8A1.5,1.5 0 0,1 13,6.5A1.5,1.5 0 0,1 14.5,5A1.5,1.5 0 0,1 16,6.5A1.5,1.5 0 0,1 14.5,8M9.5,8A1.5,1.5 0 0,1 8,6.5A1.5,1.5 0 0,1 9.5,5A1.5,1.5 0 0,1 11,6.5A1.5,1.5 0 0,1 9.5,8M6.5,12A1.5,1.5 0 0,1 5,10.5A1.5,1.5 0 0,1 6.5,9A1.5,1.5 0 0,1 8,10.5A1.5,1.5 0 0,1 6.5,12M12,3A9,9 0 0,0 3,12A9,9 0 0,0 12,21A1.5,1.5 0 0,0 13.5,19.5C13.5,19.11 13.35,18.76 13.11,18.5C12.88,18.23 12.73,17.88 12.73,17.5A1.5,1.5 0 0,1 14.23,16H16A5,5 0 0,0 21,11C21,6.58 16.97,3 12,3Z",
+  history: "M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3",
+  radiator: "M7.95,3L6.53,5.19L7.95,7.4H7.94L5.95,10.5L4.22,9.6L5.64,7.39L4.22,5.19L6.22,2.09L7.95,3M13.95,2.89L12.53,5.1L13.95,7.3L13.94,7.31L11.95,10.4L10.22,9.5L11.64,7.3L10.22,5.1L12.22,2L13.95,2.89M20,2.89L18.56,5.1L20,7.3V7.31L18,10.4L16.25,9.5L17.67,7.3L16.25,5.1L18.25,2L20,2.89M2,22V14A2,2 0 0,1 4,12H20A2,2 0 0,1 22,14V22H20V20H4V22H2M6,14A1,1 0 0,0 5,15V17A1,1 0 0,0 6,18A1,1 0 0,0 7,17V15A1,1 0 0,0 6,14M10,14A1,1 0 0,0 9,15V17A1,1 0 0,0 10,18A1,1 0 0,0 11,17V15A1,1 0 0,0 10,14M14,14A1,1 0 0,0 13,15V17A1,1 0 0,0 14,18A1,1 0 0,0 15,17V15A1,1 0 0,0 14,14M18,14A1,1 0 0,0 17,15V17A1,1 0 0,0 18,18A1,1 0 0,0 19,17V15A1,1 0 0,0 18,14Z",
+  fire: "M17.66 11.2C17.43 10.9 17.15 10.64 16.89 10.38C16.22 9.78 15.46 9.35 14.82 8.72C13.33 7.26 13 4.85 13.95 3C13 3.23 12.17 3.75 11.46 4.32C8.87 6.4 7.85 10.07 9.07 13.22C9.11 13.32 9.15 13.42 9.15 13.55C9.15 13.77 9 13.97 8.8 14.05C8.57 14.15 8.33 14.09 8.14 13.93C8.08 13.88 8.04 13.83 8 13.76C6.87 12.33 6.69 10.28 7.45 8.64C5.78 10 4.87 12.3 5 14.47C5.06 14.97 5.12 15.47 5.29 15.97C5.43 16.57 5.7 17.17 6 17.7C7.08 19.43 8.95 20.67 10.96 20.92C13.1 21.19 15.39 20.8 17.03 19.32C18.86 17.66 19.5 15 18.56 12.72L18.43 12.46C18.22 12 17.66 11.2 17.66 11.2M14.5 17.5C14.22 17.74 13.76 18 13.4 18.1C12.28 18.5 11.16 17.94 10.5 17.28C11.69 17 12.4 16.12 12.61 15.23C12.78 14.43 12.46 13.77 12.33 13C12.21 12.26 12.23 11.63 12.5 10.94C12.69 11.32 12.89 11.7 13.13 12C13.9 13 15.11 13.44 15.37 14.8C15.41 14.94 15.43 15.08 15.43 15.23C15.46 16.05 15.1 16.95 14.5 17.5H14.5Z",
+  boiler: "M8 2C6.89 2 6 2.89 6 4V16C6 17.11 6.89 18 8 18H9V20H6V22H9C10.11 22 11 21.11 11 20V18H13V20C13 21.11 13.89 22 15 22H18V20H15V18H16C17.11 18 18 17.11 18 16V4C18 2.89 17.11 2 16 2H8M12 4.97A2 2 0 0 1 14 6.97A2 2 0 0 1 12 8.97A2 2 0 0 1 10 6.97A2 2 0 0 1 12 4.97M10 14.5H14V16H10V14.5Z",
+  euro: "M15 18.5C12.5 18.5 10.32 17.08 9.24 15H15L16 13H8.58C8.53 12.67 8.5 12.34 8.5 12S8.53 11.33 8.58 11H15L16 9H9.24C10.32 6.92 12.5 5.5 15 5.5C16.61 5.5 18.09 6.09 19.23 7.07L21 5.3C19.41 3.87 17.3 3 15 3C11.08 3 7.76 5.5 6.5 9H3L2 11H6.06C6 11.33 6 11.66 6 12S6 12.67 6.06 13H3L2 15H6.5C7.76 18.5 11.08 21 15 21C17.31 21 19.41 20.13 21 18.7L19.22 16.93C18.09 17.91 16.62 18.5 15 18.5Z",
+  thermometer: "M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z",
+  cloud: "M12.74,5.47C15.1,6.5 16.35,9.03 15.92,11.46C17.19,12.56 18,14.19 18,16V16.17C18.31,16.06 18.65,16 19,16A3,3 0 0,1 22,19A3,3 0 0,1 19,22H6A4,4 0 0,1 2,18A4,4 0 0,1 6,14H6.27C5,12.45 4.6,10.24 5.5,8.26C6.72,5.5 9.97,4.24 12.74,5.47M11.93,7.3C10.16,6.5 8.09,7.31 7.31,9.07C6.85,10.09 6.93,11.22 7.41,12.13C8.5,10.83 10.16,10 12,10C12.7,10 13.38,10.12 14,10.34C13.94,9.06 13.18,7.86 11.93,7.3M13.55,3.64C13,3.4 12.45,3.23 11.88,3.12L14.37,1.82L15.27,4.71C14.76,4.29 14.19,3.93 13.55,3.64M6.09,4.44C5.6,4.79 5.17,5.19 4.8,5.63L4.91,2.82L7.87,3.5C7.25,3.71 6.65,4.03 6.09,4.44M18,9.71C17.91,9.12 17.78,8.55 17.59,8L19.97,9.5L17.92,11.73C18.03,11.08 18.05,10.4 18,9.71M3.04,11.3C3.11,11.9 3.24,12.47 3.43,13L1.06,11.5L3.1,9.28C3,9.93 2.97,10.61 3.04,11.3M19,18H16V16A4,4 0 0,0 12,12A4,4 0 0,0 8,16H6A2,2 0 0,0 4,18A2,2 0 0,0 6,20H19A1,1 0 0,0 20,19A1,1 0 0,0 19,18Z",
+  indoor: "M19 8C20.11 8 21 8.9 21 10V16.76C21.61 17.31 22 18.11 22 19C22 20.66 20.66 22 19 22C17.34 22 16 20.66 16 19C16 18.11 16.39 17.31 17 16.76V10C17 8.9 17.9 8 19 8M19 9C18.45 9 18 9.45 18 10V11H20V10C20 9.45 19.55 9 19 9M12 5.69L7 10.19V18H14.1L14 19L14.1 20H5V12H2L12 3L16.4 6.96C15.89 7.4 15.5 7.97 15.25 8.61L12 5.69Z",
   left: "M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z",
   right: "M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z",
   down: "M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z",
@@ -1363,10 +1449,6 @@ class ElectricityContractsPanel extends HTMLElement {
     return (this._entries || []).find((entry) => entry.entry_id === this._entryId) || null;
   }
 
-  // Open-Meteo's data is under CC BY 4.0: credit it wherever it is shown.
-  _weatherCredit() {
-    return this._entry && this._entry.outdoor === "open_meteo" ? this._t("openMeteoCredit") : null;
-  }
 
   _color(contractId) {
     const contracts = this._entry ? this._entry.contracts : [];
@@ -1395,7 +1477,7 @@ class ElectricityContractsPanel extends HTMLElement {
     }
     this._renderSources();
     this._refreshOutlook();
-    await this._load();
+    await Promise.all([this._loadStatisticNames(), this._load()]);
   }
 
   _resetPeriod() {
@@ -1757,11 +1839,15 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   // A card: its title, the (i) opening what its figures mean, its tools, then
-  // its body. The notes open under the body.
-  _card(title, body, { info = [], tools = null, rerender = () => this._renderContent() } = {}) {
+  // its body. The notes open under the body: how it is computed, the data it
+  // uses ("uses", see _uses) and what more data would bring ("hint").
+  _card(title, body, { info = [], uses = [], hint = null, tools = null, rerender = () => this._renderContent() } = {}) {
     const notes = info.filter(Boolean);
-    const open = notes.length > 0 && Boolean(this._open[title]);
-    const button = notes.length
+    const rows = uses.filter(Boolean);
+    const hints = [hint].flat().filter(Boolean);
+    const explained = notes.length > 0 || rows.length > 0;
+    const open = explained && Boolean(this._open[title]);
+    const button = explained
       ? h(
           "button",
           {
@@ -1782,8 +1868,147 @@ class ElectricityContractsPanel extends HTMLElement {
       { class: "card" },
       h("div", { class: "card-head" }, h("h2", {}, title), tools || button ? h("div", { class: "card-tools" }, tools, button) : null),
       body,
-      open ? h("div", { class: "method" }, notes.map((note) => h("p", {}, note))) : null,
+      open
+        ? h(
+            "div",
+            { class: "method" },
+            notes.map((note) => h("p", {}, note)),
+            rows.length
+              ? h(
+                  "div",
+                  { class: "uses" },
+                  h("h3", {}, this._t("yourData")),
+                  h(
+                    "dl",
+                    {},
+                    rows.map((row) => [
+                      h("dt", {}, icon(row.path), row.name),
+                      h(
+                        "dd",
+                        { style: { "--tag": row.hue } },
+                        row.values.map((value) => h("span", { class: row.state ? `tag ${row.state}` : "tag" }, value)),
+                      ),
+                    ]),
+                  ),
+                )
+              : null,
+            hints.map((note) => h("p", { class: "hint" }, note)),
+          )
+        : null,
     );
+  }
+
+  // "Your data" of a card: one line per input it uses, its icon and name, then
+  // where it comes from in tags. Each key gives { path, hue, name, values,
+  // state }, state "estimated" or "missing" when so, or null when it doesn't apply.
+  _uses(...keys) {
+    const rank = (key) => USE_ORDER.indexOf(key);
+    return keys
+      .filter(Boolean)
+      .sort((first, second) => rank(first) - rank(second))
+      .flatMap((key) => this._use(key))
+      .filter(Boolean);
+  }
+
+  _use(key) {
+    const entry = this._entry;
+    if (!entry) return null;
+    const inputs = entry.inputs || {};
+    const heating = entry.heating;
+    const named = (id) => this._statisticName(id);
+    // The step of statistics, hourly or daily, once for those that share it.
+    const step = (...steps) => [...new Set(steps.filter(Boolean))].map((value) => this._t(value === "day" ? "stepDay" : "stepHour"));
+    const steps = (ids) => step(...ids.map((id) => (inputs.steps || {})[id]));
+    // hue: the color of its tags, that of the data in the charts when it has one.
+    const row = (path, hue, name, values, state = null) => ({ path, hue, name: this._t(name), values: values.filter(Boolean), state });
+    // One line per contract, so their tags don't mix.
+    const contracts = (path, list, name = "useContract") => list.map((contract) => row(path, "var(--ec-s1)", name, this._contractFacts(contract)));
+    const colors = (list) => (list.some((contract) => contract.kind === "tempo") ? row(ICONS.colors, "var(--ec-s5)", "useColors", ["RTE"]) : null);
+    switch (key) {
+      case "consumption":
+        return entry.meter === false ? null : row(ICONS.meter, "var(--ec-money)", "useConsumption", [inputs.meter === "linky" ? "Linky" : this._t("meterTag"), ...step(inputs.meter_step)]);
+      case "contract":
+        return contracts(ICONS.contract, this._usedContracts());
+      case "contractToday":
+        return contracts(ICONS.contract, this._contractsToday());
+      case "otherContract":
+        // The contract in force, beside a chosen one that isn't it.
+        return contracts(ICONS.contract, this._usedContracts().filter((contract) => contract.id !== this._billContract));
+      case "chosen":
+        return contracts(ICONS.compare, entry.contracts.filter((contract) => contract.id === this._billContract), "useChosen");
+      case "colorsToday":
+        return colors(this._contractsToday());
+      case "colors":
+        return colors(this._usedContracts());
+      case "history":
+        return row(ICONS.history, "var(--ec-money)", "useHistory", [this._t("lastYear")]);
+      case "heating": {
+        if (!heating) return null;
+        const path = heating.gas ? ICONS.fire : ICONS.radiator;
+        if (!heating.measured) return row(path, "var(--ec-s2)", "useHeating", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
+        return row(path, "var(--ec-s2)", "useHeating", [...(inputs.heating || []).map(named), ...steps(inputs.heating || [])]);
+      }
+      case "water":
+        if (!heating || !heating.with_water) return null;
+        return inputs.water
+          ? row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), ...steps([inputs.water])])
+          : row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
+      case "gasPrice": {
+        if (!heating || !heating.gas) return null;
+        const price = this._heating && this._heating.simulator ? this._heating.simulator.gas_price : null;
+        return price !== null && price !== undefined
+          ? row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [`${this._price(price)}/kWh`])
+          : row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [this._t("missing")], "missing");
+      }
+      case "outdoor":
+        if (entry.outdoor === "sensor") return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [named(inputs.outdoor), ...steps([inputs.outdoor])]);
+        if (entry.outdoor === "open_meteo") return row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo", ...step("hour")]);
+        return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("missing")], "missing");
+      case "indoor": {
+        const ids = inputs.indoor || [];
+        if (!ids.length) return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", [this._t("missing")], "missing");
+        return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", [...ids.map(named), ...steps(ids)]);
+      }
+      default:
+        return null;
+    }
+  }
+
+  // The contracts a card's figures come from: those in force over the period,
+  // or today's when nothing is costed.
+  _usedContracts() {
+    const entry = this._entry;
+    const ids = this._data && !this._data.meterless ? this._contractsInForce().map((contract) => contract.id) : this._contractsToday().map((contract) => contract.id);
+    return entry.contracts.filter((contract) => ids.includes(contract.id));
+  }
+
+  _contractFacts(contract) {
+    return [contract.name, contract.kva ? `${contract.kva} kVA` : null, this._t(contract.official ? "regulated" : "manualPrices")].filter(Boolean);
+  }
+
+  // The name of a statistic: its entity's, or the recorder's for one imported.
+  _statisticName(id) {
+    const state = this._hass && this._hass.states[id];
+    return (state && state.attributes.friendly_name) || (this._statisticNames && this._statisticNames[id]) || id;
+  }
+
+  // The recorder's names of the statistics the cards list, for those without
+  // an entity (a Gazpar import, for example).
+  async _loadStatisticNames() {
+    const ids = new Set();
+    for (const entry of this._entries || []) {
+      const inputs = entry.inputs || {};
+      for (const id of [...(inputs.heating || []), inputs.water, inputs.outdoor, ...(inputs.indoor || [])]) {
+        if (id && !(this._hass.states[id] || (this._statisticNames && id in this._statisticNames))) ids.add(id);
+      }
+    }
+    if (!ids.size) return;
+    try {
+      const found = await this._hass.callWS({ type: "recorder/get_statistics_metadata", statistic_ids: [...ids] });
+      this._statisticNames = { ...this._statisticNames, ...Object.fromEntries(found.filter((item) => item.name).map((item) => [item.statistic_id, item.name])) };
+    } catch (error) {
+      // The IDs stand in for the names.
+    }
   }
 
   _renderContent() {
@@ -1906,7 +2131,9 @@ class ElectricityContractsPanel extends HTMLElement {
     const heating = this._heating;
     const split = heating && heating.totals && (!heating.gas || (heating.water_split && !heating.water_gas)) && this._measure !== "price";
     return this._card(this._t(`${this._measure}By${by}`), this._timeChart, {
-      info: [this._t(`${this._measure}Per${by}`), split ? this._t("heatingSplitInfo") : null, this._weatherCredit()],
+      info: [this._t(`${this._measure}Per${by}`), split ? this._t("heatingSplitInfo") : null],
+      uses: this._uses("consumption", "contract", "colors", split ? "heating" : null, split && heating.water_split ? "water" : null, "outdoor"),
+      hint: this._entry.outdoor ? null : this._t("hintOutdoor"),
       tools: [measures, this._toggle("time")],
     });
   }
@@ -2713,6 +2940,7 @@ class ElectricityContractsPanel extends HTMLElement {
         ticks,
         tempo ? this._tomorrowLine(tempo) : null,
       ],
+      { info: [this._t("nowInfo")], uses: this._uses("contractToday", "colorsToday"), rerender: () => this._renderHead() },
     );
   }
 
@@ -2772,7 +3000,11 @@ class ElectricityContractsPanel extends HTMLElement {
     if (!season) {
       if (!tempo) return null;
       const label = `${tempo.season.start.slice(0, 4)}-${tempo.season.end.slice(0, 4)}`;
-      return this._card(this._t("season", { season: label }), this._tempoMeters(tempo));
+      return this._card(this._t("season", { season: label }), this._tempoMeters(tempo), {
+        info: [this._t("tempoLeftInfo")],
+        uses: this._uses("contractToday", "colorsToday"),
+        rerender: () => this._renderHead(),
+      });
     }
     const label = `${season.start.slice(0, 4)}-${season.end.slice(0, 4)}`;
     const long = { day: "numeric", month: "long", year: "numeric" };
@@ -2823,6 +3055,7 @@ class ElectricityContractsPanel extends HTMLElement {
           season.complete ? null : this._t("budgetPartial"),
           projection ? this._t("budgetMethod") : this._t("budgetNoProjection"),
         ],
+        uses: this._uses("consumption", "contractToday", "colorsToday", projection ? "history" : null),
         rerender: () => this._renderHead(),
       },
     );
@@ -2921,7 +3154,7 @@ class ElectricityContractsPanel extends HTMLElement {
           this._offPeakRanges().length ? [h("span", { class: "swatch", style: { background: "var(--ec-wash)", "box-shadow": "inset 0 0 0 1px var(--ec-axis)" } }), capitalize(this._t("offPeakBand"), this._locale)] : null,
         ),
       ],
-      { info: [this._t("profileInfo", { days: this._number(this._insights.days.length) })] },
+      { info: [this._t("profileInfo", { days: this._number(this._insights.days.length) })], uses: this._uses("consumption", "contract") },
     );
   }
 
@@ -3108,6 +3341,7 @@ class ElectricityContractsPanel extends HTMLElement {
           ),
         ),
       ],
+      { info: [this._t("peakByColorInfo")], uses: this._uses("consumption", "contract", "colors") },
     );
   }
 
@@ -3139,7 +3373,7 @@ class ElectricityContractsPanel extends HTMLElement {
             )
           : null,
       ],
-      { info: [this._t("baseloadInfo", { energy: this._kwh(baseload.annual_energy) }), this._t("baseloadNote")] },
+      { info: [this._t("baseloadInfo", { energy: this._kwh(baseload.annual_energy) }), this._t("baseloadNote")], uses: this._uses("consumption", "contract") },
     );
   }
 
@@ -3264,8 +3498,8 @@ class ElectricityContractsPanel extends HTMLElement {
         info: [
           this._t("weatherInfo"),
           heating ? this._t("withHeating", { base, energy: this._kwh(Math.max(0, weather.intercept)), slope: this._kwh(weather.slope) }) : null,
-          this._weatherCredit(),
         ],
+        uses: this._uses("consumption", "outdoor"),
       },
     );
   }
@@ -3423,7 +3657,11 @@ class ElectricityContractsPanel extends HTMLElement {
         );
     this._calendarChart = h("div", { class: "scroll" });
     this._calendarDetail = h("div", { class: "day-detail", "aria-live": "polite" });
-    return this._card(this._t(tempo ? "calendarTempo" : "calendar"), [this._calendarChart, this._calendarDetail], { tools: legend });
+    return this._card(this._t(tempo ? "calendarTempo" : "calendar"), [this._calendarChart, this._calendarDetail], {
+      info: [this._t(tempo ? "calendarTempoInfo" : "calendarInfo")],
+      uses: this._uses("colors", "consumption", "contract"),
+      tools: legend,
+    });
   }
 
   // One square per day, a column per week from Monday to Sunday: the Tempo color
@@ -3564,6 +3802,7 @@ class ElectricityContractsPanel extends HTMLElement {
           ),
         ),
       ),
+      { info: [this._t("topDaysInfo")], uses: this._uses("consumption", "contract", "colors", weather ? "outdoor" : null) },
     );
   }
 
@@ -3646,7 +3885,7 @@ class ElectricityContractsPanel extends HTMLElement {
         this._lead(share(item.cost / cost), this._t("spendLead", { tranche: names[dearest] || dearest, energy: share(item.energy / energy) })),
         this._views.tranches === "chart" ? [bar("energy", energy, "kWh"), bar("cost", cost, "€")] : table,
       ],
-      { tools: this._toggle("tranches") },
+      { info: [this._t("spendInfo")], uses: this._uses("consumption", "contract"), tools: this._toggle("tranches") },
     );
   }
 
@@ -3723,6 +3962,7 @@ class ElectricityContractsPanel extends HTMLElement {
         contracts.length > 1 ? this._t("rankingChoose") : null,
         yours && yours.energy ? this._t("mineAllIn", { name: yours.name, price: this._average(yours.total_cost / yours.energy) }) : null,
       ],
+      uses: this._uses("consumption", "contract"),
     });
   }
 
@@ -3885,6 +4125,7 @@ class ElectricityContractsPanel extends HTMLElement {
           [this._t("billInfo", { name: contract ? contract.name : "" }), bill.actual !== null ? this._t("billActual", { actual: this._money(bill.actual) }) : null].filter(Boolean).join(" "),
           this._t("billPeriodsInfo"),
         ],
+        uses: this._uses("consumption", "chosen", "otherContract"),
       },
     );
   }
@@ -3907,6 +4148,7 @@ class ElectricityContractsPanel extends HTMLElement {
     const names = { mine: mine || this._t("yourContract"), name: contract.name };
     return this._card(this._t("gapWith", { name: contract.name }), [lead, this._cumulativeChart], {
       info: [this._t("gapInfo", names), this._t("gapNote", names)],
+      uses: this._uses("consumption", "chosen", "otherContract"),
       tools: this._toggle("cumulative"),
     });
   }
@@ -4076,9 +4318,23 @@ class ElectricityContractsPanel extends HTMLElement {
       : null;
     const { monthly } = this._heatingBuckets(heating);
     return this._card(this._t(monthly ? "heatingByMonth" : "heatingByDay"), this._heatingDaysChart, {
-      info: [this._t(heating.gas ? "heatingByDayGasInfo" : "heatingByDayInfo"), this._waterNote(heating), this._weatherCredit()],
+      info: [this._t(heating.gas ? "heatingByDayGasInfo" : "heatingByDayInfo"), this._waterNote(heating)],
+      uses: this._uses("heating", "water", heating.gas ? "gasPrice" : "contract", "outdoor"),
+      hint: this._heatingHints(heating, "water", "gasPrice", "outdoor"),
       tools: measures,
     });
+  }
+
+  // What more data would bring to a heating card.
+  _heatingHints(heating, ...wanted) {
+    const entry = this._entry;
+    const hints = {
+      statistics: !heating.measured ? this._t("hintHeatingStatistics") : null,
+      water: heating.water_split && !heating.water_measured ? this._t("hintWaterHeater") : null,
+      gasPrice: heating.gas && (!heating.simulator || heating.simulator.gas_price === null) ? this._t("hintGasPrice") : null,
+      outdoor: entry.outdoor ? null : this._t("hintOutdoor"),
+    };
+    return wanted.map((key) => hints[key]);
   }
 
   // How the hot water is told apart from the heating, when it is.
@@ -4186,7 +4442,10 @@ class ElectricityContractsPanel extends HTMLElement {
       );
     }
     if (!parts.length) return null;
-    return this._card(this._t("whereHeatingGoes"), h("div", { class: "heat-split" }, parts), { info: [this._t("whereHeatingInfo")] });
+    return this._card(this._t("whereHeatingGoes"), h("div", { class: "heat-split" }, parts), {
+      info: [this._t("whereHeatingInfo")],
+      uses: this._uses("heating", "contract"),
+    });
   }
 
   _renderHomeEnergy(heating) {
@@ -4218,7 +4477,11 @@ class ElectricityContractsPanel extends HTMLElement {
         ),
         this._keys(...items.map((item) => [h("span", { class: "swatch", style: { background: item.color } }), `${item.name} · ${format(item.value)}`])),
       ],
-      { info: [this._t("homeEnergyInfo"), euros ? null : this._t("homeEnergyKwh"), this._waterNote(heating)] },
+      {
+        info: [this._t("homeEnergyInfo"), euros ? null : this._t("homeEnergyKwh"), this._waterNote(heating)],
+        uses: this._uses("consumption", "contract", "heating", "water", "gasPrice"),
+        hint: this._heatingHints(heating, "water", "gasPrice"),
+      },
     );
   }
 
@@ -4244,7 +4507,11 @@ class ElectricityContractsPanel extends HTMLElement {
           !heating.gas && this._offPeakRanges().length ? [h("span", { class: "swatch", style: { background: "var(--ec-wash)", "box-shadow": "inset 0 0 0 1px var(--ec-axis)" } }), capitalize(this._t("offPeakBand"), this._locale)] : null,
         ),
       ],
-      { info: [this._t("heatingProfileInfo", { days: this._number(hourly) }), this._waterNote(heating)] },
+      {
+        info: [this._t("heatingProfileInfo", { days: this._number(hourly) }), this._waterNote(heating)],
+        uses: this._uses("heating", "water", heating.gas ? null : "contract"),
+        hint: this._heatingHints(heating, "water"),
+      },
     );
   }
 
@@ -4293,8 +4560,9 @@ class ElectricityContractsPanel extends HTMLElement {
             ? this._t("heatingWeatherInfo", { base, slope: this._kwh(perDegree.energy), cost: perDegree.cost !== null ? this._money(perDegree.cost) : "—" })
             : this._t("weatherInfo"),
           heating.measured ? this._waterNote(heating) : this._t("estimatedHeatingInfo"),
-          this._weatherCredit(),
         ],
+        uses: this._uses("outdoor", "heating", heating.measured ? null : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
+        hint: this._heatingHints(heating, "statistics", "water"),
       },
     );
   }
@@ -4320,7 +4588,10 @@ class ElectricityContractsPanel extends HTMLElement {
     else if (sim.indoor === null) message = [this._t("simNoIndoorData")];
     else if (!this._perDegree(heating)) message = [this._t("simFewDays")];
     if (message) {
-      return this._card(title, [h("p", { class: "message" }, message[0]), message[1] || null]);
+      return this._card(title, [h("p", { class: "message" }, message[0]), message[1] || null], {
+        info: [this._t("simAbout")],
+        uses: this._uses("outdoor", "heating", heating.measured ? null : "consumption", "indoor"),
+      });
     }
     // Tenths, so the sliders start on the measured temperatures.
     const tenth = (value) => Math.round(value * 10) / 10;
@@ -4375,6 +4646,8 @@ class ElectricityContractsPanel extends HTMLElement {
           Number.isFinite(low) && Number.isFinite(highest) ? this._t("simInfoRange", { low: this._degrees(low), high: this._degrees(highest) }) : null,
           heating.measured ? null : this._t("estimatedHeatingInfo"),
         ],
+        uses: this._uses("outdoor", "indoor", "heating", heating.measured ? null : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
+        hint: this._heatingHints(heating, "statistics"),
       },
     );
   }

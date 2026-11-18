@@ -522,6 +522,9 @@ async def test_heating_before_the_data(
 async def test_entries_tell_the_heating(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator
 ) -> None:
+    # Gazpar: one row a day; the outdoor sensor, one an hour.
+    await add_energy(hass, GAS, [30.0] * 3, hours=24)
+    await add_temperature(hass, [10.0] * 3)
     await setup_entry(hass, make_entry([TEMPO_CONTRACT], options=GAS_OPTIONS))
     [entry] = await result(hass_ws_client, hass, type=f"{DOMAIN}/entries")
     assert entry["heating"] == {
@@ -529,6 +532,15 @@ async def test_entries_tell_the_heating(
         "gas": True,
         "with_water": True,
         "indoor": False,
+    }
+    assert entry["inputs"] == {
+        "meter": "linky",
+        "meter_step": "hour",
+        "heating": [GAS],
+        "water": None,
+        "outdoor": TEMPERATURE_ID,
+        "indoor": [],
+        "steps": {GAS: "day", TEMPERATURE_ID: "hour"},
     }
 
 
