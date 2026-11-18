@@ -66,11 +66,9 @@ async def async_insights(
             "days": [],
             "profile": [],
             "previous": None,
-            # Without a meter, the colors left still help.
+            # Nothing costed yet, or no meter: the colors left still help.
             "tempo": (
-                _tempo(entry, tempo, calendar, [], today)
-                if tempo is not None and coordinator.statistic_id is None
-                else None
+                _tempo(entry, tempo, calendar, [], today) if tempo is not None else None
             ),
             "baseload": None,
             "weather": None,

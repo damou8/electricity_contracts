@@ -35,7 +35,9 @@ from .test_heating import (
     GAS,
     GAS_OPTIONS,
     HEATER_A,
+    HEATER_B,
     add_energy,
+    gas_home,  # noqa: F401 - a fixture
     gas_price,
     heating,
     hourly,
@@ -243,3 +245,39 @@ async def test_removing_the_meter_clears_the_costs(hass: HomeAssistant) -> None:
     await async_wait_recording_done(hass)
     assert entry.runtime_data.statistic_id is None
     assert await own_statistics(hass) == []
+
+
+@pytest.mark.usefixtures("sources", "gas_home")
+async def test_the_heating_window_ends_with_its_statistics(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [BASE_CONTRACT, gas_price(0.1, "2026-01-01")],
+            options=GAS_OPTIONS,
+            statistic_id=None,
+        ),
+    )
+    # Asked until the end of next year: the warm days of the hot water are still
+    # read on the year before the last hour of gas.
+    answer = await heating(hass, hass_ws_client, entry, "2026-03-01", "2027-12-31")
+    assert answer["water_per_day"] == 5.0
+    assert answer["totals"]["water"] == pytest.approx(5.0 * DAYS)
+
+
+@pytest.mark.usefixtures("sources")
+async def test_the_first_day_of_any_heating_statistic(
+    hass: HomeAssistant,
+) -> None:
+    await add_energy(hass, HEATER_A, hourly([24.0] * 4), days_later=5)
+    await add_energy(hass, HEATER_B, hourly([24.0] * DAYS))
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [TEMPO_CONTRACT],
+            options={SECTION_HEATING: {CONF_HEATING_STATISTICS: [HEATER_A, HEATER_B]}},
+            statistic_id=None,
+        ),
+    )
+    assert entry.runtime_data.data.sources.first_day == date(2026, 3, 2)

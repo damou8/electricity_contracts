@@ -68,9 +68,17 @@ DAYS = 16
 
 
 async def add_energy(
-    hass: HomeAssistant, statistic_id: str, kwh: list[float], *, hours: int = 1
+    hass: HomeAssistant,
+    statistic_id: str,
+    kwh: list[float],
+    *,
+    hours: int = 1,
+    days_later: int = 0,
 ) -> None:
-    """Import the kWh of an energy sensor every `hours`, from 2 March in Paris."""
+    """Import the kWh of an energy sensor every `hours`, from 2 March in Paris.
+
+    `days_later` starts it that many days after 2 March.
+    """
     metadata = StatisticMetaData(
         mean_type=StatisticMeanType.NONE,
         has_sum=True,
@@ -86,7 +94,8 @@ async def add_energy(
         total += value
         rows.append(
             StatisticData(
-                start=FIRST_HOUR + timedelta(hours=MIDNIGHT + hours * index),
+                start=FIRST_HOUR
+                + timedelta(days=days_later, hours=MIDNIGHT + hours * index),
                 state=total,
                 sum=total,
             )
