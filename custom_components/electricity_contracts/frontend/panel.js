@@ -109,7 +109,7 @@ const STRINGS = {
     meterHourly: "Meter, hourly",
     rte: "RTE",
     lastYear: "last year's consumption",
-    openMeteo: "Open-Meteo.com (CC BY 4.0), to about 10 km",
+    openMeteo: "Open-Meteo (CC BY 4.0)",
     sensorNamed: "Sensor · {name}",
     heatersOne: "{count} heater",
     heatersOther: "{count} heaters",
@@ -396,7 +396,7 @@ const STRINGS = {
     meterHourly: "Compteur, horaire",
     rte: "RTE",
     lastYear: "consommation de l'an dernier",
-    openMeteo: "Open-Meteo.com (CC BY 4.0), à 10 km près",
+    openMeteo: "Open-Meteo (CC BY 4.0)",
     sensorNamed: "Capteur · {name}",
     heatersOne: "{count} radiateur",
     heatersOther: "{count} radiateurs",
@@ -865,10 +865,13 @@ main {
 .method p + p { margin-top: 8px; }
 .method > * + * { margin-top: 10px; }
 .uses h3 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--ec-text-2); }
-.uses dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin: 0; }
-.uses dt { color: var(--ec-text); }
-.uses dd { margin: 0; text-align: right; }
-.uses dd.missing { color: var(--ec-warn); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tag { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; box-sizing: border-box; padding: 3px 10px 3px 8px; border: 1px solid var(--ec-ring); border-radius: 14px; background: var(--ec-surface); color: var(--ec-text); font-size: 12px; line-height: 1.3; }
+.tag svg { width: 16px; height: 16px; flex: none; fill: var(--ec-text-2); }
+.tag-name { color: var(--ec-text-2); }
+.tag.estimated { border-style: dashed; border-color: var(--ec-axis); background: transparent; }
+.tag.missing { border-color: var(--ec-warn); background: transparent; }
+.tag.missing svg, .tag.missing .tag-value { fill: var(--ec-warn); color: var(--ec-warn); }
 .method p.hint { margin-top: 10px; }
 .lead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-bottom: 12px; }
 .lead strong { font-size: 28px; font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
@@ -1143,6 +1146,18 @@ tfoot td { font-weight: 600; border-bottom: none; }
 `;
 
 const ICONS = {
+  meter: "M7,2V13H10V22L17,10H13L17,2H7Z",
+  contract: "M6,2A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6M6,4H13V9H18V20H6V4M8,12V14H16V12H8M8,16V18H13V16H8Z",
+  compare: "M12,3C10.73,3 9.6,3.8 9.18,5H3V7H4.95L2,14C1.53,16 3,17 5.5,17C8,17 9.56,16 9,14L6.05,7H9.17C9.5,7.85 10.15,8.5 11,8.83V20H2V22H22V20H13V8.82C13.85,8.5 14.5,7.85 14.82,7H17.95L15,14C14.53,16 16,17 18.5,17C21,17 22.56,16 22,14L19.05,7H21V5H14.83C14.4,3.8 13.27,3 12,3M12,5A1,1 0 0,1 13,6A1,1 0 0,1 12,7A1,1 0 0,1 11,6A1,1 0 0,1 12,5M5.5,10.25L7,14H4L5.5,10.25M18.5,10.25L20,14H17L18.5,10.25Z",
+  colors: "M17.5,12A1.5,1.5 0 0,1 16,10.5A1.5,1.5 0 0,1 17.5,9A1.5,1.5 0 0,1 19,10.5A1.5,1.5 0 0,1 17.5,12M14.5,8A1.5,1.5 0 0,1 13,6.5A1.5,1.5 0 0,1 14.5,5A1.5,1.5 0 0,1 16,6.5A1.5,1.5 0 0,1 14.5,8M9.5,8A1.5,1.5 0 0,1 8,6.5A1.5,1.5 0 0,1 9.5,5A1.5,1.5 0 0,1 11,6.5A1.5,1.5 0 0,1 9.5,8M6.5,12A1.5,1.5 0 0,1 5,10.5A1.5,1.5 0 0,1 6.5,9A1.5,1.5 0 0,1 8,10.5A1.5,1.5 0 0,1 6.5,12M12,3A9,9 0 0,0 3,12A9,9 0 0,0 12,21A1.5,1.5 0 0,0 13.5,19.5C13.5,19.11 13.35,18.76 13.11,18.5C12.88,18.23 12.73,17.88 12.73,17.5A1.5,1.5 0 0,1 14.23,16H16A5,5 0 0,0 21,11C21,6.58 16.97,3 12,3Z",
+  history: "M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3",
+  radiator: "M7.95,3L6.53,5.19L7.95,7.4H7.94L5.95,10.5L4.22,9.6L5.64,7.39L4.22,5.19L6.22,2.09L7.95,3M13.95,2.89L12.53,5.1L13.95,7.3L13.94,7.31L11.95,10.4L10.22,9.5L11.64,7.3L10.22,5.1L12.22,2L13.95,2.89M20,2.89L18.56,5.1L20,7.3V7.31L18,10.4L16.25,9.5L17.67,7.3L16.25,5.1L18.25,2L20,2.89M2,22V14A2,2 0 0,1 4,12H20A2,2 0 0,1 22,14V22H20V20H4V22H2M6,14A1,1 0 0,0 5,15V17A1,1 0 0,0 6,18A1,1 0 0,0 7,17V15A1,1 0 0,0 6,14M10,14A1,1 0 0,0 9,15V17A1,1 0 0,0 10,18A1,1 0 0,0 11,17V15A1,1 0 0,0 10,14M14,14A1,1 0 0,0 13,15V17A1,1 0 0,0 14,18A1,1 0 0,0 15,17V15A1,1 0 0,0 14,14M18,14A1,1 0 0,0 17,15V17A1,1 0 0,0 18,18A1,1 0 0,0 19,17V15A1,1 0 0,0 18,14Z",
+  fire: "M17.66 11.2C17.43 10.9 17.15 10.64 16.89 10.38C16.22 9.78 15.46 9.35 14.82 8.72C13.33 7.26 13 4.85 13.95 3C13 3.23 12.17 3.75 11.46 4.32C8.87 6.4 7.85 10.07 9.07 13.22C9.11 13.32 9.15 13.42 9.15 13.55C9.15 13.77 9 13.97 8.8 14.05C8.57 14.15 8.33 14.09 8.14 13.93C8.08 13.88 8.04 13.83 8 13.76C6.87 12.33 6.69 10.28 7.45 8.64C5.78 10 4.87 12.3 5 14.47C5.06 14.97 5.12 15.47 5.29 15.97C5.43 16.57 5.7 17.17 6 17.7C7.08 19.43 8.95 20.67 10.96 20.92C13.1 21.19 15.39 20.8 17.03 19.32C18.86 17.66 19.5 15 18.56 12.72L18.43 12.46C18.22 12 17.66 11.2 17.66 11.2M14.5 17.5C14.22 17.74 13.76 18 13.4 18.1C12.28 18.5 11.16 17.94 10.5 17.28C11.69 17 12.4 16.12 12.61 15.23C12.78 14.43 12.46 13.77 12.33 13C12.21 12.26 12.23 11.63 12.5 10.94C12.69 11.32 12.89 11.7 13.13 12C13.9 13 15.11 13.44 15.37 14.8C15.41 14.94 15.43 15.08 15.43 15.23C15.46 16.05 15.1 16.95 14.5 17.5H14.5Z",
+  boiler: "M8 2C6.89 2 6 2.89 6 4V16C6 17.11 6.89 18 8 18H9V20H6V22H9C10.11 22 11 21.11 11 20V18H13V20C13 21.11 13.89 22 15 22H18V20H15V18H16C17.11 18 18 17.11 18 16V4C18 2.89 17.11 2 16 2H8M12 4.97A2 2 0 0 1 14 6.97A2 2 0 0 1 12 8.97A2 2 0 0 1 10 6.97A2 2 0 0 1 12 4.97M10 14.5H14V16H10V14.5Z",
+  euro: "M15 18.5C12.5 18.5 10.32 17.08 9.24 15H15L16 13H8.58C8.53 12.67 8.5 12.34 8.5 12S8.53 11.33 8.58 11H15L16 9H9.24C10.32 6.92 12.5 5.5 15 5.5C16.61 5.5 18.09 6.09 19.23 7.07L21 5.3C19.41 3.87 17.3 3 15 3C11.08 3 7.76 5.5 6.5 9H3L2 11H6.06C6 11.33 6 11.66 6 12S6 12.67 6.06 13H3L2 15H6.5C7.76 18.5 11.08 21 15 21C17.31 21 19.41 20.13 21 18.7L19.22 16.93C18.09 17.91 16.62 18.5 15 18.5Z",
+  thermometer: "M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z",
+  cloud: "M12.74,5.47C15.1,6.5 16.35,9.03 15.92,11.46C17.19,12.56 18,14.19 18,16V16.17C18.31,16.06 18.65,16 19,16A3,3 0 0,1 22,19A3,3 0 0,1 19,22H6A4,4 0 0,1 2,18A4,4 0 0,1 6,14H6.27C5,12.45 4.6,10.24 5.5,8.26C6.72,5.5 9.97,4.24 12.74,5.47M11.93,7.3C10.16,6.5 8.09,7.31 7.31,9.07C6.85,10.09 6.93,11.22 7.41,12.13C8.5,10.83 10.16,10 12,10C12.7,10 13.38,10.12 14,10.34C13.94,9.06 13.18,7.86 11.93,7.3M13.55,3.64C13,3.4 12.45,3.23 11.88,3.12L14.37,1.82L15.27,4.71C14.76,4.29 14.19,3.93 13.55,3.64M6.09,4.44C5.6,4.79 5.17,5.19 4.8,5.63L4.91,2.82L7.87,3.5C7.25,3.71 6.65,4.03 6.09,4.44M18,9.71C17.91,9.12 17.78,8.55 17.59,8L19.97,9.5L17.92,11.73C18.03,11.08 18.05,10.4 18,9.71M3.04,11.3C3.11,11.9 3.24,12.47 3.43,13L1.06,11.5L3.1,9.28C3,9.93 2.97,10.61 3.04,11.3M19,18H16V16A4,4 0 0,0 12,12A4,4 0 0,0 8,16H6A2,2 0 0,0 4,18A2,2 0 0,0 6,20H19A1,1 0 0,0 20,19A1,1 0 0,0 19,18Z",
+  indoor: "M19 8C20.11 8 21 8.9 21 10V16.76C21.61 17.31 22 18.11 22 19C22 20.66 20.66 22 19 22C17.34 22 16 20.66 16 19C16 18.11 16.39 17.31 17 16.76V10C17 8.9 17.9 8 19 8M19 9C18.45 9 18 9.45 18 10V11H20V10C20 9.45 19.55 9 19 9M12 5.69L7 10.19V18H14.1L14 19L14.1 20H5V12H2L12 3L16.4 6.96C15.89 7.4 15.5 7.97 15.25 8.61L12 5.69Z",
   left: "M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z",
   right: "M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z",
   down: "M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z",
@@ -1882,9 +1897,17 @@ class ElectricityContractsPanel extends HTMLElement {
                   { class: "uses" },
                   h("h3", {}, this._t("yourData")),
                   h(
-                    "dl",
-                    {},
-                    rows.map(([name, value, missing]) => [h("dt", {}, name), h("dd", missing ? { class: "missing" } : {}, value)]),
+                    "ul",
+                    { class: "tags" },
+                    rows.map((row) =>
+                      h(
+                        "li",
+                        { class: row.state ? `tag ${row.state}` : "tag" },
+                        icon(row.path),
+                        h("span", { class: "tag-name" }, row.name),
+                        h("span", { class: "tag-value" }, row.value),
+                      ),
+                    ),
                   ),
                 )
               : null,
@@ -1894,8 +1917,9 @@ class ElectricityContractsPanel extends HTMLElement {
     );
   }
 
-  // "Your data" of a card: one row per input it uses, with where it comes from.
-  // Each key gives [name, value, missing?], or null when it doesn't apply.
+  // "Your data" of a card: one tag per input it uses, with where it comes from.
+  // Each key gives { path, name, value, state }, state "estimated" or "missing"
+  // when so, or null when it doesn't apply.
   _uses(...keys) {
     return keys.map((key) => this._use(key)).filter(Boolean);
   }
@@ -1906,57 +1930,52 @@ class ElectricityContractsPanel extends HTMLElement {
     const inputs = entry.inputs || {};
     const heating = entry.heating;
     const named = (id) => this._statisticName(id);
+    const tag = (path, name, value, state = null) => ({ path, name: this._t(name), value, state });
+    const contracts = (path, list, one = "useContract") =>
+      list.length ? tag(path, list.length > 1 ? "useContracts" : one, list.map((contract) => this._contractFacts(contract)).join(" ; ")) : null;
     switch (key) {
       case "consumption":
-        return entry.meter === false ? null : [this._t("useConsumption"), this._t(inputs.meter === "linky" ? "linkyHourly" : "meterHourly")];
-      case "contract": {
-        const shown = this._usedContracts();
-        if (!shown.length) return null;
-        return [this._t(shown.length > 1 ? "useContracts" : "useContract"), shown.map((contract) => this._contractFacts(contract)).join(" ; ")];
-      }
-      case "contractToday": {
-        const today = this._contractsToday();
-        return today.length ? [this._t("useContract"), today.map((contract) => this._contractFacts(contract)).join(" ; ")] : null;
-      }
-      case "otherContract": {
+        return entry.meter === false ? null : tag(ICONS.meter, "useConsumption", this._t(inputs.meter === "linky" ? "linkyHourly" : "meterHourly"));
+      case "contract":
+        return contracts(ICONS.contract, this._usedContracts());
+      case "contractToday":
+        return contracts(ICONS.contract, this._contractsToday());
+      case "otherContract":
         // The contract in force, beside a chosen one that isn't it.
-        const shown = this._usedContracts().filter((contract) => contract.id !== this._billContract);
-        return shown.length ? [this._t(shown.length > 1 ? "useContracts" : "useContract"), shown.map((contract) => this._contractFacts(contract)).join(" ; ")] : null;
-      }
-      case "chosen": {
-        const chosen = entry.contracts.find((contract) => contract.id === this._billContract);
-        return chosen ? [this._t("useChosen"), this._contractFacts(chosen)] : null;
-      }
+        return contracts(ICONS.contract, this._usedContracts().filter((contract) => contract.id !== this._billContract));
+      case "chosen":
+        return contracts(ICONS.compare, entry.contracts.filter((contract) => contract.id === this._billContract), "useChosen");
       case "colorsToday":
-        return this._contractsToday().some((contract) => contract.kind === "tempo") ? [this._t("useColors"), this._t("rte")] : null;
+        return this._contractsToday().some((contract) => contract.kind === "tempo") ? tag(ICONS.colors, "useColors", this._t("rte")) : null;
       case "colors":
-        return this._usedContracts().some((contract) => contract.kind === "tempo") ? [this._t("useColors"), this._t("rte")] : null;
+        return this._usedContracts().some((contract) => contract.kind === "tempo") ? tag(ICONS.colors, "useColors", this._t("rte")) : null;
       case "history":
-        return [this._t("useHistory"), this._t("lastYear")];
+        return tag(ICONS.history, "useHistory", this._t("lastYear"));
       case "heating": {
         if (!heating) return null;
-        const label = this._t(heating.gas ? "useGas" : "useHeating");
-        if (!heating.measured) return [label, this._t("fromTheHome")];
+        const path = heating.gas ? ICONS.fire : ICONS.radiator;
+        const name = heating.gas ? "useGas" : "useHeating";
+        if (!heating.measured) return tag(path, name, this._t("fromTheHome"), "estimated");
         const ids = inputs.heating || [];
-        if (ids.length === 1) return [label, named(ids[0])];
-        return [label, this._count(ids.length, heating.gas ? "statisticsOne" : "heatersOne", heating.gas ? "statisticsOther" : "heatersOther")];
+        if (ids.length === 1) return tag(path, name, named(ids[0]));
+        return tag(path, name, this._count(ids.length, heating.gas ? "statisticsOne" : "heatersOne", heating.gas ? "statisticsOther" : "heatersOther"));
       }
       case "water":
         if (!heating || !heating.with_water) return null;
-        return [this._t("useHotWater"), inputs.water ? named(inputs.water) : this._t("notTracked")];
+        return inputs.water ? tag(ICONS.boiler, "useHotWater", named(inputs.water)) : tag(ICONS.boiler, "useHotWater", this._t("notTracked"), "estimated");
       case "gasPrice": {
         if (!heating || !heating.gas) return null;
         const price = this._heating && this._heating.simulator ? this._heating.simulator.gas_price : null;
-        return price !== null && price !== undefined ? [this._t("useGasPrice"), `${this._price(price)}/kWh`] : [this._t("useGasPrice"), this._t("notEntered"), true];
+        return price !== null && price !== undefined ? tag(ICONS.euro, "useGasPrice", `${this._price(price)}/kWh`) : tag(ICONS.euro, "useGasPrice", this._t("notEntered"), "missing");
       }
       case "outdoor":
-        if (entry.outdoor === "sensor") return [this._t("useOutdoor"), this._t("sensorNamed", { name: named(inputs.outdoor) })];
-        if (entry.outdoor === "open_meteo") return [this._t("useOutdoor"), this._t("openMeteo")];
-        return [this._t("useOutdoor"), this._t("missing"), true];
+        if (entry.outdoor === "sensor") return tag(ICONS.thermometer, "useOutdoor", this._t("sensorNamed", { name: named(inputs.outdoor) }));
+        if (entry.outdoor === "open_meteo") return tag(ICONS.cloud, "useOutdoor", this._t("openMeteo"));
+        return tag(ICONS.thermometer, "useOutdoor", this._t("missing"), "missing");
       case "indoor": {
         const ids = inputs.indoor || [];
-        if (ids.length === 1) return [this._t("useIndoor"), named(ids[0])];
-        return ids.length ? [this._t("useIndoor"), this._count(ids.length, "thermometersOne", "thermometersOther")] : [this._t("useIndoor"), this._t("missing"), true];
+        if (!ids.length) return tag(ICONS.indoor, "useIndoor", this._t("missing"), "missing");
+        return tag(ICONS.indoor, "useIndoor", ids.length === 1 ? named(ids[0]) : this._count(ids.length, "thermometersOne", "thermometersOther"));
       }
       default:
         return null;
@@ -4551,7 +4570,7 @@ class ElectricityContractsPanel extends HTMLElement {
             : this._t("weatherInfo"),
           heating.measured ? this._waterNote(heating) : this._t("estimatedHeatingInfo"),
         ],
-        uses: this._uses("outdoor", heating.measured ? "heating" : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
+        uses: this._uses("outdoor", "heating", heating.measured ? null : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
         hint: this._heatingHints(heating, "statistics", "water"),
       },
     );
@@ -4580,7 +4599,7 @@ class ElectricityContractsPanel extends HTMLElement {
     if (message) {
       return this._card(title, [h("p", { class: "message" }, message[0]), message[1] || null], {
         info: [this._t("simAbout")],
-        uses: this._uses("outdoor", heating.measured ? "heating" : "consumption", "indoor"),
+        uses: this._uses("outdoor", "heating", heating.measured ? null : "consumption", "indoor"),
       });
     }
     // Tenths, so the sliders start on the measured temperatures.
@@ -4636,7 +4655,7 @@ class ElectricityContractsPanel extends HTMLElement {
           Number.isFinite(low) && Number.isFinite(highest) ? this._t("simInfoRange", { low: this._degrees(low), high: this._degrees(highest) }) : null,
           heating.measured ? null : this._t("estimatedHeatingInfo"),
         ],
-        uses: this._uses("outdoor", "indoor", heating.measured ? "heating" : "consumption", heating.gas ? "gasPrice" : "contract"),
+        uses: this._uses("outdoor", "indoor", "heating", heating.measured ? null : "consumption", heating.gas ? "gasPrice" : "contract"),
         hint: this._heatingHints(heating, "statistics"),
       },
     );
