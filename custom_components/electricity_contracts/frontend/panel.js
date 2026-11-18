@@ -104,6 +104,8 @@ const STRINGS = {
     useIndoor: "Indoor temperature",
     useHistory: "History",
     meterTag: "Meter",
+    stepHour: "hourly",
+    stepDay: "daily",
     rte: "RTE",
     lastYear: "last year",
     notTracked: "not tracked",
@@ -379,6 +381,8 @@ const STRINGS = {
     useIndoor: "Température intérieure",
     useHistory: "Historique",
     meterTag: "Compteur",
+    stepHour: "horaire",
+    stepDay: "journalier",
     rte: "RTE",
     lastYear: "l'an dernier",
     notTracked: "non suivi",
@@ -1914,6 +1918,9 @@ class ElectricityContractsPanel extends HTMLElement {
     const inputs = entry.inputs || {};
     const heating = entry.heating;
     const named = (id) => this._statisticName(id);
+    // The step of statistics, hourly or daily, once for those that share it.
+    const step = (...steps) => [...new Set(steps.filter(Boolean))].map((value) => this._t(value === "day" ? "stepDay" : "stepHour"));
+    const steps = (ids) => step(...ids.map((id) => (inputs.steps || {})[id]));
     // hue: the color of its tags, that of the data in the charts when it has one.
     const row = (path, hue, name, values, state = null) => ({ path, hue, name: this._t(name), values: values.filter(Boolean), state });
     // One line per contract, so their tags don't mix.
@@ -1921,7 +1928,7 @@ class ElectricityContractsPanel extends HTMLElement {
     const colors = (list) => (list.some((contract) => contract.kind === "tempo") ? row(ICONS.colors, "var(--ec-s5)", "useColors", ["RTE"]) : null);
     switch (key) {
       case "consumption":
-        return entry.meter === false ? null : row(ICONS.meter, "var(--ec-money)", "useConsumption", [inputs.meter === "linky" ? "Linky" : this._t("meterTag")]);
+        return entry.meter === false ? null : row(ICONS.meter, "var(--ec-money)", "useConsumption", [inputs.meter === "linky" ? "Linky" : this._t("meterTag"), ...step(inputs.meter_step)]);
       case "contract":
         return contracts(ICONS.contract, this._usedContracts());
       case "contractToday":
@@ -1941,12 +1948,12 @@ class ElectricityContractsPanel extends HTMLElement {
         if (!heating) return null;
         const path = heating.gas ? ICONS.fire : ICONS.radiator;
         if (!heating.measured) return row(path, "var(--ec-s2)", "useHeating", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
-        return row(path, "var(--ec-s2)", "useHeating", (inputs.heating || []).map(named));
+        return row(path, "var(--ec-s2)", "useHeating", [...(inputs.heating || []).map(named), ...steps(inputs.heating || [])]);
       }
       case "water":
         if (!heating || !heating.with_water) return null;
         return inputs.water
-          ? row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water)])
+          ? row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), ...steps([inputs.water])])
           : row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
       case "gasPrice": {
         if (!heating || !heating.gas) return null;
@@ -1956,13 +1963,13 @@ class ElectricityContractsPanel extends HTMLElement {
           : row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [this._t("missing")], "missing");
       }
       case "outdoor":
-        if (entry.outdoor === "sensor") return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [named(inputs.outdoor)]);
-        if (entry.outdoor === "open_meteo") return row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo"]);
+        if (entry.outdoor === "sensor") return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [named(inputs.outdoor), ...steps([inputs.outdoor])]);
+        if (entry.outdoor === "open_meteo") return row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo", ...step("hour")]);
         return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("missing")], "missing");
       case "indoor": {
         const ids = inputs.indoor || [];
         if (!ids.length) return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", [this._t("missing")], "missing");
-        return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", ids.map(named));
+        return row(ICONS.indoor, "var(--ec-s8)", "useIndoor", [...ids.map(named), ...steps(ids)]);
       }
       default:
         return null;

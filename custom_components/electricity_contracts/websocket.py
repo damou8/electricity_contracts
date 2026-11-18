@@ -5,6 +5,7 @@ from typing import Any
 
 import probatio as vol
 from elec_tariffs import PricePeriod
+from homeassistant.components.recorder.statistics import get_last_statistics
 from homeassistant.components.websocket_api import async_register_command
 from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.components.websocket_api.const import (
@@ -19,6 +20,7 @@ from homeassistant.components.websocket_api.decorators import (
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.recorder import get_instance
 
 from .bill import Bill, async_bill
 from .comparison import (
@@ -50,6 +52,8 @@ from .statistics import SeriesStatus
 from .weather import outdoor_source, outdoor_statistic
 
 _HOUR = timedelta(hours=1)
+# Rows at least 23 hours apart (a day, or a day when the clocks change).
+_DAILY_SECONDS = 23 * 3600
 # Longer windows are split into months.
 _MAX_DAYS_BY_DAY = 62
 
@@ -145,28 +149,71 @@ def _contract(
     }
 
 
-def _inputs(entry: ConfigEntry, heating: Heating) -> dict[str, Any]:
+def _inputs(
+    entry: ConfigEntry, heating: Heating, steps: dict[str, str]
+) -> dict[str, Any]:
     """Return the statistics the entry reads, for the panel to name them.
 
     The consumption is only told as Linky or not: its ID holds the meter number.
+    `steps` says whether each statistic is "hour"ly or "day"ly, by ID.
     """
     source = source_statistic(entry)
+    ids = _read_ids(entry, heating)
     return {
         "meter": None if source is None else source.split(":", 1)[0],
+        "meter_step": steps.get(source) if source else None,
         "heating": list(heating.statistics),
         "water": heating.water_statistic,
         "outdoor": entry.options.get(CONF_TEMPERATURE) or None,
         "indoor": list(heating.indoor),
+        "steps": {
+            statistic_id: steps[statistic_id]
+            for statistic_id in ids
+            if statistic_id in steps
+        },
     }
 
 
+def _read_ids(entry: ConfigEntry, heating: Heating) -> list[str]:
+    """Return the statistics other than the meter that the entry reads."""
+    outdoor = entry.options.get(CONF_TEMPERATURE)
+    water = [heating.water_statistic] if heating.water_statistic else []
+    return [
+        *heating.statistics,
+        *water,
+        *([outdoor] if outdoor else []),
+        *heating.indoor,
+    ]
+
+
+def _steps(hass: HomeAssistant, ids: set[str]) -> dict[str, str]:
+    """Tell, from its last two rows, whether each statistic is hourly or daily."""
+    steps: dict[str, str] = {}
+    for statistic_id in ids:
+        rows = get_last_statistics(
+            hass, 2, statistic_id, convert_units=False, types={"sum", "mean"}
+        ).get(statistic_id, [])
+        if len(rows) == 2:  # noqa: PLR2004 - the last two rows
+            gap = rows[0]["start"] - rows[1]["start"]
+            steps[statistic_id] = "day" if gap >= _DAILY_SECONDS else "hour"
+    return steps
+
+
 @websocket_command({vol.Required("type"): f"{DOMAIN}/entries"})
-@callback
-def ws_entries(
+@async_response
+async def ws_entries(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """List the consumption sources, their contracts and the days they cover."""
+    ids: set[str] = set()
+    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        heating = Heating.from_options(entry.options, outdoor=None)
+        ids.update(_read_ids(entry, heating))
+        if source := source_statistic(entry):
+            ids.add(source)
+    steps = await get_instance(hass).async_add_executor_job(_steps, hass, ids)
     result: list[dict[str, Any]] = []
+    # Read again: an entry may have been unloaded meanwhile.
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
         manual = manual_prices(entry)
         coordinator: ElectricityContractsCoordinator = entry.runtime_data
@@ -201,7 +248,7 @@ def ws_entries(
                 "actual": status.actual is not None,
                 "outdoor": outdoor_source(entry),
                 # What the cards' notes list as "your data".
-                "inputs": _inputs(entry, heating),
+                "inputs": _inputs(entry, heating, steps),
                 # Without a meter, the heating can't be estimated: only measured.
                 "heating": _heating(heating) if meter or heating.measured else None,
             }
