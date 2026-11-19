@@ -27,7 +27,6 @@ from .coordinator import ElectricityContractsConfigEntry
 from .data import Heating, source_statistic
 from .heating import async_heating_between, heating_window
 from .insights import weather_fit
-from .statistics import async_statistic_first_day
 from .weather import outdoor_ids, outdoor_rows, outdoor_statistic
 
 STORE_VERSION = 1
@@ -193,11 +192,12 @@ def _uses(
         estimated = answer["estimated"]
         heat = estimated["heating"] if estimated else 0.0
         heat_source = "estimated"
+    # The heating estimated from the Linky before the window holds no hot water.
     before = answer.get("before")
+    earlier = before["heating"] if before else 0.0
     if before:
-        heat += before["heating"]
         heat_source = "mixed" if heat_source == "measured" else "estimated"
-    if heat <= 0:
+    if heat + earlier <= 0:
         return []
     if answer["water_split"]:
         water = answer["totals"]["water"]
@@ -206,17 +206,19 @@ def _uses(
             water += water / days * before["days"]
         water_gas = bool(answer["water_gas"])
         water_source = "measured" if answer["water_measured"] else "estimated"
-        heat = max(0.0, heat + extra)
+        heat = max(0.0, heat + earlier + extra)
         total = (heat + water) / (1 - auxiliaries)
     elif answer["measured"] and answer["with_water"]:
-        # The hot water is in the heating statistics, but can't be told apart.
-        water = heat / (1 - auxiliaries) * water_share
-        heat = max(0.0, heat - water + extra)
+        # The hot water is in the heating statistics, but can't be told apart;
+        # before them, its share comes on top of the Linky's estimate.
+        inside = heat / (1 - auxiliaries) * water_share
+        water = inside + earlier / (1 - auxiliaries - water_share) * water_share
+        heat = max(0.0, heat - inside + earlier + extra)
         total = (heat + water) / (1 - auxiliaries)
         water_gas, water_source = gas, "share"
     else:
         # The hot water is elsewhere, unmeasured: an electric water heater.
-        heat = max(0.0, heat + extra)
+        heat = max(0.0, heat + earlier + extra)
         total = heat / (1 - auxiliaries - water_share)
         water = total * water_share
         water_gas, water_source = False, "share"
@@ -336,6 +338,9 @@ async def _async_linky_heating(
         )
 
     energy, outdoor, indoor = await get_instance(hass).async_add_executor_job(read)
+    # A daily read also returns the day that starts at `end`.
+    first_day, end_day = _local_day(start), _local_day(end)
+    energy = {day: kwh for day, kwh in energy.items() if first_day <= day < end_day}
     weather = weather_fit(
         {day: {"energy": kwh} for day, kwh in energy.items()}, outdoor
     )
@@ -360,21 +365,16 @@ async def _async_linky_heating(
 
 
 async def _async_main_start(
-    hass: HomeAssistant, entry: ElectricityContractsConfigEntry, first: datetime
+    entry: ElectricityContractsConfigEntry, first: datetime
 ) -> datetime:
     """Return where the heating tab's answer starts.
 
     Its window, or the heating statistics' first day when they start later.
     """
-    heating = Heating.from_options(entry.options, outdoor=None)
-    if not heating.measured:
+    if not Heating.from_options(entry.options, outdoor=None).measured:
         return first
-    days = [
-        day
-        for statistic_id in heating.statistics
-        if (day := await async_statistic_first_day(hass, statistic_id))
-    ]
-    return max(first, day_start(min(days))) if days else first
+    day = await entry.runtime_data.async_heating_first_day()
+    return max(first, day_start(day)) if day else first
 
 
 async def async_dpe(
@@ -390,7 +390,7 @@ async def async_dpe(
     start = day_start(_year_before(end) + timedelta(days=1))
     stop = day_start(end + timedelta(days=1))
     first, last = heating_window(entry, start, stop)
-    first = min(await _async_main_start(hass, entry, first), max(first, last))
+    first = min(await _async_main_start(entry, first), max(first, last))
     settings = await async_load_settings(hass, entry.entry_id)
     answer = await async_heating_between(
         hass, entry=entry, start=first, end=max(first, last), weather_days=True

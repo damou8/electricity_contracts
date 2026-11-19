@@ -14,9 +14,11 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
 from custom_components.electricity_contracts.const import (
+    CONF_HEATING_STATISTICS,
     CONF_TEMPERATURE,
     DOMAIN,
     FRANCE_TIME_ZONE,
+    SECTION_HEATING,
 )
 from custom_components.electricity_contracts.dpe import (
     DEFAULTS,
@@ -39,8 +41,11 @@ from .test_heating import (
     BASE_CONTRACT,
     DAYS,
     GAS_OPTIONS,
+    HEATER_A,
+    add_energy,
     cold_days,  # noqa: F401 - a fixture
     gas_home,  # noqa: F401 - a fixture
+    hourly,
 )
 from .test_websocket import command, result
 
@@ -441,16 +446,21 @@ LINKY_DAYS = "linky:44444444444444"
 FEBRUARY = [date(2026, 2, 13) + timedelta(days=offset) for offset in range(16)]
 
 
-@pytest.mark.usefixtures("sources")
-async def test_linky_days_estimate_the_heating_before_the_window(
-    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+def _hours_from_first(moment: datetime) -> int:
+    """Return the hours from the tests' first hour to `moment`."""
+    return int((moment.astimezone(UTC) - FIRST_HOUR) / timedelta(hours=1))
+
+
+async def add_linky(
+    hass: HomeAssistant, daily: list[float], first_hour: datetime, hourly: list[float]
 ) -> None:
-    await hass.config.async_update(time_zone="Europe/Paris")
-    first_hour = datetime(2026, 3, 1, tzinfo=FRANCE_TIME_ZONE)
-    starts = [datetime.combine(day, time(), FRANCE_TIME_ZONE) for day in FEBRUARY]
-    starts += [first_hour + timedelta(hours=hour) for hour in range(48)]
-    values = [(10 + 2 * (18 - index)) * 1000.0 for index in range(16)]
-    values += [500.0] * 48
+    """Import Wh only known by day from 13 February, then hours from `first_hour`."""
+    starts = [
+        datetime.combine(day, time(), FRANCE_TIME_ZONE)
+        for day in FEBRUARY[: len(daily)]
+    ]
+    starts += [first_hour + timedelta(hours=hour) for hour in range(len(hourly))]
+    values = daily + hourly
     sums = [sum(values[: index + 1]) for index in range(len(values))]
     async_add_external_statistics(
         hass,
@@ -468,14 +478,28 @@ async def test_linky_days_estimate_the_heating_before_the_window(
             for start, value, total in zip(starts, values, sums, strict=True)
         ],
     )
+    await async_wait_recording_done(hass)
+
+
+@pytest.mark.usefixtures("sources")
+async def test_linky_days_estimate_the_heating_before_the_window(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    await hass.config.async_update(time_zone="Europe/Paris")
+    await add_linky(
+        hass,
+        [(10 + 2 * (18 - index)) * 1000.0 for index in range(16)],
+        datetime(2026, 3, 1, tzinfo=FRANCE_TIME_ZONE),
+        [500.0] * 48,
+    )
     # Each French day at its temperature, hour by hour.
-    february_start = starts[0].astimezone(UTC)
     await add_temperature(
         hass,
         [float(index) for index in range(16) for _ in range(24)],
-        first=int((february_start - FIRST_HOUR) / timedelta(hours=1)),
+        first=_hours_from_first(
+            datetime.combine(FEBRUARY[0], time(), FRANCE_TIME_ZONE)
+        ),
     )
-    await async_wait_recording_done(hass)
     entry = await setup_entry(
         hass,
         make_entry(
@@ -512,3 +536,78 @@ async def test_linky_days_estimate_the_heating_before_the_window(
     label = await dpe(hass, hass_ws_client, entry.entry_id, "2026-03-02")
     assert label["conventional"]["extra"] == pytest.approx(-32.0, abs=0.1)
     assert uses(label)["heating"]["energy"] == pytest.approx(304.0, abs=0.1)
+
+
+def test_hot_water_inside_the_heating_before_it_is_measured() -> None:
+    before: dict[str, Any] = {
+        "heating": 1000.0,
+        "days": 5,
+        "weather": None,
+        "weather_days": [],
+    }
+    rows = uses(
+        dpe_label(
+            answer(water_split=False, totals={"heating": 6800.0}, before=before),
+            DEFAULTS,
+        )
+    )
+    # 15 % of the three uses is water: carved out of the measured heating, on top
+    # of the Linky's estimate, which holds none.
+    inside = 6800.0 / 0.95 * 0.15
+    on_top = 1000.0 / 0.8 * 0.15
+    assert rows["water"]["energy"] == pytest.approx(inside + on_top, abs=0.1)
+    assert rows["heating"]["energy"] == pytest.approx(6800.0 - inside + 1000.0, abs=0.1)
+
+
+@pytest.mark.usefixtures("sources")
+async def test_heaters_starting_later_leave_the_linky_days_before(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    cold_days: list[float],  # noqa: F811
+) -> None:
+    await hass.config.async_update(time_zone="Europe/Paris")
+    # The heater only from 16 March, the 15th of the 16 cold days.
+    await add_energy(hass, HEATER_A, hourly([2.0 * 14, 2.0 * 15]), days_later=14)
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [TEMPO_CONTRACT],
+            options={
+                CONF_TEMPERATURE: TEMPERATURE_ID,
+                SECTION_HEATING: {CONF_HEATING_STATISTICS: [HEATER_A]},
+            },
+        ),
+    )
+    label = await dpe(hass, hass_ws_client, entry.entry_id, "2026-03-17")
+    assert (label["start"], label["days"]) == ("2026-03-02", DAYS)
+    # The 14 days before it from the Linky: 2 kWh a degree day, n degree days
+    # on day n.
+    assert label["estimated"] == {
+        "start": "2026-03-02",
+        "end": "2026-03-15",
+        "heating": 2.0 * sum(range(14)),
+    }
+    rows = uses(label)
+    assert rows["heating"]["source"] == "mixed"
+    assert rows["heating"]["energy"] == pytest.approx(2.0 * sum(range(16)), abs=0.1)
+
+
+@pytest.mark.usefixtures("sources")
+async def test_gas_heating_isnt_estimated_from_the_linky(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    gas_home: list[float],  # noqa: F811
+) -> None:
+    await add_linky(
+        hass,
+        [10000.0] * 16,
+        datetime(2026, 3, 2, tzinfo=FRANCE_TIME_ZONE),
+        [250.0] * 24 * DAYS,
+    )
+    entry = await setup_entry(
+        hass,
+        make_entry([BASE_CONTRACT], statistic_id=LINKY_DAYS, options=GAS_OPTIONS),
+    )
+    label = await dpe(hass, hass_ws_client, entry.entry_id, "2026-03-17")
+    assert label["estimated"] is None
+    assert label["start"] == "2026-03-02"
