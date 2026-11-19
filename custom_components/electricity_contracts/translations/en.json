@@ -44,7 +44,7 @@
         },
         "data_description": {
           "temperature": "Puts the consumption next to the weather, in the Heating tab. The sensor must keep statistics. It takes the place of Open-Meteo.",
-          "open_meteo": "Without an outdoor sensor, takes the hourly outdoor temperature from Open-Meteo.com, free and without an account. Your home's location, rounded to about 10 km, is sent to Open-Meteo."
+          "open_meteo": "Takes the hourly outdoor temperature from Open-Meteo.com, free and without an account. With an outdoor sensor, Open-Meteo only gives the days before its first readings. Your home's location, rounded to about 10 km, is sent to Open-Meteo."
         },
         "sections": {
           "heating": {

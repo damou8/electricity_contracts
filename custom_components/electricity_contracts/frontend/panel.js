@@ -189,6 +189,7 @@ const STRINGS = {
     regulated: "regulated prices",
     manualPrices: "prices entered by hand",
     since: "since {date}",
+    untilDay: "until {date}",
     offPeakHours: "off-peak {ranges}",
     weekendOffPeak: "weekends off-peak",
     pricesSince: "Prices in force since {date}",
@@ -505,6 +506,7 @@ const STRINGS = {
     regulated: "tarif réglementé",
     manualPrices: "prix saisis à la main",
     since: "depuis le {date}",
+    untilDay: "jusqu'au {date}",
     offPeakHours: "heures creuses {ranges}",
     weekendOffPeak: "week-end en heures creuses",
     pricesSince: "Prix en vigueur depuis le {date}",
@@ -2154,6 +2156,14 @@ class ElectricityContractsPanel extends HTMLElement {
           : row(ICONS.euro, "var(--ec-s4)", "useGasPrice", [this._t("missing")], "missing");
       }
       case "outdoor":
+        if (entry.outdoor === "sensor" && entry.outdoor_fill_until) {
+          // Open-Meteo gives the days before the sensor's first one.
+          const until = entry.outdoor_fill_until;
+          return [
+            { ...row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo", ...step("hour")]), period: this._t("untilDay", { date: this._dayLabel(addDays(until, -1)) }) },
+            { ...row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [named(inputs.outdoor), ...steps([inputs.outdoor])]), period: this._t("since", { date: this._dayLabel(until) }) },
+          ];
+        }
         if (entry.outdoor === "sensor") return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [named(inputs.outdoor), ...steps([inputs.outdoor])]);
         if (entry.outdoor === "open_meteo") return row(ICONS.cloud, "var(--ec-s6)", "useOutdoor", ["Open-Meteo", ...step("hour")]);
         return row(ICONS.thermometer, "var(--ec-s6)", "useOutdoor", [this._t("missing")], "missing");

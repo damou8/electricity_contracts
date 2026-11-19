@@ -1,12 +1,16 @@
-"""Outdoor temperature from Open-Meteo, for homes without an outdoor thermometer.
+"""Outdoor temperature from Open-Meteo, without an outdoor thermometer or before it.
 
-With the option on and no outdoor sensor chosen, the hourly temperature at the
-home's location, rounded to 0.1° (about 10 km), is written as a statistic of the
-entry from the day before the first day of consumption. The tabs read it like the
-statistics of a sensor. The last days are asked again at each update, since
-Open-Meteo revises them once its reanalysis catches up.
+With the option on, the hourly temperature at the home's location, rounded to
+0.1° (about 10 km), is written as a statistic of the entry from the day before
+the first day of consumption. The tabs read it like the statistics of a sensor.
+The last days are asked again at each update, since Open-Meteo revises them once
+its reanalysis catches up.
+
+With an outdoor sensor too, Open-Meteo only fills the days before the sensor's
+first day: the tabs read both, the sensor first.
 """
 
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Final
 
@@ -17,6 +21,7 @@ from homeassistant.components.recorder.models import (
     StatisticMetaData,
 )
 from homeassistant.components.recorder.statistics import (
+    StatisticsRow,
     async_add_external_statistics,
     get_last_statistics,
 )
@@ -27,12 +32,14 @@ from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.storage import Store
 from homeassistant.util.unit_conversion import TemperatureConverter
 
+from .comparison import day_start
 from .const import CONF_TEMPERATURE, CONF_WEATHER, DOMAIN
 from .data import source_object
-from .statistics import async_clear_statistics
+from .statistics import async_clear_statistics, async_statistic_first_day
 
 STORE_VERSION: Final = 1
 REVISED_DAYS: Final = 7
+_HOUR: Final = timedelta(hours=1)
 _NAMES: Final = {
     "en": "Outdoor temperature (Open-Meteo)",
     "fr": "Température extérieure (Open-Meteo)",
@@ -45,9 +52,8 @@ def weather_statistic_id(entry: ConfigEntry) -> str:
 
 
 def uses_weather(entry: ConfigEntry) -> bool:
-    """Tell whether the outdoor temperature comes from Open-Meteo."""
-    options = entry.options
-    return bool(options.get(CONF_WEATHER)) and not options.get(CONF_TEMPERATURE)
+    """Tell whether Open-Meteo gives the outdoor temperature, or what precedes it."""
+    return bool(entry.options.get(CONF_WEATHER))
 
 
 def outdoor_statistic(entry: ConfigEntry) -> str | None:
@@ -55,6 +61,39 @@ def outdoor_statistic(entry: ConfigEntry) -> str | None:
     if sensor := entry.options.get(CONF_TEMPERATURE):
         return str(sensor)
     return weather_statistic_id(entry) if uses_weather(entry) else None
+
+
+def outdoor_fill(entry: ConfigEntry) -> str | None:
+    """Return the statistic that fills the days before the sensor, if any."""
+    if entry.options.get(CONF_TEMPERATURE) and uses_weather(entry):
+        return weather_statistic_id(entry)
+    return None
+
+
+def outdoor_ids(entry: ConfigEntry) -> list[str]:
+    """Return every statistic the outdoor temperature is read from."""
+    return [
+        statistic_id
+        for statistic_id in (outdoor_statistic(entry), outdoor_fill(entry))
+        if statistic_id
+    ]
+
+
+def outdoor_rows(
+    entry: ConfigEntry, rows: Mapping[str, list[StatisticsRow]]
+) -> list[StatisticsRow]:
+    """Return the outdoor rows read with `outdoor_ids`, oldest first.
+
+    Open-Meteo stops where the sensor starts: their hours don't overlap.
+    """
+    return sorted(
+        (
+            row
+            for statistic_id in outdoor_ids(entry)
+            for row in rows.get(statistic_id, [])
+        ),
+        key=lambda row: row["start"],
+    )
 
 
 def outdoor_source(entry: ConfigEntry) -> str | None:
@@ -100,19 +139,32 @@ class WeatherWriter:
         """Load the statistic, location and first day written for."""
         self._written = await self._store.async_load() or {}
 
+    @property
+    def until(self) -> date | None:
+        """Return the sensor's first day, where Open-Meteo stops; None without one."""
+        until = self._written.get("until")
+        return date.fromisoformat(until) if until else None
+
     async def async_update(self, first_day: date, now: datetime) -> None:
         """Ask Open-Meteo for the hours missing or revised, and write them.
 
-        Clear the statistic when the option was turned off or the home moved.
-        Raise WeatherError when Open-Meteo fails, and RecorderNotStartedError
-        when the statistic must be cleared before Home Assistant has started.
+        Clear the statistic when the option was turned off, the home moved or the
+        sensor's first day changed. Raise WeatherError when Open-Meteo fails, and
+        RecorderNotStartedError when the statistic must be cleared before Home
+        Assistant has started.
         """
         coordinates = self.coordinates
         written_id = self._written.get("statistic_id")
+        sensor = self.entry.options.get(CONF_TEMPERATURE)
+        sensor_first = (
+            await async_statistic_first_day(self.hass, sensor) if sensor else None
+        )
+        until = sensor_first.isoformat() if sensor_first else None
         if (
             not self.enabled
             or self._written.get("coordinates") != coordinates
             or written_id != self.statistic_id
+            or self._written.get("until") != until
         ):
             if self._written or self.enabled:
                 # Hours of another place, of the source's former statistic (its
@@ -136,21 +188,31 @@ class WeatherWriter:
             else last.date() - timedelta(days=REVISED_DAYS)
         )
         utc_now = now.astimezone(UTC)
-        temperatures = await self.client.async_hourly_temperatures(
-            coordinates[0], coordinates[1], start, utc_now.date()
-        )
         current_hour = utc_now.replace(minute=0, second=0, microsecond=0)
-        rows = [
-            StatisticData(start=moment, mean=value, min=value, max=value)
-            for moment, value in sorted(temperatures.items())
-            if moment < current_hour
-        ]
-        if rows:
-            async_add_external_statistics(self.hass, self._metadata(), rows)
+        # Before a sensor, up to its first day only: those days don't change.
+        end = (
+            current_hour
+            if sensor_first is None
+            else min(current_hour, day_start(sensor_first))
+        )
+        missing = last is None or last + _HOUR < end or start == first
+        revised = end > current_hour - timedelta(days=REVISED_DAYS)
+        if missing or revised:
+            temperatures = await self.client.async_hourly_temperatures(
+                coordinates[0], coordinates[1], start, end.date()
+            )
+            rows = [
+                StatisticData(start=moment, mean=value, min=value, max=value)
+                for moment, value in sorted(temperatures.items())
+                if moment < end
+            ]
+            if rows:
+                async_add_external_statistics(self.hass, self._metadata(), rows)
         written = {
             "statistic_id": self.statistic_id,
             "coordinates": coordinates,
             "first_day": min(start.isoformat(), written_from or start.isoformat()),
+            "until": until,
         }
         if self._written != written:
             self._written = written

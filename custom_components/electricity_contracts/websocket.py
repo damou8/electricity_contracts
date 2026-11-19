@@ -52,7 +52,7 @@ from .heating import async_heating
 from .insights import async_insights
 from .outlook import async_outlook
 from .statistics import SeriesStatus
-from .weather import outdoor_source, outdoor_statistic
+from .weather import outdoor_fill, outdoor_source, outdoor_statistic
 
 _HOUR = timedelta(hours=1)
 # Rows at least 23 hours apart (a day, or a day when the clocks change).
@@ -258,6 +258,12 @@ async def ws_entries(
                 ],
                 "actual": status.actual is not None,
                 "outdoor": outdoor_source(entry),
+                # The sensor's first day, when Open-Meteo gives the days before.
+                "outdoor_fill_until": (
+                    until.isoformat()
+                    if outdoor_fill(entry) and (until := coordinator.weather.until)
+                    else None
+                ),
                 # What the cards' notes list as "your data".
                 "inputs": _inputs(entry, heating, steps),
                 # Without a meter, the heating can't be estimated: only measured.

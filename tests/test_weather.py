@@ -27,17 +27,20 @@ from custom_components.electricity_contracts.const import (
 )
 from custom_components.electricity_contracts.data import Heating
 from custom_components.electricity_contracts.weather import (
+    outdoor_fill,
     outdoor_source,
     outdoor_statistic,
 )
 
 from .conftest import (
+    FIRST_HOUR,
     NOW,
     OTHER_STATISTIC_ID,
     TEMPERATURE_ID,
     TEMPO_CONTRACT,
     Sources,
     add_statistic,
+    add_temperature,
     make_entry,
 )
 from .test_comparison import setup_entry
@@ -129,10 +132,80 @@ async def test_older_data_asks_the_days_before(
 
 @pytest.mark.usefixtures("statistic")
 async def test_a_sensor_comes_first(hass: HomeAssistant, sources: Sources) -> None:
-    entry = await setup_entry(hass, weather_entry(**{CONF_TEMPERATURE: TEMPERATURE_ID}))
+    entry = await setup_entry(
+        hass, make_entry(options={CONF_TEMPERATURE: TEMPERATURE_ID})
+    )
     assert asked(sources) == []
     assert outdoor_statistic(entry) == TEMPERATURE_ID
+    assert outdoor_fill(entry) is None
     assert outdoor_source(entry) == "sensor"
+
+
+# 6 November 2026 at midnight, French time: the sensor's first hour.
+SENSOR_START = datetime(2026, 11, 5, 23, tzinfo=UTC)
+
+
+async def test_open_meteo_gives_the_days_before_the_sensor(
+    hass: HomeAssistant,
+    sources: Sources,
+    hass_ws_client: WebSocketGenerator,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    # Consumption from 4 November, French time, to now.
+    first_hour = datetime(2026, 11, 3, 23, tzinfo=UTC)
+    await add_statistic(
+        hass,
+        hours=int((NOW - first_hour) / timedelta(hours=1)),
+        first=int((first_hour - FIRST_HOUR) / timedelta(hours=1)),
+    )
+    await add_temperature(
+        hass,
+        [5.0] * int((NOW - SENSOR_START) / timedelta(hours=1)),
+        first=int((SENSOR_START - FIRST_HOUR) / timedelta(hours=1)),
+    )
+    entry = await setup_entry(hass, weather_entry(**{CONF_TEMPERATURE: TEMPERATURE_ID}))
+    assert outdoor_statistic(entry) == TEMPERATURE_ID
+    assert outdoor_fill(entry) == WEATHER_ID
+    # Up to the sensor's first day only.
+    assert asked(sources) == [(*COORDINATES, date(2026, 11, 3), date(2026, 11, 5))]
+    written = await hours(hass)
+    assert max(written) == SENSOR_START - timedelta(hours=1)
+    [listed] = await result(hass_ws_client, hass, type=f"{DOMAIN}/entries")
+    assert listed["outdoor"] == "sensor"
+    assert listed["outdoor_fill_until"] == "2026-11-06"
+
+    # The days before the sensor read Open-Meteo, the others the sensor.
+    insights = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/insights",
+        entry_id=entry.entry_id,
+        start="2026-11-04",
+        end="2026-11-06",
+    )
+    assert [(day["date"], day["temperature"]) for day in insights["days"]] == [
+        ("2026-11-04", 10.0),
+        ("2026-11-05", 10.0),
+        ("2026-11-06", 5.0),
+    ]
+
+    heating = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/heating",
+        entry_id=entry.entry_id,
+        start="2026-11-04",
+        end="2026-11-06",
+    )
+    # Its weather line reads the three days: (10 + 10 + 5) / 3.
+    assert heating["weather"]["days"] == 3
+    assert heating["weather"]["mean_temperature"] == 8.3
+
+    # Within a week, the last days are asked again, still up to the sensor.
+    freezer.tick(timedelta(hours=1))
+    await entry.runtime_data.async_refresh()
+    assert asked(sources)[-1] == (*COORDINATES, date(2026, 10, 29), date(2026, 11, 5))
+    assert max(await hours(hass)) == SENSOR_START - timedelta(hours=1)
 
 
 async def test_without_any_outdoor_temperature(hass: HomeAssistant) -> None:
@@ -151,6 +224,8 @@ async def test_turning_it_off_clears_the_statistic(
         "statistic_id": WEATHER_ID,
         "coordinates": list(COORDINATES),
         "first_day": "2026-02-28",
+        # No sensor: up to now.
+        "until": None,
     }
     hass.config_entries.async_update_entry(entry, options={})
     await hass.async_block_till_done()

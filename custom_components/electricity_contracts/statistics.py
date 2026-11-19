@@ -16,7 +16,7 @@ import json
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from typing import Any
 
@@ -46,7 +46,7 @@ from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.storage import Store
 from homeassistant.util.unit_conversion import EnergyConverter
 
-from .const import DOMAIN
+from .const import DOMAIN, FRANCE_TIME_ZONE
 from .costing import (
     ActualCosted,
     ContractInput,
@@ -692,6 +692,40 @@ def _cost_all(
     costed = {item.uid: cost_contract(item, hours, calendar) for item in inputs}
     actual = cost_actual(inputs, costed, hours) if with_actual else None
     return costed, actual
+
+
+async def async_statistic_first_day(
+    hass: HomeAssistant, statistic_id: str
+) -> date | None:
+    """Return the day, French time, of a statistic's first hour; None without one."""
+    recorder = get_instance(hass)
+    months = await recorder.async_add_executor_job(
+        statistics_during_period,
+        hass,
+        datetime(2000, 1, 1, tzinfo=UTC),
+        None,
+        {statistic_id},
+        "month",
+        None,
+        {"mean", "sum"},
+    )
+    if not months.get(statistic_id):
+        return None
+    # Months follow the server's time zone: look for the first hour in the
+    # first month only.
+    month_start = datetime.fromtimestamp(months[statistic_id][0]["start"], UTC)
+    hours = await recorder.async_add_executor_job(
+        statistics_during_period,
+        hass,
+        month_start,
+        month_start + timedelta(days=32),
+        {statistic_id},
+        "hour",
+        None,
+        {"mean", "sum"},
+    )
+    start = hours[statistic_id][0]["start"]
+    return datetime.fromtimestamp(start, FRANCE_TIME_ZONE).date()
 
 
 async def async_clear_statistics(hass: HomeAssistant, ids: list[str]) -> None:
