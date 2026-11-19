@@ -95,8 +95,6 @@ const STRINGS = {
     dpeAuxiliaries: "Auxiliaries share",
     dpeWaterShare: "Hot water share",
     dpeWaterUsed: "Used because your hot water is neither measured nor estimated.",
-    dpeWaterMeasured: "Not used: your hot water is measured.",
-    dpeWaterEstimated: "Not used: your hot water is estimated from the days without heating.",
     dpeSave: "Save",
     dpeDefaults: "Default values",
     dpeSaved: "Saved.",
@@ -409,8 +407,6 @@ const STRINGS = {
     dpeAuxiliaries: "Part des auxiliaires",
     dpeWaterShare: "Part de l'eau chaude",
     dpeWaterUsed: "Utilisée, car votre eau chaude n'est ni mesurée ni estimée.",
-    dpeWaterMeasured: "Inutilisée : votre eau chaude est mesurée.",
-    dpeWaterEstimated: "Inutilisée : votre eau chaude est estimée d'après les jours sans chauffage.",
     dpeSave: "Enregistrer",
     dpeDefaults: "Valeurs par défaut",
     dpeSaved: "Enregistré.",
@@ -4488,7 +4484,7 @@ class ElectricityContractsPanel extends HTMLElement {
       save.disabled = !changed || !form.checkValidity();
       status.textContent = changed ? this._t("dpeUnsaved") : this._dpeStatus || "";
     };
-    const field = (key, label, min, max, unit, help = null, enabled = true) =>
+    const field = (key, label, min, max, unit, help = null) =>
       h(
         "label",
         { class: "dpe-field" },
@@ -4504,7 +4500,7 @@ class ElectricityContractsPanel extends HTMLElement {
             step: "any",
             required: true,
             value: draft[key],
-            disabled: !enabled || !admin,
+            disabled: !admin,
             oninput: (event) => {
               draft[key] = event.target.value;
               this._dpeStatus = null;
@@ -4515,7 +4511,6 @@ class ElectricityContractsPanel extends HTMLElement {
         ),
         help ? h("small", {}, help) : null,
       );
-    const waterHelp = waterUsed ? "dpeWaterUsed" : water.source === "measured" ? "dpeWaterMeasured" : "dpeWaterEstimated";
     form = h(
       "form",
       {
@@ -4532,7 +4527,8 @@ class ElectricityContractsPanel extends HTMLElement {
         field("surface", this._t("dpeSurface"), 5, 2000, "m²"),
         field("coefficient", this._t("dpeCoefficient"), 1, 3, "kWhEP/kWh"),
         field("auxiliaries", this._t("dpeAuxiliaries"), 0, 30, "%"),
-        field("water", this._t("dpeWaterShare"), 0, 60, "%", this._t(waterHelp), waterUsed),
+        // Only when the hot water is neither measured nor estimated.
+        waterUsed ? field("water", this._t("dpeWaterShare"), 0, 60, "%", this._t("dpeWaterUsed")) : null,
         // The home's setpoint, without thermometers to measure it.
         setpoint ? field("setpoint", this._t("dpeSetpoint"), 10, 26, "°C") : null,
         setpoint ? field("setback", this._t("dpeSetback"), 0, 10, "°C") : null,
