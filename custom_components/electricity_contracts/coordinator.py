@@ -230,6 +230,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         self._store = cache_store(hass, config_entry.entry_id)
         self._cache = _Cache()
         self._first_day: date | None = None
+        self._heating_first_day: date | None = None
         self.last_errors: dict[str, str] = {}
         self.costing = StatisticsWriter(hass, config_entry)
         self.weather = WeatherWriter(hass, config_entry, OpenMeteoClient(session))
@@ -257,6 +258,21 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             if (day := await async_statistic_first_day(self.hass, statistic_id))
         ]
         return min(days) if days else dt_util.now(FRANCE_TIME_ZONE).date()
+
+    async def async_heating_first_day(self) -> date | None:
+        """Return the first day of the heating statistics, None without one.
+
+        Kept once known: a change of options reloads the entry.
+        """
+        if self._heating_first_day is None:
+            heating = Heating.from_options(self.config_entry.options, outdoor=None)
+            days = [
+                day
+                for statistic_id in heating.statistics
+                if (day := await async_statistic_first_day(self.hass, statistic_id))
+            ]
+            self._heating_first_day = min(days) if days else None
+        return self._heating_first_day
 
     async def _async_heating_end(self) -> datetime | None:
         """Return the end of the last hour of the heating statistics."""
