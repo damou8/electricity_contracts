@@ -31,6 +31,7 @@ from .comparison import (
     comparison_response,
     data_end,
     day_start,
+    linky_days,
 )
 from .const import CONF_TEMPERATURE, DOMAIN, FRANCE_TIME_ZONE
 from .coordinator import (
@@ -238,6 +239,12 @@ async def ws_entries(
                 "title": entry.title,
                 "meter": meter,
                 "first_day": _local_day(first) if first else None,
+                # With the days the Linky only gave in total, which have no cost.
+                "energy_first_day": (
+                    coordinator.data.sources.first_day.isoformat()
+                    if meter and end
+                    else None
+                ),
                 "last_day": _local_day(end - _HOUR) if end else None,
                 "contracts": [
                     _contract(
@@ -291,15 +298,42 @@ async def ws_compare(
         end=day_start(end + timedelta(days=1)),
         details=True,
     )
+    source_id = source_statistic(entry)
+    days = (
+        await get_instance(hass).async_add_executor_job(
+            linky_days,
+            hass,
+            source_id,
+            day_start(start),
+            day_start(end + timedelta(days=1)),
+        )
+        if source_id
+        else {}
+    )
     group_by: GroupBy = "day" if (end - start).days < _MAX_DAYS_BY_DAY else "month"
     series = await async_series(
-        hass, writer=coordinator.costing, comparison=comparison, group_by=group_by
+        hass,
+        writer=coordinator.costing,
+        comparison=comparison,
+        group_by=group_by,
+        days=days,
     )
     connection.send_result(
         msg["id"],
         {
             **comparison_response(comparison),
             "group_by": group_by,
+            # The days the Linky only gave in total: kWh without a cost.
+            "daily": (
+                {
+                    "first": min(days).isoformat(),
+                    "last": max(days).isoformat(),
+                    "days": len(days),
+                    "energy": round(sum(days.values()), 3),
+                }
+                if days
+                else None
+            ),
             "series": [
                 {
                     "start": bucket.start.isoformat(),
@@ -310,6 +344,7 @@ async def ws_compare(
                     "actual": (
                         round(bucket.actual, 2) if bucket.actual is not None else None
                     ),
+                    "daily": bucket.daily,
                 }
                 for bucket in series
             ],

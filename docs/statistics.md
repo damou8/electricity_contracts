@@ -93,6 +93,8 @@ Sans courbe de charge, le Linky ne remonte qu'une consommation par jour. L'App L
 
 Ces totaux quotidiens ne sont pas valorisés : on ne sait pas comment ils se répartissent entre heures creuses et heures pleines, et l'intégration ne fait pas d'estimation. Les statistiques commencent à la première heure mesurée. Une heure qui manque dans la source reste vide.
 
+La page Contrats montre quand même ces jours en kWh. Les cartes Évolution et Calendrier les affichent, ainsi que la tuile Consommation. Ils n'ont pas de coût, et un mois qui en contient un n'a pas de barre en €. Le (i) de ces cartes donne les dates des jours journaliers et celles des heures.
+
 Une statistique qui n'a que des valeurs quotidiennes est refusée à la configuration. Activez la courbe de charge (consommation horaire) dans votre espace Enedis et dans l'App Linky.
 
 ---
@@ -143,5 +145,7 @@ Hours are costed at each check, at most an hour after the Linky import.
 Without a load curve, a Linky meter only reports one value a day. The Linky app writes it as one row at midnight, which is often the case for the history older than the load curve.
 
 Daily totals aren't costed: how they split between off-peak and peak hours isn't known, and the integration doesn't estimate it. Statistics start at the first measured hour. An hour missing from the source stays empty.
+
+The Contracts page still shows these days in kWh. The Evolution and Calendar cards show them, and so does the Consumption tile. They have no cost, and a month that holds one has no bar in €. The (i) of these cards gives the dates of the daily days and those of the hours.
 
 A statistic with only daily values is refused at setup: enable the load curve (hourly consumption) in your Enedis account and in the Linky app.

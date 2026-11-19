@@ -211,6 +211,9 @@ const STRINGS = {
     to: "To",
     window: "{start} to {end}",
     windowDays: "{window} · {count} days of data",
+    costsFrom: "costs start on {date}",
+    fromTo: "{start} to {end}",
+    noCosts: "This period has no cost. Before {date}, the Linky gives only one value a day. The price depends on the hour, so these days can't be costed.",
     noData: "No data for this period.",
     preparing: "Preparing the figures… The page updates by itself.",
     ifItLasts: "If this lasts, see the state of the integration.",
@@ -297,6 +300,7 @@ const STRINGS = {
     priceByDay: "Average price by day",
     partialMonth: "Incomplete month",
     restOfHome: "Rest of the home",
+    wholeHome: "Consumption without the heating detail",
     heatingSplitInfo: "Heating and hot water come from their statistics, at the prices of each hour; the subscription counts in the rest of the home.",
     verdictActual: "What you paid is the lowest",
     isCheapest: "is the cheapest",
@@ -523,6 +527,9 @@ const STRINGS = {
     to: "Au",
     window: "Du {start} au {end}",
     windowDays: "{window} · {count} jours de données",
+    costsFrom: "les coûts commencent le {date}",
+    fromTo: "du {start} au {end}",
+    noCosts: "Cette période n'a pas de coût. Avant le {date}, le Linky ne donne qu'une valeur par jour. Le prix dépend de l'heure, donc ces jours ne peuvent pas être chiffrés.",
     noData: "Pas de données sur cette période.",
     preparing: "Préparation des calculs… La page se met à jour toute seule.",
     ifItLasts: "Si cela dure, voyez l'état de l'intégration.",
@@ -609,6 +616,7 @@ const STRINGS = {
     priceByDay: "Prix moyen par jour",
     partialMonth: "Mois incomplet",
     restOfHome: "Reste de la maison",
+    wholeHome: "Consommation sans le détail du chauffage",
     heatingSplitInfo: "Le chauffage et l'eau chaude viennent de leurs statistiques, aux prix de chaque heure ; l'abonnement compte dans le reste de la maison.",
     verdictActual: "Ce que vous avez payé est le plus bas",
     isCheapest: "est le moins cher",
@@ -921,6 +929,7 @@ main {
 .uses dd { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
 .tag { display: inline-flex; align-items: center; min-height: 24px; box-sizing: border-box; padding: 2px 9px; border: 1px solid transparent; border-radius: 12px; background: color-mix(in srgb, var(--tag) 22%, transparent); color: var(--ec-text); font-size: 12px; line-height: 1.3; }
 .tag.estimated { border: 1px dashed var(--tag); background: transparent; }
+.uses .use-period { align-self: center; color: var(--ec-text-2); font-size: 12px; }
 .tag.missing { border-color: var(--ec-warn); background: transparent; color: var(--ec-warn); }
 @media (max-width: 480px) { .uses dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } .uses dd { margin-bottom: 6px; } }
 .method p.hint { margin-top: 10px; }
@@ -1228,7 +1237,7 @@ tfoot td { font-weight: 600; border-bottom: none; }
 `;
 
 // The order of the lines of "Your data", the same on every card.
-const USE_ORDER = ["consumption", "heating", "water", "dpeWater", "auxiliaries", "surface", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
+const USE_ORDER = ["consumption", "consumptionDays", "heating", "water", "dpeWater", "auxiliaries", "surface", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
 
 const ICONS = {
   meter: "M7,2V13H10V22L17,10H13L17,2H7Z",
@@ -1655,7 +1664,8 @@ class ElectricityContractsPanel extends HTMLElement {
       // Falls through: a custom window starts as the last 12 months.
       default: {
         const start = addDays(`${year - 1}-${pad(month)}-${pad(Math.min(day, monthEnd(year - 1, month)))}`, 1);
-        return { start: entry.first_day && entry.first_day > start ? entry.first_day : start, end: last };
+        const first = entry.energy_first_day || entry.first_day;
+        return { start: first && first > start ? first : start, end: last };
       }
     }
   }
@@ -1708,6 +1718,12 @@ class ElectricityContractsPanel extends HTMLElement {
           : null,
       ]);
       if (count !== this._loadCount) return;
+      if (data && data.series) {
+        // The time chart also shows the days only known in total; the other
+        // charts compare costs.
+        data.energySeries = data.series;
+        data.series = data.series.filter((bucket) => !bucket.daily);
+      }
       this._request = window;
       this._data = data;
       this._insights = insights;
@@ -1864,7 +1880,7 @@ class ElectricityContractsPanel extends HTMLElement {
       ),
     );
     const children = [h("div", { class: "segmented", role: "group", "aria-label": this._t("period") }, modes)];
-    const first = entry.first_day || entry.last_day;
+    const first = entry.energy_first_day || entry.first_day || entry.last_day;
     if (this._mode === "season" && this._season !== null) {
       children.push(
         this._nav(
@@ -1932,10 +1948,29 @@ class ElectricityContractsPanel extends HTMLElement {
       );
     }
     const data = this._data;
-    if (data && data.start !== data.end) {
-      children.push(h("div", { class: "window" }, this._t("windowDays", { window: this._windowText(), count: this._days() })));
+    if (data && (data.start !== data.end || data.daily)) {
+      const range = this._energyRange();
+      const parts = [this._t("windowDays", { window: this._windowText(range), count: this._days(range) })];
+      if (data.daily && this._costed()) parts.push(this._t("costsFrom", { date: this._dayLabel(data.start.slice(0, 10)) }));
+      children.push(h("div", { class: "window" }, parts.join(" · ")));
     }
     this._filters.replaceChildren(...children);
+  }
+
+  // Whether the period has hours costed.
+  _costed() {
+    return this._data.start !== this._data.end;
+  }
+
+  // The period's days with kWh: the costed hours, and before them the days
+  // the Linky only gave in total.
+  _energyRange() {
+    const data = this._data;
+    if (!data.daily) return data;
+    const first = `${data.daily.first}T00:00:00`;
+    const end = `${addDays(data.daily.last, 1)}T00:00:00`;
+    if (!this._costed()) return { start: first, end };
+    return { start: data.daily.first < data.start.slice(0, 10) ? first : data.start, end: data.end > end ? data.end : end };
   }
 
   // The days of data in the period, once narrowed to the data.
@@ -2019,6 +2054,7 @@ class ElectricityContractsPanel extends HTMLElement {
                         "dd",
                         { style: { "--tag": row.hue } },
                         row.values.map((value) => h("span", { class: row.state ? `tag ${row.state}` : "tag" }, value)),
+                        row.period ? h("span", { class: "use-period" }, row.period) : null,
                       ),
                     ]),
                   ),
@@ -2059,6 +2095,18 @@ class ElectricityContractsPanel extends HTMLElement {
     switch (key) {
       case "consumption":
         return entry.meter === false ? null : row(ICONS.meter, "var(--ec-money)", "useConsumption", [inputs.meter === "linky" ? "Linky" : this._t("meterTag"), ...step(inputs.meter_step)]);
+      case "consumptionDays": {
+        // The days the Linky gave in total, then the hours, each with its dates.
+        const daily = this._data && this._data.daily;
+        if (entry.meter === false || !daily) return this._use("consumption");
+        const name = inputs.meter === "linky" ? "Linky" : this._t("meterTag");
+        const span = (start, end) => this._t("fromTo", { start: this._dayLabel(start), end: this._dayLabel(end) });
+        // The dates follow the tags, in plain text.
+        const dated = (step, start, end) => ({ ...row(ICONS.meter, "var(--ec-money)", "useConsumption", [name, this._t(step)]), period: span(start, end) });
+        const rows = [dated("stepDay", daily.first, daily.last)];
+        if (this._costed()) rows.push(dated("stepHour", this._data.start.slice(0, 10), lastDayOf(this._data.end)));
+        return rows;
+      }
       case "contract":
         return contracts(ICONS.contract, this._usedContracts());
       case "contractToday":
@@ -2171,7 +2219,7 @@ class ElectricityContractsPanel extends HTMLElement {
         : null;
     } else if (!entry.contracts.length) {
       message = this._t("noContract");
-    } else if (entry.meter !== false && (!entry.last_day || !this._data || this._data.start === this._data.end)) {
+    } else if (entry.meter !== false && (!entry.last_day || !this._data || (this._data.start === this._data.end && !this._data.daily))) {
       message = this._data || !entry.last_day ? this._t("noData") : null;
     }
     if (message !== null) {
@@ -2227,6 +2275,8 @@ class ElectricityContractsPanel extends HTMLElement {
     if (!this._data.actual) {
       return [h("section", { class: "card message" }, this._t("noContractInForce"))];
     }
+    // Before the first costed hour, only the kWh.
+    if (!this._costed()) return [this._renderEvolution()];
     return [this._renderKpis(), this._renderEvolution()];
   }
 
@@ -2234,6 +2284,9 @@ class ElectricityContractsPanel extends HTMLElement {
     const insights = this._insights;
     if (this._insightsError) {
       return [this._errorCard(this._t("tabUnderstand"), this._t("insightsFailed", { error: this._insightsError }), () => this._load())];
+    }
+    if (insights && !insights.days.length && insights.daily && insights.daily.length) {
+      return [this._renderCalendar()];
     }
     if (!insights || !insights.days.length) {
       return [h("section", { class: "card message" }, this._t(this._data.actual ? "noData" : "noContractInForce"))];
@@ -2258,11 +2311,13 @@ class ElectricityContractsPanel extends HTMLElement {
     const measures = h(
       "div",
       { class: "segmented small", role: "group", "aria-label": this._t("measure") },
-      Object.entries(MEASURES).map(([measure, label]) =>
+      Object.entries(MEASURES)
+        .filter(([measure]) => this._costed() || measure === "energy")
+        .map(([measure, label]) =>
         h(
           "button",
           {
-            "aria-pressed": String(this._measure === measure),
+            "aria-pressed": String(this._measureNow() === measure),
             onclick: () => {
               if (this._measure === measure) return;
               this._measure = measure;
@@ -2274,18 +2329,28 @@ class ElectricityContractsPanel extends HTMLElement {
       ),
     );
     const heating = this._heating;
-    const split = heating && heating.totals && (!heating.gas || (heating.water_split && !heating.water_gas)) && this._measure !== "price";
-    return this._card(this._t(`${this._measure}By${by}`), this._timeChart, {
-      info: [this._t(`${this._measure}Per${by}`), split ? this._t("heatingSplitInfo") : null],
-      uses: this._uses("consumption", "contract", "colors", split ? "heating" : null, split && heating.water_split ? "water" : null, "outdoor"),
+    const split = heating && heating.totals && (!heating.gas || (heating.water_split && !heating.water_gas)) && this._measureNow() !== "price";
+    return this._card(this._t(`${this._measureNow()}By${by}`), this._timeChart, {
+      info: [this._t(`${this._measureNow()}Per${by}`), split ? this._t("heatingSplitInfo") : null],
+      uses: this._uses("consumptionDays", "contract", "colors", split ? "heating" : null, split && heating.water_split ? "water" : null, "outdoor"),
       hint: this._entry.outdoor ? null : this._t("hintOutdoor"),
       tools: [measures, this._toggle("time")],
     });
   }
 
+  // What the time chart shows: the kWh alone when nothing is costed.
+  _measureNow() {
+    return this._costed() ? this._measure : "energy";
+  }
+
+  // The buckets of the time chart: with the days only known in total.
+  _timeBuckets() {
+    return { items: this._data.energySeries || this._data.series, monthly: this._data.group_by === "month" };
+  }
+
   // What the time chart shows of each bucket, and how to write it.
   _measureOf() {
-    switch (this._measure) {
+    switch (this._measureNow()) {
       case "energy":
         return { value: (bucket) => bucket.energy, format: (value) => this._kwh(value), axis: (value, digits) => `${this._number(value, digits)} kWh` };
       case "price":
@@ -2302,10 +2367,11 @@ class ElectricityContractsPanel extends HTMLElement {
   // The months the data covers only in part, at both ends of the period.
   _partialBuckets() {
     const partial = new Set();
-    const series = this._data.series;
+    const series = this._timeBuckets().items;
     if (this._data.group_by !== "month" || !series.length) return partial;
-    if (this._data.start.slice(8, 10) !== "01") partial.add(0);
-    const [year, month, day] = lastDayOf(this._data.end).split("-").map(Number);
+    const range = this._energyRange();
+    if (range.start.slice(8, 10) !== "01") partial.add(0);
+    const [year, month, day] = lastDayOf(range.end).split("-").map(Number);
     if (day !== monthEnd(year, month)) partial.add(series.length - 1);
     return partial;
   }
@@ -2330,12 +2396,14 @@ class ElectricityContractsPanel extends HTMLElement {
   _renderKpis() {
     const actual = this._data.actual;
     const tile = (label, value, sub) => h("div", { class: "kpi" }, h("div", { class: "label" }, label), h("div", { class: "value" }, value), sub ? h("div", { class: "sub" }, sub) : null);
-    const days = this._days();
+    // The consumption also counts the days only known in total.
+    const days = this._days(this._energyRange());
+    const energy = actual.energy + (this._data.daily ? this._data.daily.energy : 0);
     return h(
       "section",
       { class: "card kpis" },
       tile(this._t("actualCost"), this._money(actual.total_cost, 0), this._t("ofWhichSubscription", { amount: this._money(actual.fixed_cost, 0) })),
-      tile(this._t("consumption"), this._kwh(actual.energy), days > 0 ? this._t("perDayEnergy", { energy: this._kwh(actual.energy / days) }) : null),
+      tile(this._t("consumption"), this._kwh(energy), days > 0 ? this._t("perDayEnergy", { energy: this._kwh(energy / days) }) : null),
       actual.energy
         ? tile(
             this._t("averagePrice"),
@@ -2538,7 +2606,7 @@ class ElectricityContractsPanel extends HTMLElement {
       this._renderCumulativeChart(this._data.contracts.find((contract) => contract.id === this._billContract));
     }
     if (this._calendarChart) {
-      this._drawCalendar(this._calendarChart, this._calendarDetail, this._insights.days);
+      this._drawCalendar(this._calendarChart, this._calendarDetail, this._calendarDays());
     }
     if (this._profileChart) {
       this._drawProfile(this._profileChart, this._insights.profile);
@@ -2561,15 +2629,17 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   _renderTimeChart() {
-    const actual = { id: ACTUAL, name: this._t({ energy: "consumption", price: "averagePrice" }[this._measure] || "actual") };
-    const missing = this._data.series.some((bucket) => bucket.actual === null);
+    const actual = { id: ACTUAL, name: this._t({ energy: "consumption", price: "averagePrice" }[this._measureNow()] || "actual") };
+    const buckets = this._timeBuckets();
+    // A day only known in total has no cost: that is not a missing contract.
+    const missing = buckets.items.some((bucket) => bucket.actual === null && !bucket.daily);
     const temperatures = this._bucketTemperatures();
     const measure = this._measureOf();
     const partial = this._partialBuckets();
     const split = this._views.time === "chart" ? this._heatingSeries(actual, measure) : null;
     if (this._views.time === "chart") {
-      const series = split || [{ ...actual, values: this._data.series.map((bucket) => measure.value(bucket) ?? 0) }];
-      const options = { temperatures, axis: measure.axis, format: measure.format, partial };
+      const series = split || [{ ...actual, values: buckets.items.map((bucket) => measure.value(bucket) ?? 0) }];
+      const options = { temperatures, axis: measure.axis, format: measure.format, partial, buckets };
       const frame = split
         ? this._drawColumns(this._timeChart, series, { ...options, stacked: true })
         : this._data.group_by === "month"
@@ -2582,7 +2652,7 @@ class ElectricityContractsPanel extends HTMLElement {
       }
     } else {
       const extra = temperatures && { label: this._t("temperature"), values: temperatures, format: (value) => this._degrees(value) };
-      this._timeChart.replaceChildren(this._seriesTable((bucket) => measure.value(bucket), false, [actual], extra, measure.format));
+      this._timeChart.replaceChildren(this._seriesTable((bucket) => measure.value(bucket), false, [actual], extra, measure.format, buckets.items));
     }
     if (this._views.time === "chart") {
       this._timeChart.append(
@@ -2593,7 +2663,7 @@ class ElectricityContractsPanel extends HTMLElement {
         ),
       );
     }
-    if (missing && this._measure !== "energy") {
+    if (missing && this._measureNow() !== "energy") {
       this._timeChart.append(h("p", { class: "note" }, this._t("partialActual")));
     }
   }
@@ -2602,8 +2672,8 @@ class ElectricityContractsPanel extends HTMLElement {
   // home, when they are measured and part of the electricity; null otherwise.
   _heatingSeries(actual, measure) {
     const heating = this._heating;
-    if (!heating || !heating.totals || this._measure === "price") return null;
-    const cost = this._measure === "cost";
+    if (!heating || !heating.totals || this._measureNow() === "price") return null;
+    const cost = this._measureNow() === "cost";
     // Only what the electricity holds: gas is outside it.
     const inside = !heating.gas;
     const water = heating.water_split && !heating.water_gas;
@@ -2617,17 +2687,24 @@ class ElectricityContractsPanel extends HTMLElement {
       if (water) part.water += (cost ? day.water_cost : day.water) || 0;
       parts.set(key(day.date), part);
     }
-    const buckets = this._data.series.map((bucket) => {
+    const buckets = this._timeBuckets().items.map((bucket) => {
       const total = measure.value(bucket) ?? 0;
-      const part = parts.get(key(bucket.start)) || { heating: 0, water: 0 };
+      const part = parts.get(key(bucket.start));
+      // Before the heating statistics, the heating isn't told apart.
+      if (!part) return { heat: 0, hot: 0, rest: 0, whole: total };
       const heat = Math.min(part.heating, total);
       const hot = Math.min(part.water, total - heat);
-      return { heat, hot, rest: total - heat - hot };
+      return { heat, hot, rest: total - heat - hot, whole: 0 };
     });
+    // Nothing to split: the consumption alone.
+    if (!buckets.some((bucket) => bucket.heat + bucket.hot + bucket.rest > 0)) return null;
     return [
       inside ? { id: "heating", color: "var(--ec-s2)", name: this._t("heating"), values: buckets.map((bucket) => bucket.heat) } : null,
       water ? { id: "water", color: "var(--ec-s3)", name: this._t("hotWater"), values: buckets.map((bucket) => bucket.hot) } : null,
       { ...actual, name: this._t("restOfHome"), values: buckets.map((bucket) => bucket.rest) },
+      buckets.some((bucket) => bucket.whole > 0)
+        ? { id: "whole", color: "var(--ec-other)", name: this._t("wholeHome"), values: buckets.map((bucket) => bucket.whole) }
+        : null,
     ].filter(Boolean);
   }
 
@@ -2736,16 +2813,22 @@ class ElectricityContractsPanel extends HTMLElement {
     const { root, margin, plotHeight, x, y, band } = frame;
     const wash = s("rect", { y: margin.top, height: plotHeight, width: band, style: { fill: "var(--ec-wash)", visibility: "hidden" } });
     root.insertBefore(wash, root.firstChild);
-    const hatch = `ec-hatch-${(this._patterns = (this._patterns || 0) + 1)}`;
+    // The series a partial month hatches: the actual cost, or the consumption
+    // without the heating detail, each in its own color.
+    const number = (this._patterns = (this._patterns || 0) + 1);
+    const hatches = { [ACTUAL]: ["var(--ec-money-soft)", "var(--ec-money)"], whole: ["var(--ec-wash)", "var(--ec-other)"] };
+    const hatch = (id) => `ec-hatch-${number}-${id}`;
     root.insertBefore(
       s(
         "defs",
         {},
-        s(
-          "pattern",
-          { id: hatch, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" },
-          s("rect", { width: 6, height: 6, style: { fill: "var(--ec-money-soft)" } }),
-          s("rect", { width: 2.5, height: 6, style: { fill: "var(--ec-money)" } }),
+        Object.entries(hatches).map(([id, [soft, strong]]) =>
+          s(
+            "pattern",
+            { id: hatch(id), width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" },
+            s("rect", { width: 6, height: 6, style: { fill: soft } }),
+            s("rect", { width: 2.5, height: 6, style: { fill: strong } }),
+          ),
         ),
       ),
       root.firstChild,
@@ -2757,10 +2840,9 @@ class ElectricityContractsPanel extends HTMLElement {
     const used = barWidth * columns + gap * (columns - 1);
     const marks = s("g");
     const base = y(0);
-    // The hatching of a partial month is the color of the actual cost.
     const fill = (item, index) => {
       const color = item.color || this._color(item.id);
-      return partial.has(index) && item.id === ACTUAL ? { fill: `url(#${hatch})`, stroke: color, "stroke-width": "1.5px" } : { fill: color };
+      return partial.has(index) && item.id in hatches ? { fill: `url(#${hatch(item.id)})`, stroke: color, "stroke-width": "1.5px" } : { fill: color };
     };
     items.forEach((bucket, index) => {
       const left = x(index) - used / 2;
@@ -2819,9 +2901,9 @@ class ElectricityContractsPanel extends HTMLElement {
     return frame;
   }
 
-  _drawLines(container, series, { zero, temperatures = null, axis, format }) {
+  _drawLines(container, series, { zero, temperatures = null, axis, format, buckets = this._periodBuckets() }) {
     const values = series.flatMap((item) => item.values);
-    const frame = this._frame(container, values, zero, axis);
+    const frame = this._frame(container, values, zero, axis, buckets);
     frame.temperatures = temperatures;
     frame.format = format;
     const { root, margin, plotHeight, plotWidth, x, y, count } = frame;
@@ -2935,7 +3017,7 @@ class ElectricityContractsPanel extends HTMLElement {
     tooltip.style.top = `${frame.margin.top}px`;
   }
 
-  _seriesTable(value, withActual, contracts = this._data.contracts, extra = null, format = (amount) => this._money(amount)) {
+  _seriesTable(value, withActual, contracts = this._data.contracts, extra = null, format = (amount) => this._money(amount), buckets = this._data.series) {
     const head = h(
       "tr",
       {},
@@ -2944,7 +3026,7 @@ class ElectricityContractsPanel extends HTMLElement {
       withActual && this._data.actual ? h("th", {}, this._t("actual")) : null,
       extra ? h("th", {}, extra.label) : null,
     );
-    const rows = this._data.series.map((bucket, index) =>
+    const rows = buckets.map((bucket, index) =>
       h(
         "tr",
         {},
@@ -3208,7 +3290,7 @@ class ElectricityContractsPanel extends HTMLElement {
 
   // The outdoor temperature of each day or month of the time chart.
   _bucketTemperatures() {
-    const days = (this._insights && this._insights.days) || [];
+    const days = this._insights ? [...this._insights.days, ...(this._insights.daily || [])] : [];
     if (!days.some((day) => day.temperature !== null)) return null;
     const month = this._data.group_by === "month";
     const sums = new Map();
@@ -3220,7 +3302,7 @@ class ElectricityContractsPanel extends HTMLElement {
       sum[1] += 1;
       sums.set(key, sum);
     }
-    return this._data.series.map((bucket) => {
+    return this._timeBuckets().items.map((bucket) => {
       const sum = sums.get(month ? bucket.start.slice(0, 7) : bucket.start.slice(0, 10));
       return sum ? sum[0] / sum[1] : null;
     });
@@ -3775,8 +3857,14 @@ class ElectricityContractsPanel extends HTMLElement {
 
   // Calendar and expensive days ---------------------------------------------------
 
+  // The calendar's days: with those only known in total, which have no cost.
+  _calendarDays() {
+    const daily = (this._insights.daily || []).map((day) => ({ ...day, cost: null }));
+    return [...daily, ...this._insights.days].sort((first, second) => (first.date < second.date ? -1 : 1));
+  }
+
   _renderCalendar() {
-    const days = this._insights.days;
+    const days = this._calendarDays();
     const tempo = days.some((day) => day.color);
     const names = COLORS[this._language];
     const legend = tempo
@@ -3804,7 +3892,7 @@ class ElectricityContractsPanel extends HTMLElement {
     this._calendarDetail = h("div", { class: "day-detail", "aria-live": "polite" });
     return this._card(this._t(tempo ? "calendarTempo" : "calendar"), [this._calendarChart, this._calendarDetail], {
       info: [this._t(tempo ? "calendarTempoInfo" : "calendarInfo")],
-      uses: this._uses("colors", "consumption", "contract"),
+      uses: this._uses("colors", "consumptionDays", "contract"),
       tools: legend,
     });
   }
@@ -3826,10 +3914,11 @@ class ElectricityContractsPanel extends HTMLElement {
     // Squares big enough to tap, bigger over a few weeks.
     const pitch = Math.max(10, Math.min(26, Math.floor(((container.clientWidth || 320) - left) / weeks)));
     const size = pitch - 2;
-    const costs = days.map((day) => day.cost);
+    const costs = days.map((day) => day.cost).filter((cost) => cost !== null);
     const cheapest = Math.min(...costs);
     const spread = Math.max(...costs) - cheapest || 1;
-    const fill = (day) => (tempo ? DAY_FILLS[day.color] || "var(--ec-axis)" : costFill(30 + 70 * ((day.cost - cheapest) / spread)));
+    const fill = (day) =>
+      tempo ? DAY_FILLS[day.color] || "var(--ec-axis)" : day.cost === null ? "var(--ec-axis)" : costFill(30 + 70 * ((day.cost - cheapest) / spread));
     const place = (time) => {
       const offset = Math.round((time - origin) / DAY_MS);
       return { x: left + Math.floor(offset / 7) * pitch, y: top + (offset % 7) * pitch };
@@ -3868,7 +3957,7 @@ class ElectricityContractsPanel extends HTMLElement {
           [capitalize(label, this._locale), day.color ? names[day.color].toLowerCase() : null].filter(Boolean).join(" · "),
         ),
         h("span", {}, this._kwh(day.energy)),
-        h("span", {}, this._money(day.cost)),
+        day.cost !== null ? h("span", {}, this._money(day.cost)) : null,
         day.temperature !== null ? h("span", { class: "sub" }, this._degrees(day.temperature)) : null,
       );
       // Keep the day in view when the grid scrolls.
@@ -4039,6 +4128,7 @@ class ElectricityContractsPanel extends HTMLElement {
   // Every contract on the period's consumption: a ranking led by its verdict,
   // the bill of the one chosen, and how the gap with it built up.
   _renderCompare() {
+    if (!this._costed()) return [this._noCosts()];
     const contracts = [...this._data.contracts].sort((first, second) => first.total_cost - second.total_cost);
     const actual = this._data.actual;
     const inForce = this._contractsInForce();
@@ -4055,6 +4145,10 @@ class ElectricityContractsPanel extends HTMLElement {
       this._renderBill(),
       actual && this._billContract !== mine ? this._renderGap() : null,
     ];
+  }
+
+  _noCosts() {
+    return h("section", { class: "card message" }, this._t("noCosts", { date: this._dayLabel(this._entry.first_day) }));
   }
 
   // Who comes first, and by how much.

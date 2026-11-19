@@ -11,15 +11,18 @@ from homeassistant.components.recorder.statistics import (
     statistic_during_period,
     statistics_during_period,
 )
+from homeassistant.const import UnitOfEnergy
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.recorder import get_instance
 from homeassistant.util import dt as dt_util
 
 from .const import FRANCE_TIME_ZONE
+from .costing import daily_totals
 from .data import Contract
 from .statistics import CostingStatus, StatisticsWriter
 
 _HOUR = timedelta(hours=1)
+_DAY = timedelta(days=1)
 _RECORDER_TIMEOUT = 60
 # kWh: the same hours summed through different statistics.
 _ENERGY_TOLERANCE = 0.001
@@ -275,10 +278,12 @@ class Bucket:
     start: date
     energy: float
     contracts: dict[str, float]
-    """Total cost of each contract, by uid."""
+    """Total cost of each contract, by uid; empty when a day has no cost."""
     actual: float | None
     """Total cost of the contracts in force, None unless one was in force at every
-    hour."""
+    hour, or when a day has no cost."""
+    daily: bool = False
+    """Some days are only known in total: they have kWh but no cost."""
 
 
 def _bucket(day: date, group_by: GroupBy) -> date:
@@ -304,33 +309,80 @@ def hourly_changes(
     }
 
 
+def linky_days(
+    hass: HomeAssistant, source_id: str, start: datetime, end: datetime
+) -> dict[date, float]:
+    """Read the days between `start` and `end` (UTC) the source only knows in total.
+
+    Their kWh, by day, French time. Run it in the recorder's executor.
+    """
+    # A day more on each side, to tell daily rows from hourly ones.
+    rows = statistics_during_period(
+        hass,
+        start - _DAY,
+        end + _DAY,
+        {source_id},
+        "hour",
+        {"energy": UnitOfEnergy.KILO_WATT_HOUR},
+        {"change"},
+    ).get(source_id, [])
+    first = start.astimezone(FRANCE_TIME_ZONE).date()
+    last = (end - _HOUR).astimezone(FRANCE_TIME_ZONE).date()
+    days = daily_totals(
+        [
+            (dt_util.utc_from_timestamp(row["start"]), row.get("change") or 0.0)
+            for row in rows
+        ]
+    )
+    return {day: energy for day, energy in days.items() if first <= day <= last}
+
+
 async def async_series(
     hass: HomeAssistant,
     *,
     writer: StatisticsWriter,
     comparison: Comparison,
     group_by: GroupBy,
+    days: dict[date, float] | None = None,
 ) -> list[Bucket]:
-    """Split a comparison into days or months, French time, with none missing."""
+    """Split a comparison into days or months, French time, with none missing.
+
+    `days` are the days only known in total (`linky_days`): their kWh are added,
+    and the buckets that hold one have no cost. The series runs from the first
+    of them when it comes before the comparison.
+    """
+    days = days or {}
     contracts = [item.contract for item in comparison.contracts]
-    if not contracts or comparison.end <= comparison.start:
+    costed = bool(contracts) and comparison.end > comparison.start
+    if not costed and not days:
         return []
     totals = {
         contract.uid: writer.contract_statistics(contract.uid, contract.kind).total
         for contract in contracts
     }
     # Every contract costs the same consumption.
-    energy_id = writer.contract_statistics(contracts[0].uid, contracts[0].kind).energy
-    ids = [*totals.values(), energy_id]
+    energy_id = (
+        writer.contract_statistics(contracts[0].uid, contracts[0].kind).energy
+        if contracts
+        else None
+    )
+    ids = [*totals.values(), *([energy_id] if energy_id else [])]
     actual_ids = writer.actual_statistics() if comparison.actual is not None else None
     if actual_ids is not None:
         ids.extend((actual_ids.variable, actual_ids.fixed, actual_ids.energy))
-    hourly = await get_instance(hass).async_add_executor_job(
-        hourly_changes, hass, comparison.start, comparison.end, ids
+    hourly = (
+        await get_instance(hass).async_add_executor_job(
+            hourly_changes, hass, comparison.start, comparison.end, ids
+        )
+        if costed
+        else {}
     )
 
-    first = comparison.start.astimezone(FRANCE_TIME_ZONE).date()
-    last = (comparison.end - _HOUR).astimezone(FRANCE_TIME_ZONE).date()
+    firsts, lasts = list(days), list(days)
+    if costed:
+        firsts.append(comparison.start.astimezone(FRANCE_TIME_ZONE).date())
+        lasts.append((comparison.end - _HOUR).astimezone(FRANCE_TIME_ZONE).date())
+    first, last = min(firsts), max(lasts)
     sums: dict[date, dict[str, float]] = {}
     for offset in range((last - first).days + 1):
         sums.setdefault(
@@ -340,9 +392,25 @@ async def async_series(
         for hour, change in rows:
             day = dt_util.utc_from_timestamp(hour).astimezone(FRANCE_TIME_ZONE).date()
             sums[_bucket(day, group_by)][statistic_id] += change
+    daily: dict[date, float] = {}
+    for day, energy in days.items():
+        bucket = _bucket(day, group_by)
+        daily[bucket] = daily.get(bucket, 0.0) + energy
 
     buckets: list[Bucket] = []
     for bucket_start, values in sums.items():
+        energy = values[energy_id] if energy_id else 0.0
+        if bucket_start in daily:
+            buckets.append(
+                Bucket(
+                    start=bucket_start,
+                    energy=energy + daily[bucket_start],
+                    contracts={},
+                    actual=None,
+                    daily=True,
+                )
+            )
+            continue
         actual = (
             ActualTotals(
                 energy=values[actual_ids.energy],
@@ -355,11 +423,11 @@ async def async_series(
         buckets.append(
             Bucket(
                 start=bucket_start,
-                energy=values[energy_id],
+                energy=energy,
                 contracts={uid: values[total] for uid, total in totals.items()},
                 actual=(
                     actual.total
-                    if actual is not None and covers(actual, values[energy_id])
+                    if actual is not None and covers(actual, energy)
                     else None
                 ),
             )

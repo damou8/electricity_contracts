@@ -17,12 +17,20 @@ from .comparison import (
     data_end,
     day_start,
     hourly_changes,
+    linky_days,
     narrow_window,
     read_changes,
 )
 from .const import FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
-from .data import Contract, contracts, in_force, manual_prices, price_periods
+from .data import (
+    Contract,
+    contracts,
+    in_force,
+    manual_prices,
+    price_periods,
+    source_statistic,
+)
 from .outlook import RED_DAYS, WHITE_DAYS, placed_days
 from .weather import outdoor_statistic
 
@@ -64,6 +72,7 @@ async def async_insights(
     if status.actual is None:
         return {
             "days": [],
+            "daily": [],
             "profile": [],
             "previous": None,
             # Nothing costed yet, or no meter: the colors left still help.
@@ -73,7 +82,10 @@ async def async_insights(
             "baseload": None,
             "weather": None,
         }
+    # The days the Linky only gave in total are read over the whole window.
+    window_start, window_end = start, end
     start, end = narrow_window(status, entry_contracts, start, end)
+    source_id = source_statistic(entry)
     ids = coordinator.costing.actual_statistics()
     costs = [ids.variable, ids.fixed]
     temperature_id = outdoor_statistic(entry)
@@ -92,6 +104,7 @@ async def async_insights(
         list[tuple[float, float]],
         dict[str, list[tuple[float, float]]],
         list[StatisticsRow],
+        dict[date, float],
     ]:
         hours = (
             hourly_changes(hass, start, end, [*costs, ids.energy])
@@ -114,22 +127,25 @@ async def async_insights(
             else []
         )
         year = hourly_changes(hass, year_start, year_end, [ids.variable, ids.energy])
+        linky = (
+            linky_days(hass, source_id, window_start, window_end) if source_id else {}
+        )
         temperatures = (
             statistics_during_period(
                 hass,
-                start,
-                end,
+                window_start,
+                window_end,
                 {temperature_id},
                 "hour",
                 {"temperature": UnitOfTemperature.CELSIUS},
                 {"mean"},
             ).get(temperature_id, [])
-            if temperature_id and end > start
+            if temperature_id and (end > start or linky)
             else []
         )
-        return hours, previous, recent, year, temperatures
+        return hours, previous, recent, year, temperatures, linky
 
-    hours, previous, recent, year, temperatures = await get_instance(
+    hours, previous, recent, year, temperatures, linky = await get_instance(
         hass
     ).async_add_executor_job(read)
 
@@ -165,6 +181,18 @@ async def async_insights(
                 ),
             }
             for day, values in sorted(days.items())
+        ],
+        # Days only known in total: no hours, so no cost nor peak hours.
+        "daily": [
+            {
+                "date": day.isoformat(),
+                "color": calendar[day].value if day in calendar else None,
+                "energy": round(energy, 3),
+                "temperature": (
+                    round(temperature[day], 1) if day in temperature else None
+                ),
+            }
+            for day, energy in sorted(linky.items())
         ],
         "profile": [
             round(total / count, 4) if count else None for total, count in profile
