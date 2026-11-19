@@ -44,7 +44,7 @@
         },
         "data_description": {
           "temperature": "Relie la consommation à la météo, dans l'onglet Chauffage. Le capteur doit garder des statistiques. Il passe avant Open-Meteo.",
-          "open_meteo": "Sans capteur extérieur, prend la température extérieure heure par heure sur Open-Meteo.com, gratuit et sans compte. La position de votre maison, arrondie à environ 10 km, est envoyée à Open-Meteo."
+          "open_meteo": "Prend la température extérieure heure par heure sur Open-Meteo.com, gratuit et sans compte. Avec un capteur extérieur, Open-Meteo ne donne que les jours d'avant ses premières mesures. La position de votre maison, arrondie à environ 10 km, est envoyée à Open-Meteo."
         },
         "sections": {
           "heating": {

@@ -32,7 +32,7 @@ from .data import (
     source_statistic,
 )
 from .outlook import RED_DAYS, WHITE_DAYS, placed_days
-from .weather import outdoor_statistic
+from .weather import outdoor_ids, outdoor_rows, outdoor_statistic
 
 # Tempo's peak hours, also used to tell day from night for the other contracts.
 _PEAK_HOURS = range(6, 22)
@@ -131,15 +131,18 @@ async def async_insights(
             linky_days(hass, source_id, window_start, window_end) if source_id else {}
         )
         temperatures = (
-            statistics_during_period(
-                hass,
-                window_start,
-                window_end,
-                {temperature_id},
-                "hour",
-                {"temperature": UnitOfTemperature.CELSIUS},
-                {"mean"},
-            ).get(temperature_id, [])
+            outdoor_rows(
+                entry,
+                statistics_during_period(
+                    hass,
+                    window_start,
+                    window_end,
+                    set(outdoor_ids(entry)),
+                    "hour",
+                    {"temperature": UnitOfTemperature.CELSIUS},
+                    {"mean"},
+                ),
+            )
             if temperature_id and (end > start or linky)
             else []
         )

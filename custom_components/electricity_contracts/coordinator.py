@@ -26,7 +26,6 @@ from elec_tariffs import (
 )
 from homeassistant.components.recorder.statistics import (
     get_last_statistics,
-    statistics_during_period,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -57,6 +56,7 @@ from .statistics import (
     RecorderNotStartedError,
     SeriesStatus,
     StatisticsWriter,
+    async_statistic_first_day,
 )
 from .weather import WeatherWriter
 
@@ -254,39 +254,9 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         days = [
             day
             for statistic_id in self._read_ids()
-            if (day := await self._async_statistic_first_day(statistic_id))
+            if (day := await async_statistic_first_day(self.hass, statistic_id))
         ]
         return min(days) if days else dt_util.now(FRANCE_TIME_ZONE).date()
-
-    async def _async_statistic_first_day(self, statistic_id: str) -> date | None:
-        recorder = get_instance(self.hass)
-        months = await recorder.async_add_executor_job(
-            statistics_during_period,
-            self.hass,
-            datetime(2000, 1, 1, tzinfo=UTC),
-            None,
-            {statistic_id},
-            "month",
-            None,
-            {"sum"},
-        )
-        if not months.get(statistic_id):
-            return None
-        # Months follow the server's time zone: look for the first hour in the
-        # first month only.
-        month_start = datetime.fromtimestamp(months[statistic_id][0]["start"], UTC)
-        hours = await recorder.async_add_executor_job(
-            statistics_during_period,
-            self.hass,
-            month_start,
-            month_start + timedelta(days=32),
-            {statistic_id},
-            "hour",
-            None,
-            {"sum"},
-        )
-        start = hours[statistic_id][0]["start"]
-        return datetime.fromtimestamp(start, FRANCE_TIME_ZONE).date()
 
     async def _async_heating_end(self) -> datetime | None:
         """Return the end of the last hour of the heating statistics."""

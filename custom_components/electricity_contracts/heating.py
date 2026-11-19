@@ -42,7 +42,7 @@ from .data import (
     source_statistic,
 )
 from .insights import DEGREE_DAY_BASE, daily_means, weather_fit
-from .weather import outdoor_statistic
+from .weather import outdoor_fill, outdoor_ids, outdoor_rows, outdoor_statistic
 
 # kWh below which a day is taken as costed in full.
 _UNCOSTED_TOLERANCE = 0.001
@@ -397,9 +397,11 @@ class _Answer:
         self.meter = source_statistic(entry) is not None
         self.calendar = entry.runtime_data.data.sources.calendar
         self.read = read
+        self.entry = entry
         heating = self.heating
+        # The sensor, and Open-Meteo before it.
         self.outdoor = (
-            daily_means(read.temperatures.get(heating.outdoor, []))
+            daily_means(outdoor_rows(entry, read.temperatures))
             if heating.outdoor
             else {}
         )
@@ -424,7 +426,7 @@ class _Answer:
             return None
         temperatures = {
             _day_of(row["start"]): mean
-            for row in self.read.year_temperature.get(outdoor, [])
+            for row in outdoor_rows(self.entry, self.read.year_temperature)
             if (mean := row.get("mean")) is not None
         }
         energy: dict[date, float] = {}
@@ -707,7 +709,9 @@ async def async_heating_between(
     if heating.water_statistic:
         measured.append(heating.water_statistic)
     temperatures = [
-        item for item in (heating.outdoor, *heating.indoor) if item is not None
+        item
+        for item in (heating.outdoor, outdoor_fill(entry), *heating.indoor)
+        if item is not None
     ]
     # Hot water mixed with the heating is told apart on the warm days of a year.
     outdoor = heating.outdoor
@@ -751,10 +755,10 @@ async def async_heating_between(
                 if heating.statistics
                 else {}
             ),
-            **(read_year(outdoor) if year and outdoor else {}),
+            **(read_year() if year and outdoor else {}),
         )
 
-    def read_year(outdoor: str) -> dict[str, Any]:
+    def read_year() -> dict[str, Any]:
         since = end - _WATER_YEAR
         return {
             "year_energy": statistics_during_period(
@@ -770,7 +774,7 @@ async def async_heating_between(
                 hass,
                 since,
                 end,
-                {outdoor},
+                set(outdoor_ids(entry)),
                 "day",
                 {"temperature": UnitOfTemperature.CELSIUS},
                 {"mean"},
