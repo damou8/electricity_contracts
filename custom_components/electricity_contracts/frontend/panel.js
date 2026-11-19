@@ -1239,7 +1239,7 @@ tfoot td { font-weight: 600; border-bottom: none; }
 `;
 
 // The order of the lines of "Your data", the same on every card.
-const USE_ORDER = ["consumption", "consumptionDays", "heating", "water", "dpeWater", "auxiliaries", "surface", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
+const USE_ORDER = ["consumption", "consumptionDays", "heating", "dpeHeating", "water", "dpeWater", "auxiliaries", "surface", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
 
 const ICONS = {
   meter: "M7,2V13H10V22L17,10H13L17,2H7Z",
@@ -2135,10 +2135,31 @@ class ElectricityContractsPanel extends HTMLElement {
         return inputs.water
           ? row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), ...steps([inputs.water])])
           : row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
+      case "dpeHeating": {
+        // Measured heating, and before its statistics the Linky's estimate.
+        const estimated = this._dpe && this._dpe.estimated;
+        const measured = this._use("heating");
+        if (!estimated || !heating || !heating.measured || !measured) return measured;
+        const span = (start, end) => this._t("fromTo", { start: this._dayLabel(start), end: this._dayLabel(end) });
+        return [
+          { ...row(ICONS.radiator, "var(--ec-s2)", "useHeating", ["Linky", this._t("estimatedTag")], "estimated"), period: span(estimated.start, estimated.end) },
+          { ...measured, period: span(addDays(estimated.end, 1), this._dpe.end) },
+        ];
+      }
       case "dpeWater": {
         const water = this._dpe && this._dpe.uses.find((item) => item.use === "water");
         if (!water) return null;
-        if (water.source === "measured" && inputs.water) return row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), ...steps([inputs.water])]);
+        if (water.source === "measured" && inputs.water) {
+          const measured = row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), ...steps([inputs.water])]);
+          const estimated = this._dpe.estimated;
+          if (!estimated) return measured;
+          // Before the heating statistics, the water of a measured day on average.
+          const span = (start, end) => this._t("fromTo", { start: this._dayLabel(start), end: this._dayLabel(end) });
+          return [
+            { ...row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), this._t("estimatedTag")], "estimated"), period: span(estimated.start, estimated.end) },
+            { ...measured, period: span(addDays(estimated.end, 1), this._dpe.end) },
+          ];
+        }
         return row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [this._t("notTracked"), this._t(water.source === "share" ? "shareTag" : "estimatedTag")], "estimated");
       }
       case "auxiliaries":
@@ -4472,7 +4493,7 @@ class ElectricityContractsPanel extends HTMLElement {
         this._t("dpeInfoNotOfficial"),
       ],
       extra: this._dpeSettings(dpe),
-      uses: this._uses("heating", "dpeWater", "auxiliaries", "surface", "outdoor", dpe.conventional.source === "thermometers" ? "indoor" : null),
+      uses: this._uses("dpeHeating", "dpeWater", "auxiliaries", "surface", "outdoor", dpe.conventional.source === "thermometers" ? "indoor" : null),
       tools: this._toggle("dpe"),
     });
   }

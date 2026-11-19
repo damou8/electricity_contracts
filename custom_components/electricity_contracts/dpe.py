@@ -4,19 +4,31 @@ The label counts the heating, the hot water and the auxiliaries (ventilation,
 pumps) of the 12 months that end on a day, divided by the living area. The
 auxiliaries are always a share of the three; the hot water is one only when it
 is neither measured nor estimated.
+
+Electric heating before the heating tab's window (before the heating statistics,
+or before the first costed hour) is estimated from the Linky's days and the
+outdoor temperature, so the label covers the whole year.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import probatio as vol
+from homeassistant.components.recorder.statistics import statistics_during_period
+from homeassistant.const import UnitOfEnergy, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .comparison import day_start
 from .const import DOMAIN, FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
+from .data import Heating, source_statistic
 from .heating import async_heating_between, heating_window
+from .insights import weather_fit
+from .statistics import async_statistic_first_day
+from .weather import outdoor_ids, outdoor_rows, outdoor_statistic
 
 STORE_VERSION = 1
 
@@ -107,6 +119,10 @@ def _mean_temperature(setpoint: float, setback: float) -> float:
     return setpoint - setback * _NIGHT_SHARE
 
 
+def _fitted(weather: dict[str, Any] | None) -> bool:
+    return bool(weather and weather["slope"] and weather["slope"] > 0)
+
+
 def _conventional(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, Any]:
     """Say how much more heating the DPE's setpoint takes than the home's.
 
@@ -114,20 +130,25 @@ def _conventional(answer: dict[str, Any], settings: dict[str, float]) -> dict[st
     mean indoor temperature to the DPE's moves its base by as much, on each day
     of the year. The home's temperature is what its thermometers measured on
     the heating days, else its setpoint setting. Without a line, nothing moves.
+    The days estimated before the window move with their own line.
     """
-    weather = answer["weather"]
-    if not weather or not weather["slope"] or weather["slope"] <= 0:
+    parts: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+    if _fitted(answer["weather"]):
+        days = answer["days"] if answer["measured"] else answer["weather_days"]
+        parts.append((answer["weather"], days))
+    if (before := answer.get("before")) and _fitted(before["weather"]):
+        parts.append((before["weather"], before["weather_days"]))
+    if not parts:
         return {"applied": False, "extra": 0.0}
-    base, slope = weather["base"], weather["slope"]
-    days = [
-        day
-        for day in (answer["days"] if answer["measured"] else answer["weather_days"])
-        if day["temperature"] is not None
+    counted = [
+        (weather, [day for day in days if day["temperature"] is not None])
+        for weather, days in parts
     ]
     measured = [
         day["indoor"]
+        for weather, days in counted
         for day in days
-        if day["indoor"] is not None and day["temperature"] < base
+        if day["indoor"] is not None and day["temperature"] < weather["base"]
     ]
     if measured:
         indoor, source = sum(measured) / len(measured), "thermometers"
@@ -135,10 +156,14 @@ def _conventional(answer: dict[str, Any], settings: dict[str, float]) -> dict[st
         indoor = _mean_temperature(settings[SETPOINT], settings[SETBACK])
         source = "setting"
     shift = _mean_temperature(DPE_SETPOINT, DPE_SETBACK) - indoor
-    extra = slope * sum(
-        max(0.0, base + shift - day["temperature"])
-        - max(0.0, base - day["temperature"])
-        for day in days
+    extra = sum(
+        weather["slope"]
+        * sum(
+            max(0.0, weather["base"] + shift - day["temperature"])
+            - max(0.0, weather["base"] - day["temperature"])
+            for day in days
+        )
+        for weather, days in counted
     )
     return {
         "applied": True,
@@ -168,10 +193,17 @@ def _uses(
         estimated = answer["estimated"]
         heat = estimated["heating"] if estimated else 0.0
         heat_source = "estimated"
+    before = answer.get("before")
+    if before:
+        heat += before["heating"]
+        heat_source = "mixed" if heat_source == "measured" else "estimated"
     if heat <= 0:
         return []
     if answer["water_split"]:
         water = answer["totals"]["water"]
+        if before and (days := len(answer["days"])):
+            # The water of the days before, at the window's daily mean.
+            water += water / days * before["days"]
         water_gas = bool(answer["water_gas"])
         water_source = "measured" if answer["water_measured"] else "estimated"
         heat = max(0.0, heat + extra)
@@ -246,27 +278,149 @@ def _local_day(moment: datetime) -> date:
     return moment.astimezone(FRANCE_TIME_ZONE).date()
 
 
+def _day_of(timestamp: float) -> date:
+    """Return the day a daily row of the recorder stands for, in its time zone."""
+    return dt_util.as_local(datetime.fromtimestamp(timestamp, UTC)).date()
+
+
+async def _async_linky_heating(
+    hass: HomeAssistant,
+    entry: ElectricityContractsConfigEntry,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    """Estimate the electric heating from `start` to `end` from the Linky's days.
+
+    Each day's consumption is fitted on its heating degree days, like the weather
+    line: the slope times the degree days is the heating. Without a line, none.
+    """
+    source_id = source_statistic(entry)
+    assert source_id is not None
+    heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
+
+    def read() -> tuple[dict[date, float], dict[date, float], dict[date, float]]:
+        energy = {
+            _day_of(row["start"]): row.get("change") or 0.0
+            for row in statistics_during_period(
+                hass,
+                start,
+                end,
+                {source_id},
+                "day",
+                {"energy": UnitOfEnergy.KILO_WATT_HOUR},
+                {"change"},
+            ).get(source_id, [])
+        }
+        temperatures = statistics_during_period(
+            hass,
+            start,
+            end,
+            {*outdoor_ids(entry), *heating.indoor},
+            "day",
+            {"temperature": UnitOfTemperature.CELSIUS},
+            {"mean"},
+        )
+        indoor: dict[date, list[float]] = {}
+        for statistic_id in heating.indoor:
+            for row in temperatures.get(statistic_id, []):
+                if (mean := row.get("mean")) is not None:
+                    indoor.setdefault(_day_of(row["start"]), []).append(mean)
+        return (
+            energy,
+            {
+                _day_of(row["start"]): mean
+                for row in outdoor_rows(entry, temperatures)
+                if (mean := row.get("mean")) is not None
+            },
+            {day: sum(values) / len(values) for day, values in indoor.items()},
+        )
+
+    energy, outdoor, indoor = await get_instance(hass).async_add_executor_job(read)
+    weather = weather_fit(
+        {day: {"energy": kwh} for day, kwh in energy.items()}, outdoor
+    )
+    counted = {day: outdoor[day] for day in energy if day in outdoor}
+    heat = (
+        weather["slope"]
+        * sum(max(0.0, weather["base"] - value) for value in counted.values())
+        if _fitted(weather)
+        else 0.0
+    )
+    return {
+        "start": _local_day(start).isoformat(),
+        "end": (_local_day(end) - timedelta(days=1)).isoformat(),
+        "days": len(energy),
+        "heating": heat,
+        "weather": weather,
+        "weather_days": [
+            {"temperature": value, "indoor": indoor.get(day)}
+            for day, value in counted.items()
+        ],
+    }
+
+
+async def _async_main_start(
+    hass: HomeAssistant, entry: ElectricityContractsConfigEntry, first: datetime
+) -> datetime:
+    """Return where the heating tab's answer starts.
+
+    Its window, or the heating statistics' first day when they start later.
+    """
+    heating = Heating.from_options(entry.options, outdoor=None)
+    if not heating.measured:
+        return first
+    days = [
+        day
+        for statistic_id in heating.statistics
+        if (day := await async_statistic_first_day(hass, statistic_id))
+    ]
+    return max(first, day_start(min(days))) if days else first
+
+
 async def async_dpe(
     hass: HomeAssistant, *, entry: ElectricityContractsConfigEntry, end: date
 ) -> dict[str, Any]:
     """Return the label of the 12 months that end on `end`, included.
 
     `start` and `end` are the days the label counts: the year, narrowed to the
-    data. `days` tells a year that isn't whole.
+    data. `days` tells a year that isn't whole. `estimated` gives the days whose
+    electric heating comes from the Linky and the weather, before the heating
+    tab's window.
     """
     start = day_start(_year_before(end) + timedelta(days=1))
     stop = day_start(end + timedelta(days=1))
     first, last = heating_window(entry, start, stop)
+    first = min(await _async_main_start(hass, entry, first), max(first, last))
     settings = await async_load_settings(hass, entry.entry_id)
     answer = await async_heating_between(
-        hass, entry=entry, start=first, end=last, weather_days=True
+        hass, entry=entry, start=first, end=max(first, last), weather_days=True
     )
-    days = (_local_day(last) - _local_day(first)).days if last > first else 0
+    # Before the window, the Linky's days, when the heating is electric.
+    coordinator = entry.runtime_data
+    begin = first
+    if coordinator.statistic_id and not answer["gas"]:
+        begin = max(start, day_start(coordinator.data.sources.first_day))
+        if begin < first:
+            answer["before"] = await _async_linky_heating(hass, entry, begin, first)
+        else:
+            begin = first
+    end_at = max(first, last)
+    days = (_local_day(end_at) - _local_day(begin)).days if end_at > begin else 0
+    before = answer.get("before")
     return {
         "settings": settings,
         "defaults": DEFAULTS,
-        "start": _local_day(first).isoformat(),
-        "end": (_local_day(last) - timedelta(days=1)).isoformat() if days else None,
+        "start": _local_day(begin).isoformat(),
+        "end": (_local_day(end_at) - timedelta(days=1)).isoformat() if days else None,
         "days": days,
+        "estimated": (
+            {
+                "start": before["start"],
+                "end": before["end"],
+                "heating": round(before["heating"], 1),
+            }
+            if before
+            else None
+        ),
         **dpe_label(answer, settings),
     }
