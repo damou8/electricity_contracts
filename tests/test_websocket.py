@@ -1,11 +1,13 @@
 """Tests of the commands behind the Contracts page, and of the page itself."""
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
 from elec_tariffs import ContractKind, PricePeriod, TempoColor, Tranche
 from homeassistant.components import frontend
+from homeassistant.components.recorder.models import StatisticData, StatisticMeanType
+from homeassistant.components.recorder.statistics import async_add_external_statistics
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.components.recorder.common import (
@@ -16,7 +18,11 @@ from pytest_homeassistant_custom_component.typing import (
     WebSocketGenerator,
 )
 
-from custom_components.electricity_contracts.const import CONF_TEMPERATURE, DOMAIN
+from custom_components.electricity_contracts.const import (
+    CONF_TEMPERATURE,
+    DOMAIN,
+    FRANCE_TIME_ZONE,
+)
 from custom_components.electricity_contracts.panel import PANEL_URL_PATH
 
 from .conftest import (
@@ -75,6 +81,7 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
             "title": entry.title,
             "meter": True,
             "first_day": "2026-03-01",
+            "energy_first_day": "2026-03-01",
             # The last of the 48 hours is midnight, French time.
             "last_day": "2026-03-03",
             "contracts": [
@@ -151,6 +158,7 @@ async def test_entries_before_any_data(
     assert entry["contracts"][1]["official"] is False
     assert entry["contracts"][1]["prices"] == []
     assert entry["first_day"] is None
+    assert entry["energy_first_day"] is None
     assert entry["last_day"] is None
     assert entry["actual"] is False
 
@@ -561,6 +569,7 @@ async def test_insights_without_a_contract_in_force(
     )
     assert insights == {
         "days": [],
+        "daily": [],
         "profile": [],
         "previous": None,
         "tempo": None,
@@ -714,3 +723,111 @@ async def test_outlook_without_a_contract_in_force(
         hass_ws_client, hass, type=f"{DOMAIN}/outlook", entry_id=entry.entry_id
     )
     assert outlook == {"contract": None, "prices": [], "season": None}
+
+
+LINKY_DAYS_ID = "linky:33333333333333"
+
+
+async def add_linky_days(hass: HomeAssistant) -> None:
+    """Import days the Linky only gave in total, then hours.
+
+    27 and 28 February and 1 March hold 12 kWh each; 48 hours of 0.5 kWh follow
+    from 2 March, French time.
+    """
+    first_hour = datetime(2026, 3, 2, tzinfo=FRANCE_TIME_ZONE).astimezone(UTC)
+    starts = [
+        datetime(2026, 2, 27, tzinfo=FRANCE_TIME_ZONE) + timedelta(days=days)
+        for days in range(3)
+    ]
+    starts += [first_hour + timedelta(hours=hour) for hour in range(48)]
+    values = [12000.0] * 3 + [500.0] * 48
+    sums = [sum(values[: index + 1]) for index in range(len(values))]
+    async_add_external_statistics(
+        hass,
+        {
+            "mean_type": StatisticMeanType.NONE,
+            "has_sum": True,
+            "name": "Linky",
+            "source": "linky",
+            "statistic_id": LINKY_DAYS_ID,
+            "unit_class": "energy",
+            "unit_of_measurement": "Wh",
+        },
+        [
+            StatisticData(start=start, state=value, sum=total)
+            for start, value, total in zip(starts, values, sums, strict=True)
+        ],
+    )
+    await async_wait_recording_done(hass)
+
+
+@pytest.mark.usefixtures("sources")
+async def test_linky_days_have_energy_without_cost(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    await add_linky_days(hass)
+    entry = await setup_entry(
+        hass, make_entry([TEMPO_CONTRACT], statistic_id=LINKY_DAYS_ID)
+    )
+    [listed] = await result(hass_ws_client, hass, type=f"{DOMAIN}/entries")
+    assert listed["first_day"] == "2026-03-02"
+    assert listed["energy_first_day"] == "2026-02-27"
+
+    request = {"type": f"{DOMAIN}/compare", "entry_id": entry.entry_id}
+    by_day = await result(
+        hass_ws_client, hass, **request, start="2026-02-01", end="2026-03-31"
+    )
+    # The costs start with the hours.
+    assert by_day["start"].startswith("2026-03-02")
+    assert by_day["daily"] == {
+        "first": "2026-02-27",
+        "last": "2026-03-01",
+        "days": 3,
+        "energy": 36.0,
+    }
+    assert [
+        (bucket["start"], bucket["energy"], bucket["actual"], bucket["daily"])
+        for bucket in by_day["series"]
+    ] == [
+        ("2026-02-27", 12.0, None, True),
+        ("2026-02-28", 12.0, None, True),
+        ("2026-03-01", 12.0, None, True),
+        ("2026-03-02", 12.0, by_day["series"][3]["contracts"]["tempo001"], False),
+        ("2026-03-03", 12.0, by_day["series"][4]["contracts"]["tempo001"], False),
+    ]
+    assert by_day["series"][0]["contracts"] == {}
+
+    # A month that holds such a day has no cost.
+    by_month = await result(
+        hass_ws_client, hass, **request, start="2026-01-01", end="2026-12-31"
+    )
+    assert [
+        (bucket["start"], bucket["energy"], bucket["actual"], bucket["daily"])
+        for bucket in by_month["series"]
+    ] == [("2026-02-01", 24.0, None, True), ("2026-03-01", 36.0, None, True)]
+
+    # Before the first hour, only the days.
+    before = await result(
+        hass_ws_client, hass, **request, start="2026-02-01", end="2026-02-28"
+    )
+    assert before["start"] == before["end"]
+    assert [bucket["start"] for bucket in before["series"]] == [
+        "2026-02-27",
+        "2026-02-28",
+    ]
+
+    insights = await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/insights",
+        entry_id=entry.entry_id,
+        start="2026-02-01",
+        end="2026-03-31",
+    )
+    assert [(day["date"], day["energy"]) for day in insights["daily"]] == [
+        ("2026-02-27", 12.0),
+        ("2026-02-28", 12.0),
+        ("2026-03-01", 12.0),
+    ]
+    # The hours alone make the other cards.
+    assert [day["date"] for day in insights["days"]] == ["2026-03-02", "2026-03-03"]

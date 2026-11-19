@@ -71,6 +71,19 @@ def hourly_rows(rows: Sequence[tuple[datetime, float]]) -> list[Hour]:
     ]
 
 
+def daily_totals(rows: Sequence[tuple[datetime, float]]) -> dict[date, float]:
+    """Return the kWh of the rows (start in UTC, kWh) that hold a whole day.
+
+    Keyed by the day, French time: what the Linky gave for the days without a
+    load curve.
+    """
+    return {
+        start.astimezone(FRANCE_TIME_ZONE).date(): kwh
+        for (start, kwh), is_daily in zip(rows, _daily_rows(rows), strict=True)
+        if is_daily
+    }
+
+
 @dataclass(frozen=True, kw_only=True)
 class Waiting:
     """Why costing stopped: a Tempo color or a price not known yet."""
