@@ -258,10 +258,13 @@ async def ws_entries(
                 ],
                 "actual": status.actual is not None,
                 "outdoor": outdoor_source(entry),
-                # The sensor's first day, when Open-Meteo gives the days before.
+                # The sensor's first day, when Open-Meteo gives days of consumption
+                # before it.
                 "outdoor_fill_until": (
                     until.isoformat()
-                    if outdoor_fill(entry) and (until := coordinator.weather.until)
+                    if outdoor_fill(entry)
+                    and (until := coordinator.weather.until)
+                    and until > coordinator.data.sources.first_day
                     else None
                 ),
                 # What the cards' notes list as "your data".

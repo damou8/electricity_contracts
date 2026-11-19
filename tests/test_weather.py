@@ -208,6 +208,47 @@ async def test_open_meteo_gives_the_days_before_the_sensor(
     assert max(await hours(hass)) == SENSOR_START - timedelta(hours=1)
 
 
+async def test_days_long_before_now_are_not_asked_again(
+    hass: HomeAssistant, sources: Sources, freezer: FrozenDateTimeFactory
+) -> None:
+    await add_statistic(hass)
+    # The sensor starts on 20 October, French time.
+    sensor_start = datetime(2026, 10, 19, 22, tzinfo=UTC)
+    await add_temperature(
+        hass,
+        [5.0] * int((NOW - sensor_start) / timedelta(hours=1)),
+        first=int((sensor_start - FIRST_HOUR) / timedelta(hours=1)),
+    )
+
+    async def every_hour(
+        latitude: float, longitude: float, start: date, end: date
+    ) -> dict[datetime, float]:
+        del latitude, longitude
+        first = datetime(start.year, start.month, start.day, tzinfo=UTC)
+        last = datetime(end.year, end.month, end.day, 23, tzinfo=UTC)
+        count = int((last - first) / timedelta(hours=1)) + 1
+        return {first + timedelta(hours=hour): 10.0 for hour in range(count)}
+
+    sources.weather.async_hourly_temperatures.side_effect = every_hour
+    entry = await setup_entry(hass, weather_entry(**{CONF_TEMPERATURE: TEMPERATURE_ID}))
+    assert asked(sources) == [(*COORDINATES, date(2026, 2, 28), date(2026, 10, 19))]
+    assert max(await hours(hass)) == sensor_start - timedelta(hours=1)
+    # Every hour before the sensor is written, and too old to be revised.
+    freezer.tick(timedelta(hours=1))
+    await entry.runtime_data.async_refresh()
+    assert len(asked(sources)) == 1
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_a_sensor_older_than_the_consumption_needs_no_fill(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    await add_temperature(hass, [5.0] * 24)
+    await setup_entry(hass, weather_entry(**{CONF_TEMPERATURE: TEMPERATURE_ID}))
+    [listed] = await result(hass_ws_client, hass, type=f"{DOMAIN}/entries")
+    assert listed["outdoor_fill_until"] is None
+
+
 async def test_without_any_outdoor_temperature(hass: HomeAssistant) -> None:
     entry = make_entry()
     assert outdoor_statistic(entry) is None
