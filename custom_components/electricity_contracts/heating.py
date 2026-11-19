@@ -338,14 +338,20 @@ def _split(  # noqa: PLR0913 - the usage, its water and what each day is shown w
     return split
 
 
+def counted_days(
+    outdoor: dict[date, float], house: dict[date, _Day]
+) -> dict[date, float]:
+    """Return the outdoor means of the days an estimate counts: those of the source."""
+    return {day: temperature for day, temperature in outdoor.items() if day in house}
+
+
 def _estimated(
     weather: dict[str, Any], outdoor: dict[date, float], house: dict[date, _Day]
 ) -> dict[str, Any]:
     """Estimate the heating in the source's consumption from its fit."""
     energy = weather["slope"] * sum(
         max(0.0, weather["base"] - temperature)
-        for day, temperature in outdoor.items()
-        if day in house
+        for temperature in counted_days(outdoor, house).values()
     )
     house_energy = sum(item.energy for item in house.values())
     house_cost = sum(item.cost for item in house.values())
@@ -647,6 +653,22 @@ def _fitted(weather: dict[str, Any] | None) -> bool:
     return weather is not None and weather["slope"] is not None and weather["slope"] > 0
 
 
+def heating_window(
+    entry: ElectricityContractsConfigEntry, start: datetime, end: datetime
+) -> tuple[datetime, datetime]:
+    """Narrow a window to the hours heating can be read on.
+
+    With a meter, like a comparison, so the figures agree with the other tabs;
+    without one, to where the heating statistics are.
+    """
+    coordinator = entry.runtime_data
+    if coordinator.statistic_id:
+        return narrow_window(coordinator.data.costing, contracts(entry), start, end)
+    start = max(start, day_start(coordinator.data.sources.first_day))
+    heating_end = coordinator.data.heating_end
+    return start, max(start, min(end, heating_end)) if heating_end else start
+
+
 async def async_heating(
     hass: HomeAssistant,
     *,
@@ -656,20 +678,29 @@ async def async_heating(
 ) -> dict[str, Any]:
     """Describe what heating used and cost between `start` and `end` (UTC).
 
-    The window is narrowed like a comparison, so the figures agree with the other
-    tabs. Without heating statistics, the heating is estimated from the source's
-    consumption and the outdoor temperature.
+    The window is narrowed by `heating_window` first.
+    """
+    start, end = heating_window(entry, start, end)
+    return await async_heating_between(hass, entry=entry, start=start, end=end)
+
+
+async def async_heating_between(
+    hass: HomeAssistant,
+    *,
+    entry: ElectricityContractsConfigEntry,
+    start: datetime,
+    end: datetime,
+    weather_days: bool = False,
+) -> dict[str, Any]:
+    """Describe what heating used and cost over a window `heating_window` narrowed.
+
+    Without heating statistics, the heating is estimated from the source's
+    consumption and the outdoor temperature. `weather_days` adds, to an
+    estimate, the outdoor and indoor means of the days it counts.
     """
     heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
     coordinator = entry.runtime_data
     status = coordinator.data.costing
-    if coordinator.statistic_id:
-        start, end = narrow_window(status, contracts(entry), start, end)
-    else:
-        # Without a meter, the window is where the heating statistics are.
-        start = max(start, day_start(coordinator.data.sources.first_day))
-        heating_end = coordinator.data.heating_end
-        end = max(start, min(end, heating_end)) if heating_end else start
     actual = coordinator.costing.actual_statistics() if status.actual else None
     house_ids = (actual.energy, actual.variable) if actual is not None else None
     measured = [*heating.statistics]
@@ -747,9 +778,14 @@ async def async_heating(
         }
 
     rows = await get_instance(hass).async_add_executor_job(read)
-    return _Answer(hass, entry, rows, house_ids).build(
-        dt_util.now(FRANCE_TIME_ZONE).date()
-    )
+    built = _Answer(hass, entry, rows, house_ids)
+    answer = built.build(dt_util.now(FRANCE_TIME_ZONE).date())
+    if weather_days and not answer["measured"]:
+        answer["weather_days"] = [
+            {"temperature": temperature, "indoor": built.indoor.get(day)}
+            for day, temperature in counted_days(built.outdoor, built.house).items()
+        ]
+    return answer
 
 
 def _day_of(timestamp: float) -> date:

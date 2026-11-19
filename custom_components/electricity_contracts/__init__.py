@@ -28,6 +28,7 @@ from .coordinator import (
     cache_store,
 )
 from .data import contracts, manual_prices
+from .dpe import settings_store
 from .panel import async_register_panel, async_remove_panel, async_setup_frontend
 from .statistics import async_remove_statistics
 from .weather import async_remove_weather
@@ -178,6 +179,7 @@ async def async_remove_entry(
     await async_remove_statistics(hass, entry.entry_id)
     await async_remove_weather(hass, entry)
     await cache_store(hass, entry.entry_id).async_remove()
+    await settings_store(hass, entry.entry_id).async_remove()
     async_delete_issues(hass, entry.entry_id)
 
 

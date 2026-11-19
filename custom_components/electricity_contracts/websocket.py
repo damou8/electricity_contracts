@@ -15,6 +15,7 @@ from homeassistant.components.websocket_api.const import (
 )
 from homeassistant.components.websocket_api.decorators import (
     async_response,
+    require_admin,
     websocket_command,
 )
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
@@ -45,6 +46,7 @@ from .data import (
     price_periods,
     source_statistic,
 )
+from .dpe import SETTINGS_SCHEMA, async_dpe, async_save_settings
 from .heating import async_heating
 from .insights import async_insights
 from .outlook import async_outlook
@@ -72,6 +74,8 @@ def async_register_commands(hass: HomeAssistant) -> None:
     async_register_command(hass, ws_insights)
     async_register_command(hass, ws_heating)
     async_register_command(hass, ws_outlook)
+    async_register_command(hass, ws_dpe)
+    async_register_command(hass, ws_dpe_save)
 
 
 def _local_day(moment: datetime) -> str:
@@ -406,6 +410,45 @@ async def ws_heating(
             start=day_start(start),
             end=day_start(end + timedelta(days=1)),
         ),
+    )
+
+
+@websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/dpe",
+        vol.Required(ATTR_ENTRY_ID): cv.string,
+        vol.Required(ATTR_END): cv.date,
+    }
+)
+@async_response
+async def ws_dpe(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the energy label of the 12 months that end on a day."""
+    if (entry := _loaded_entry(hass, connection, msg)) is None:
+        return
+    connection.send_result(
+        msg["id"], await async_dpe(hass, entry=entry, end=msg[ATTR_END])
+    )
+
+
+@websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/dpe/save",
+        vol.Required(ATTR_ENTRY_ID): cv.string,
+        **SETTINGS_SCHEMA,
+    }
+)
+@require_admin
+@async_response
+async def ws_dpe_save(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Save the settings of an entry's energy label."""
+    if (entry := _loaded_entry(hass, connection, msg)) is None:
+        return
+    connection.send_result(
+        msg["id"], await async_save_settings(hass, entry.entry_id, msg)
     )
 
 

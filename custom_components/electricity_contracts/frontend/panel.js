@@ -68,6 +68,42 @@ const STRINGS = {
     simSourceHome: "the home's consumption",
     simInfoRange: "The line was drawn between {low} and {high} outside; beyond, it is extended.",
     heatingNoData: "No heating recorded over this period.",
+    dpeTitle: "Estimated energy label",
+    dpeClass: "Class {letter}",
+    dpeEnergy: "Energy, kWh/m²/year",
+    dpeClimate: "Climate, kg CO₂/m²/year",
+    dpeRange: "{from} to {to}",
+    dpeUse: "Use",
+    dpeFinal: "Final energy",
+    dpePrimary: "Primary energy",
+    dpeTotal: "Total",
+    dpeInfoPeriod: "The label counts what the heating, the hot water and the auxiliaries (ventilation, pumps) used from {start} to {end}, divided by the living area. Lighting and appliances are not part of it.",
+    dpeInfoFactors: "Primary energy: electricity × the coefficient below, gas × 1. Climate: electricity 0.079 kg CO₂/kWh for heating, 0.065 for hot water and 0.064 for the auxiliaries, gas 0.227.",
+    dpeInfoClass: "The class shown is the worse of the two labels.",
+    dpeConventionalMeasured: "The DPE heats the home to 19 °C by day and 16 °C at night. Your thermometers measured {indoor} on average on heating days: the heating counts {after} instead of {before}.",
+    dpeConventionalSetting: "The DPE heats the home to 19 °C by day and 16 °C at night. With your setpoint, set below, the heating counts {after} instead of {before}.",
+    dpeConventionalSame: "The DPE heats the home to 19 °C by day and 16 °C at night, like your setpoint set below: the heating counts as it is.",
+    dpeConventionalNone: "The DPE heats the home to 19 °C by day and 16 °C at night. Here the heating counts as it is: it takes an outdoor temperature and enough heating days to know what a degree more costs.",
+    dpeSetpoint: "Heating temperature by day",
+    dpeSetback: "Lowered at night, 22:00 to 6:00",
+    dpeInfoNotOfficial: "This is not a real DPE: an assessor rates the home itself (insulation, windows, heating system), not what you used.",
+    dpePartial: "Your data starts on {start}: the label only covers {days} days instead of a year.",
+    dpeNoData: "Not enough heating data over the last 12 months to compute a label.",
+    dpeSettings: "Settings",
+    dpeSurface: "Living area (Carrez law)",
+    dpeCoefficient: "Electricity coefficient",
+    dpeAuxiliaries: "Auxiliaries share",
+    dpeWaterShare: "Hot water share",
+    dpeWaterUsed: "Used because your hot water is neither measured nor estimated.",
+    dpeSave: "Save",
+    dpeDefaults: "Default values",
+    dpeSaved: "Saved.",
+    dpeUnsaved: "Not saved yet.",
+    dpeSaveFailed: "The settings could not be saved: {error}",
+    dpeReadOnly: "Only an administrator can change these settings.",
+    useAuxiliaries: "Auxiliaries",
+    useSurface: "Living area",
+    shareTag: "estimated share",
     nowLabel: "Now",
     unknownColor: "Color not published yet",
     perKwh: "{price}/kWh",
@@ -344,6 +380,42 @@ const STRINGS = {
     simSourceHome: "la consommation de la maison",
     simInfoRange: "La droite a été tracée entre {low} et {high} dehors ; au-delà, elle est prolongée.",
     heatingNoData: "Aucun chauffage enregistré sur cette période.",
+    dpeTitle: "Étiquette DPE estimée",
+    dpeClass: "Classe {letter}",
+    dpeEnergy: "Énergie, kWh/m²/an",
+    dpeClimate: "Climat, kg CO₂/m²/an",
+    dpeRange: "{from} à {to}",
+    dpeUse: "Usage",
+    dpeFinal: "Énergie finale",
+    dpePrimary: "Énergie primaire",
+    dpeTotal: "Total",
+    dpeInfoPeriod: "L'étiquette compte ce que le chauffage, l'eau chaude et les auxiliaires (ventilation, pompes) ont consommé du {start} au {end}, divisé par la surface habitable. L'éclairage et l'électroménager n'en font pas partie.",
+    dpeInfoFactors: "Énergie primaire : électricité × le coefficient ci-dessous, gaz × 1. Climat : électricité 0,079 kg CO₂/kWh pour le chauffage, 0,065 pour l'eau chaude et 0,064 pour les auxiliaires, gaz 0,227.",
+    dpeInfoClass: "La classe retenue est la plus mauvaise des deux étiquettes.",
+    dpeConventionalMeasured: "Le DPE chauffe le logement à 19 °C le jour et 16 °C la nuit. Vos thermomètres ont mesuré {indoor} en moyenne les jours de chauffe : le chauffage compte donc pour {after} au lieu de {before}.",
+    dpeConventionalSetting: "Le DPE chauffe le logement à 19 °C le jour et 16 °C la nuit. Avec votre consigne, réglée ci-dessous, le chauffage compte donc pour {after} au lieu de {before}.",
+    dpeConventionalSame: "Le DPE chauffe le logement à 19 °C le jour et 16 °C la nuit, comme votre consigne réglée ci-dessous : le chauffage compte tel quel.",
+    dpeConventionalNone: "Le DPE chauffe le logement à 19 °C le jour et 16 °C la nuit. Ici, le chauffage compte tel quel : il faut une température extérieure et assez de jours de chauffe pour savoir ce que coûte un degré de plus.",
+    dpeSetpoint: "Température de chauffage le jour",
+    dpeSetback: "Baisse la nuit, de 22 h à 6 h",
+    dpeInfoNotOfficial: "Ce n'est pas un vrai DPE : un diagnostiqueur calcule l'étiquette d'après le logement lui-même (isolation, fenêtres, système de chauffage), pas d'après ce que vous avez consommé.",
+    dpePartial: "Vos données commencent le {start} : l'étiquette ne couvre que {days} jours au lieu d'une année.",
+    dpeNoData: "Pas assez de données de chauffage sur les 12 derniers mois pour calculer une étiquette.",
+    dpeSettings: "Réglages",
+    dpeSurface: "Surface habitable (loi Carrez)",
+    dpeCoefficient: "Coefficient de l'électricité",
+    dpeAuxiliaries: "Part des auxiliaires",
+    dpeWaterShare: "Part de l'eau chaude",
+    dpeWaterUsed: "Utilisée, car votre eau chaude n'est ni mesurée ni estimée.",
+    dpeSave: "Enregistrer",
+    dpeDefaults: "Valeurs par défaut",
+    dpeSaved: "Enregistré.",
+    dpeUnsaved: "Pas encore enregistré.",
+    dpeSaveFailed: "Les réglages n'ont pas pu être enregistrés : {error}",
+    dpeReadOnly: "Seul un administrateur peut changer ces réglages.",
+    useAuxiliaries: "Auxiliaires",
+    useSurface: "Surface habitable",
+    shareTag: "part estimée",
     nowLabel: "Maintenant",
     unknownColor: "Couleur pas encore publiée",
     perKwh: "{price}/kWh",
@@ -852,6 +924,37 @@ main {
 .tag.missing { border-color: var(--ec-warn); background: transparent; color: var(--ec-warn); }
 @media (max-width: 480px) { .uses dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } .uses dd { margin-bottom: 6px; } }
 .method p.hint { margin-top: 10px; }
+.dpe { display: flex; align-items: center; gap: 24px; }
+.dpe-letter { width: 64px; height: 64px; flex: none; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 700; }
+.dpe-letter.partial { background: var(--ec-wash); color: var(--ec-muted); border: 2px dashed var(--divider-color, var(--ec-axis)); box-sizing: border-box; }
+.dpe-scales { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.dpe-scale { display: flex; flex-direction: column; gap: 4px; }
+.dpe-scale h3 { margin: 0 0 4px; font-size: 13px; font-weight: 400; color: var(--ec-text-2); }
+.dpe-row { display: flex; align-items: center; gap: 6px; height: 22px; }
+.dpe-row.current { height: 32px; }
+.dpe-bar { height: 100%; box-sizing: border-box; border-radius: 0 14px 14px 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 10px; font-size: 11px; white-space: nowrap; opacity: 0.55; }
+.dpe-bar b { font-size: 13px; }
+.dpe-row.current .dpe-bar { opacity: 1; box-shadow: 0 0 0 2px var(--ec-text); }
+.dpe-row.current .dpe-bar b { font-size: 17px; }
+.dpe-value { font-size: 15px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .dpe { flex-direction: column; align-items: flex-start; } .dpe-scales { width: 100%; } }
+@media (max-width: 420px) { .dpe-scales { grid-template-columns: minmax(0, 1fr); } }
+.dpe-use { display: inline-flex; align-items: center; gap: 6px; }
+.dpe-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dpe-table th:first-child, .dpe-table td:first-child { padding-left: 0; }
+.dpe-table th:last-child, .dpe-table td:last-child { padding-right: 0; }
+.dpe-table tr.total td { border-bottom: none; font-weight: 500; }
+.dpe-settings h3 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--ec-text-2); }
+.dpe-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; max-width: 640px; }
+@media (max-width: 480px) { .dpe-fields { grid-template-columns: minmax(0, 1fr); } }
+.dpe-field { display: flex; flex-direction: column; gap: 4px; }
+.dpe-field .row { display: flex; align-items: center; gap: 6px; }
+.dpe-field input { font: inherit; font-size: 14px; color: var(--ec-text); background: var(--ec-surface); border: 1px solid var(--divider-color, var(--ec-axis)); border-radius: 8px; padding: 6px 8px; width: 100%; min-height: 36px; box-sizing: border-box; }
+.dpe-field input:disabled { background: transparent; color: var(--ec-muted); }
+.dpe-field small { font-size: 12px; }
+.dpe-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.toggle.primary { background: var(--primary-color, #009ac7); border-color: var(--primary-color, #009ac7); color: var(--text-primary-color, #ffffff); }
+.toggle:disabled { opacity: 0.4; cursor: default; }
 .lead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-bottom: 12px; }
 .lead strong { font-size: 28px; font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .lead span { color: var(--ec-text-2); font-size: 14px; }
@@ -1125,7 +1228,7 @@ tfoot td { font-weight: 600; border-bottom: none; }
 `;
 
 // The order of the lines of "Your data", the same on every card.
-const USE_ORDER = ["consumption", "heating", "water", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
+const USE_ORDER = ["consumption", "heating", "water", "dpeWater", "auxiliaries", "surface", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
 
 const ICONS = {
   meter: "M7,2V13H10V22L17,10H13L17,2H7Z",
@@ -1146,7 +1249,25 @@ const ICONS = {
   info: "M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z",
   alert: "M12,2L1,21H23M12,6L19.53,19H4.47M11,10V14H13V10M11,16V18H13V16",
   plus: "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",
+  fan: "M12,11A1,1 0 0,0 11,12A1,1 0 0,0 12,13A1,1 0 0,0 13,12A1,1 0 0,0 12,11M12.5,2C17,2 17.11,5.57 14.75,6.75C13.76,7.24 13.32,8.29 13.13,9.22C13.61,9.42 14.03,9.73 14.35,10.13C18.05,8.13 22.03,8.92 22.03,12.5C22.03,17 18.46,17.1 17.28,14.73C16.78,13.74 15.72,13.3 14.79,13.11C14.59,13.59 14.28,14 13.88,14.34C15.87,18.03 15.08,22 11.5,22C7,22 6.91,18.42 9.27,17.24C10.25,16.75 10.69,15.71 10.89,14.79C10.4,14.59 9.97,14.27 9.65,13.87C5.96,15.85 2,15.07 2,11.5C2,7 5.56,6.89 6.74,9.26C7.24,10.25 8.29,10.68 9.22,10.87C9.41,10.39 9.73,9.97 10.14,9.65C8.15,5.96 8.94,2 12.5,2Z",
+  area: "M3,3H21V21H3V3M5,5V19H19V5H5M7,7H11V9H9V11H7V7M17,17H13V15H15V13H17V17Z",
 };
+
+// The classes of the DPE: the upper bound of A to F, and the colors of A to G
+// (background, text).
+const DPE_LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
+const DPE_SCALES = {
+  energy: {
+    bounds: [70, 110, 180, 250, 330, 420],
+    colors: [["#009c6d", "#1a1a1a"], ["#52b153", "#1a1a1a"], ["#a5cc74", "#1a1a1a"], ["#f4e70f", "#1a1a1a"], ["#f0b40f", "#1a1a1a"], ["#eb8235", "#1a1a1a"], ["#d7221f", "#ffffff"]],
+  },
+  climate: {
+    bounds: [6, 11, 30, 50, 70, 100],
+    colors: [["#f6edfd", "#1a1a1a"], ["#e4c7fb", "#1a1a1a"], ["#d5aaf6", "#1a1a1a"], ["#cb95f3", "#1a1a1a"], ["#ba72ef", "#1a1a1a"], ["#a74deb", "#ffffff"], ["#8a19df", "#ffffff"]],
+  },
+};
+// A year of data, below which the label tells the days it covers.
+const DPE_YEAR_DAYS = 365;
 
 const MEASURES = { cost: "€", energy: "kWh", price: "€/kWh" };
 const ALL_TABS = ["follow", "understand", "heating", "compare"];
@@ -1290,7 +1411,7 @@ class ElectricityContractsPanel extends HTMLElement {
     this._request = null;
     this._data = null;
     this._error = null;
-    this._views = { time: "chart", cumulative: "chart", tranches: "chart" };
+    this._views = { time: "chart", cumulative: "chart", tranches: "chart", dpe: "chart" };
     this._tab = "follow";
     // What the time chart shows: cost, energy or price.
     this._measure = "cost";
@@ -1314,6 +1435,15 @@ class ElectricityContractsPanel extends HTMLElement {
     this._insights = null;
     this._heating = null;
     this._heatingError = null;
+    // The energy label, loaded for the Heating tab by entry and end of period;
+    // the settings typed and not saved yet, and what the last save said.
+    this._dpe = null;
+    this._dpeEntry = null;
+    this._dpeKey = null;
+    this._dpeError = null;
+    this._dpeDraft = null;
+    this._dpeStatus = null;
+    this._dpeSaving = false;
     // What the heating chart shows, and where the setting simulator stands.
     this._heatingMeasure = "cost";
     this._sim = null;
@@ -1841,11 +1971,12 @@ class ElectricityContractsPanel extends HTMLElement {
   // A card: its title, the (i) opening what its figures mean, its tools, then
   // its body. The notes open under the body: how it is computed, the data it
   // uses ("uses", see _uses) and what more data would bring ("hint").
-  _card(title, body, { info = [], uses = [], hint = null, tools = null, rerender = () => this._renderContent() } = {}) {
+  // `extra` goes in the method below the notes: a card's settings.
+  _card(title, body, { info = [], uses = [], hint = null, tools = null, extra = null, rerender = () => this._renderContent() } = {}) {
     const notes = info.filter(Boolean);
     const rows = uses.filter(Boolean);
     const hints = [hint].flat().filter(Boolean);
-    const explained = notes.length > 0 || rows.length > 0;
+    const explained = notes.length > 0 || rows.length > 0 || Boolean(extra);
     const open = explained && Boolean(this._open[title]);
     const button = explained
       ? h(
@@ -1873,6 +2004,7 @@ class ElectricityContractsPanel extends HTMLElement {
             "div",
             { class: "method" },
             notes.map((note) => h("p", {}, note)),
+            extra,
             rows.length
               ? h(
                   "div",
@@ -1953,6 +2085,19 @@ class ElectricityContractsPanel extends HTMLElement {
         return inputs.water
           ? row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), ...steps([inputs.water])])
           : row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
+      case "dpeWater": {
+        const water = this._dpe && this._dpe.uses.find((item) => item.use === "water");
+        if (!water) return null;
+        if (water.source === "measured" && inputs.water) return row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), ...steps([inputs.water])]);
+        return row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [this._t("notTracked"), this._t(water.source === "share" ? "shareTag" : "estimatedTag")], "estimated");
+      }
+      case "auxiliaries":
+        return row(ICONS.fan, "var(--ec-other)", "useAuxiliaries", [this._t("notTracked"), this._t("shareTag")], "estimated");
+      case "surface": {
+        if (!this._dpe) return null;
+        const surface = this._dpe.settings.surface;
+        return row(ICONS.area, "var(--ec-s1)", "useSurface", [`${this._number(surface, Number.isInteger(surface) ? 0 : 1)} m²`]);
+      }
       case "gasPrice": {
         if (!heating || !heating.gas) return null;
         const price = this._heating && this._heating.simulator ? this._heating.simulator.gas_price : null;
@@ -4172,7 +4317,7 @@ class ElectricityContractsPanel extends HTMLElement {
     if (!heating && !this._entry.last_day) return [h("section", { class: "card message" }, this._t("heatingNoData"))];
     if (!heating) return [this._loadingCard()];
     if (!heating.measured) {
-      return [this._renderHeatingKpis(heating), h("div", { class: "duo" }, this._renderHeatingWeather(heating), this._renderSimulator(heating))];
+      return [this._renderHeatingKpis(heating), h("div", { class: "duo" }, this._renderHeatingWeather(heating), this._renderSimulator(heating)), this._renderDpe()];
     }
     if (!heating.days.length) {
       return [h("section", { class: "card message" }, this._t("heatingNoData"))];
@@ -4187,7 +4332,251 @@ class ElectricityContractsPanel extends HTMLElement {
       this._renderHeatingSplit(heating),
       duo(this._renderHeatingProfile(heating), this._renderHeatingWeather(heating)),
       this._renderSimulator(heating),
+      this._renderDpe(),
     ];
+  }
+
+  // Energy label --------------------------------------------------------------
+
+  // The label of the 12 months that end with the period. Loaded on its own, for
+  // this tab only, and again only when the source or the period's end changes.
+  _renderDpe() {
+    const entry = this._entry;
+    const end = this._request && this._request.end;
+    if (!end) return null;
+    const key = `${entry.entry_id}|${end}`;
+    if (this._dpeKey !== key) this._loadDpe(key, end);
+    const title = this._t("dpeTitle");
+    if (this._dpeError) {
+      return this._errorCard(title, this._t("insightsFailed", { error: this._dpeError }), () => {
+        this._dpeKey = null;
+        this._renderContent();
+      });
+    }
+    // The label of the previous period stays while the next one loads.
+    const dpe = this._dpeEntry === entry.entry_id ? this._dpe : null;
+    if (!dpe) return this._loadingCard();
+    if (!dpe.classes) return h("section", { class: "card message" }, this._t("dpeNoData"));
+    const long = { day: "numeric", month: "long", year: "numeric" };
+    const partial = dpe.days < DPE_YEAR_DAYS ? h("p", { class: "note" }, this._t("dpePartial", { start: this._dayLabel(dpe.start, long), days: dpe.days })) : null;
+    return this._card(title, [this._views.dpe === "table" ? this._dpeTable(dpe) : this._dpeChart(dpe), partial], {
+      info: [
+        this._t("dpeInfoPeriod", { start: this._dayLabel(dpe.start, long), end: this._dayLabel(dpe.end, long) }),
+        this._dpeConventional(dpe),
+        this._t("dpeInfoFactors"),
+        this._t("dpeInfoClass"),
+        this._t("dpeInfoNotOfficial"),
+      ],
+      extra: this._dpeSettings(dpe),
+      uses: this._uses("heating", "dpeWater", "auxiliaries", "surface", "outdoor", dpe.conventional.source === "thermometers" ? "indoor" : null),
+      tools: this._toggle("dpe"),
+    });
+  }
+
+  // How the heating was moved to the DPE's setpoint, 19 °C by day and 16 °C at
+  // night, from the home's.
+  _dpeConventional(dpe) {
+    const conventional = dpe.conventional;
+    if (!conventional.applied) return this._t("dpeConventionalNone");
+    const after = dpe.uses.find((item) => item.use === "heating").energy;
+    const values = { indoor: `${this._number(conventional.indoor, 1)} °C`, after: this._kwh(after), before: this._kwh(after - conventional.extra) };
+    if (conventional.source === "thermometers") return this._t("dpeConventionalMeasured", values);
+    return this._t(conventional.shift === 0 ? "dpeConventionalSame" : "dpeConventionalSetting", values);
+  }
+
+  async _loadDpe(key, end) {
+    const entryId = this._entry.entry_id;
+    this._dpeKey = key;
+    this._dpeError = null;
+    try {
+      const dpe = await this._hass.callWS({ type: `${DOMAIN}/dpe`, entry_id: entryId, end });
+      if (this._dpeKey !== key) return;
+      this._dpe = dpe;
+      this._dpeEntry = entryId;
+      this._dpeDraft = null;
+      // A save reloads the label: what it said stays.
+      if (!this._dpeSaving) this._dpeStatus = null;
+      this._dpeSaving = false;
+    } catch (error) {
+      if (this._dpeKey !== key) return;
+      this._dpeError = error.message || String(error);
+      this._dpeSaving = false;
+    }
+    if (this._tab === "heating") this._renderContent();
+  }
+
+  // The letter, beside the energy and climate scales: the class of each is
+  // drawn larger, with the value.
+  _dpeChart(dpe) {
+    const classes = dpe.classes;
+    const scale = (name, value) => {
+      const { bounds, colors } = DPE_SCALES[name];
+      return h(
+        "div",
+        { class: "dpe-scale" },
+        h("h3", {}, this._t(name === "energy" ? "dpeEnergy" : "dpeClimate")),
+        DPE_LETTERS.map((letter, index) => {
+          const range = index === 0 ? `≤ ${bounds[0]}` : index === bounds.length ? `> ${bounds[bounds.length - 1]}` : this._t("dpeRange", { from: bounds[index - 1] + 1, to: bounds[index] });
+          const current = letter === classes[name];
+          return h(
+            "div",
+            { class: current ? "dpe-row current" : "dpe-row" },
+            h("div", { class: "dpe-bar", style: { width: `${38 + index * 8}%`, background: colors[index][0], color: colors[index][1] } }, h("span", {}, range), h("b", {}, letter)),
+            current ? h("span", { class: "dpe-value" }, this._number(value, name === "climate" ? 1 : 0)) : null,
+          );
+        }),
+      );
+    };
+    // The letter takes the colors of the scale that sets it, grey when the year
+    // isn't whole: without its winter, the class means little.
+    const from = classes.label === classes.energy ? "energy" : "climate";
+    const [background, color] = DPE_SCALES[from].colors[DPE_LETTERS.indexOf(classes.label)];
+    const partial = dpe.days < DPE_YEAR_DAYS;
+    return h(
+      "div",
+      { class: "dpe" },
+      h("div", { class: partial ? "dpe-letter partial" : "dpe-letter", role: "img", "aria-label": this._t("dpeClass", { letter: classes.label }), style: partial ? {} : { background, color } }, classes.label),
+      h("div", { class: "dpe-scales" }, scale("energy", dpe.energy), scale("climate", dpe.climate)),
+    );
+  }
+
+  _dpeTable(dpe) {
+    const names = { heating: "useHeating", water: "useHotWater", auxiliaries: "useAuxiliaries" };
+    const hues = { heating: "var(--ec-s2)", water: "var(--ec-s3)", auxiliaries: "var(--ec-other)" };
+    const sum = (key) => dpe.uses.reduce((total, item) => total + item[key], 0);
+    const line = (name, item, hue = null, attributes = {}) =>
+      h(
+        "tr",
+        attributes,
+        h("td", {}, h("span", { class: "dpe-use" }, hue ? h("span", { class: "dpe-dot", style: { background: hue } }) : null, name)),
+        h("td", {}, this._kwh(item.energy)),
+        h("td", {}, `${this._number(item.primary)} kWhEP`),
+        h("td", {}, `${this._number(item.co2)} kg`),
+      );
+    return h(
+      "div",
+      { class: "table-wrap" },
+      h(
+        "table",
+        { class: "dpe-table" },
+        h("thead", {}, h("tr", {}, h("th", {}, this._t("dpeUse")), h("th", {}, this._t("dpeFinal")), h("th", {}, this._t("dpePrimary")), h("th", {}, "CO₂"))),
+        h(
+          "tbody",
+          {},
+          dpe.uses.map((item) => line(this._t(names[item.use]), item, hues[item.use])),
+          line(this._t("dpeTotal"), { energy: sum("energy"), primary: sum("primary"), co2: sum("co2") }, null, { class: "total" }),
+        ),
+      ),
+    );
+  }
+
+  // The settings, in the card's method. Typing only updates the buttons, so
+  // the field keeps the focus; saving loads the label again.
+  _dpeSettings(dpe) {
+    const admin = Boolean(this._hass.user && this._hass.user.is_admin);
+    if (!this._dpeDraft) this._dpeDraft = { ...dpe.settings };
+    const draft = this._dpeDraft;
+    const water = dpe.uses.find((item) => item.use === "water");
+    const waterUsed = water.source === "share";
+    const setpoint = dpe.conventional.applied && dpe.conventional.source === "setting";
+    const status = h("span", { class: "dpe-status", role: "status" });
+    const save = h("button", { type: "submit", class: "toggle primary" }, this._t("dpeSave"));
+    let form = null;
+    const refresh = () => {
+      const changed = Object.keys(dpe.settings).some((key) => Number(draft[key]) !== dpe.settings[key]);
+      save.disabled = !changed || !form.checkValidity();
+      // What the last save said, until the next keystroke.
+      status.textContent = this._dpeStatus || (changed ? this._t("dpeUnsaved") : "");
+    };
+    const field = (key, label, min, max, unit, help = null) =>
+      h(
+        "label",
+        { class: "dpe-field" },
+        label,
+        h(
+          "span",
+          { class: "row" },
+          h("input", {
+            type: "number",
+            name: key,
+            min,
+            max,
+            step: "any",
+            required: true,
+            value: draft[key],
+            disabled: !admin,
+            oninput: (event) => {
+              draft[key] = event.target.value;
+              this._dpeStatus = null;
+              refresh();
+            },
+          }),
+          unit,
+        ),
+        help ? h("small", {}, help) : null,
+      );
+    form = h(
+      "form",
+      {
+        class: "dpe-settings",
+        onsubmit: (event) => {
+          event.preventDefault();
+          this._saveDpe();
+        },
+      },
+      h("h3", {}, this._t("dpeSettings")),
+      h(
+        "div",
+        { class: "dpe-fields" },
+        field("surface", this._t("dpeSurface"), 5, 2000, "m²"),
+        field("coefficient", this._t("dpeCoefficient"), 1, 3, "kWhEP/kWh"),
+        field("auxiliaries", this._t("dpeAuxiliaries"), 0, 30, "%"),
+        // Only when the hot water is neither measured nor estimated.
+        waterUsed ? field("water", this._t("dpeWaterShare"), 0, 60, "%", this._t("dpeWaterUsed")) : null,
+        // The home's setpoint, without thermometers to measure it.
+        setpoint ? field("setpoint", this._t("dpeSetpoint"), 10, 26, "°C") : null,
+        setpoint ? field("setback", this._t("dpeSetback"), 0, 10, "°C") : null,
+      ),
+      admin
+        ? h(
+            "div",
+            { class: "dpe-actions" },
+            save,
+            h(
+              "button",
+              {
+                type: "button",
+                class: "toggle",
+                onclick: () => {
+                  Object.assign(draft, dpe.defaults);
+                  for (const input of form.querySelectorAll("input")) input.value = draft[input.name];
+                  this._dpeStatus = null;
+                  refresh();
+                },
+              },
+              this._t("dpeDefaults"),
+            ),
+            status,
+          )
+        : h("p", {}, this._t("dpeReadOnly")),
+    );
+    refresh();
+    return form;
+  }
+
+  async _saveDpe() {
+    const settings = Object.fromEntries(Object.entries(this._dpeDraft).map(([key, value]) => [key, Number(value)]));
+    try {
+      await this._hass.callWS({ type: `${DOMAIN}/dpe/save`, entry_id: this._entry.entry_id, ...settings });
+    } catch (error) {
+      this._dpeStatus = this._t("dpeSaveFailed", { error: error.message || String(error) });
+      this._renderContent();
+      return;
+    }
+    this._dpeStatus = this._t("dpeSaved");
+    this._dpeSaving = true;
+    this._dpeKey = null;
+    this._renderContent();
   }
 
   // The heating of the period: measured, or estimated from the source when no
