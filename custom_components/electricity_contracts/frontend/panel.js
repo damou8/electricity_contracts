@@ -88,6 +88,8 @@ const STRINGS = {
     dpeSetback: "Lowered at night, 22:00 to 6:00",
     dpeInfoNotOfficial: "This is not a real DPE: an assessor rates the home itself (insulation, windows, heating system), not what you used.",
     dpePartial: "Your data starts on {start}: the label only covers {days} days instead of a year.",
+    dpeNoWeather: "The label only covers {days} days, from {start}. Before that, there's no outdoor temperature to estimate the heating from the Linky.",
+    dpeOpenMeteo: "Turn on Open-Meteo weather in the integration's options to cover the whole year.",
     dpeNoData: "Not enough heating data over the last 12 months to compute a label.",
     dpeSettings: "Settings",
     dpeSurface: "Living area (Carrez law)",
@@ -405,6 +407,8 @@ const STRINGS = {
     dpeSetback: "Baisse la nuit, de 22 h à 6 h",
     dpeInfoNotOfficial: "Ce n'est pas un vrai DPE : un diagnostiqueur calcule l'étiquette d'après le logement lui-même (isolation, fenêtres, système de chauffage), pas d'après ce que vous avez consommé.",
     dpePartial: "Vos données commencent le {start} : l'étiquette ne couvre que {days} jours au lieu d'une année.",
+    dpeNoWeather: "L'étiquette ne couvre que {days} jours, à partir du {start}. Avant, il manque la température extérieure pour estimer le chauffage à partir du Linky.",
+    dpeOpenMeteo: "Activez la météo Open-Meteo dans les options de l'intégration pour couvrir toute l'année.",
     dpeNoData: "Pas assez de données de chauffage sur les 12 derniers mois pour calculer une étiquette.",
     dpeSettings: "Réglages",
     dpeSurface: "Surface habitable (loi Carrez)",
@@ -4483,7 +4487,7 @@ class ElectricityContractsPanel extends HTMLElement {
     if (!dpe) return this._loadingCard();
     if (!dpe.classes) return h("section", { class: "card message" }, this._t("dpeNoData"));
     const long = { day: "numeric", month: "long", year: "numeric" };
-    const partial = dpe.days < DPE_YEAR_DAYS ? h("p", { class: "note" }, this._t("dpePartial", { start: this._dayLabel(dpe.start, long), days: dpe.days })) : null;
+    const partial = dpe.days < DPE_YEAR_DAYS ? this._dpePartial(dpe, long) : null;
     return this._card(title, [this._views.dpe === "table" ? this._dpeTable(dpe) : this._dpeChart(dpe), partial], {
       info: [
         this._t("dpeInfoPeriod", { start: this._dayLabel(dpe.start, long), end: this._dayLabel(dpe.end, long) }),
@@ -4562,6 +4566,20 @@ class ElectricityContractsPanel extends HTMLElement {
       { class: "dpe" },
       h("div", { class: partial ? "dpe-letter partial" : "dpe-letter", role: "img", "aria-label": this._t("dpeClass", { letter: classes.label }), style: partial ? {} : { background, color } }, classes.label),
       h("div", { class: "dpe-scales" }, scale("energy", dpe.energy), scale("climate", dpe.climate)),
+    );
+  }
+
+  // Why the label covers less than a year: the data starts later, or the Linky's
+  // days before have no outdoor temperature to estimate the heating.
+  _dpePartial(dpe, long) {
+    const values = { start: this._dayLabel(dpe.start, long), days: dpe.days };
+    if (!dpe.unestimated) return h("p", { class: "note" }, this._t("dpePartial", values));
+    if (dpe.unestimated.open_meteo) return h("p", { class: "note" }, this._t("dpeNoWeather", values));
+    return h(
+      "p",
+      { class: "note" },
+      `${this._t("dpeNoWeather", values)} ${this._t("dpeOpenMeteo")} `,
+      h("a", { href: `/config/integrations/integration/${DOMAIN}` }, this._t("weatherOpen")),
     );
   }
 
