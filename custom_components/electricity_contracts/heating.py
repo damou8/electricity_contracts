@@ -669,12 +669,14 @@ async def async_heating(
     entry: ElectricityContractsConfigEntry,
     start: datetime,
     end: datetime,
+    weather_days: bool = False,
 ) -> dict[str, Any]:
     """Describe what heating used and cost between `start` and `end` (UTC).
 
     The window is narrowed like a comparison, so the figures agree with the other
     tabs. Without heating statistics, the heating is estimated from the source's
-    consumption and the outdoor temperature.
+    consumption and the outdoor temperature. `weather_days` adds, to an
+    estimate, the outdoor and indoor means of the days it counts.
     """
     heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
     coordinator = entry.runtime_data
@@ -757,9 +759,15 @@ async def async_heating(
         }
 
     rows = await get_instance(hass).async_add_executor_job(read)
-    return _Answer(hass, entry, rows, house_ids).build(
-        dt_util.now(FRANCE_TIME_ZONE).date()
-    )
+    built = _Answer(hass, entry, rows, house_ids)
+    answer = built.build(dt_util.now(FRANCE_TIME_ZONE).date())
+    if weather_days and not answer["measured"]:
+        answer["weather_days"] = [
+            {"temperature": temperature, "indoor": built.indoor.get(day)}
+            for day, temperature in built.outdoor.items()
+            if day in built.house
+        ]
+    return answer
 
 
 def _day_of(timestamp: float) -> date:

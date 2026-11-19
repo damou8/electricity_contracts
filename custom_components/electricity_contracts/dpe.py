@@ -24,14 +24,24 @@ SURFACE = "surface"
 COEFFICIENT = "coefficient"
 AUXILIARIES = "auxiliaries"
 WATER = "water"
+SETPOINT = "setpoint"
+SETBACK = "setback"
+
+# The DPE heats to 19 °C, 3 °C less at night from 22:00 to 6:00 (méthode 3CL).
+DPE_SETPOINT = 19.0
+DPE_SETBACK = 3.0
+_NIGHT_SHARE = 8 / 24
 
 # The living area in m², the primary energy of a kWh of electricity (1.9 from
-# 1 January 2026), and the shares in % of the three uses.
+# 1 January 2026), the shares in % of the three uses, and the home's own
+# setpoint and night setback in °C, used without indoor thermometers.
 DEFAULTS: dict[str, float] = {
     SURFACE: 100.0,
     COEFFICIENT: 1.9,
     AUXILIARIES: 5.0,
     WATER: 15.0,
+    SETPOINT: DPE_SETPOINT,
+    SETBACK: DPE_SETBACK,
 }
 # The shares can't take all of the three uses: 30 + 60 leaves the heating 10 %.
 SETTINGS_SCHEMA: dict[Any, Any] = {
@@ -39,6 +49,8 @@ SETTINGS_SCHEMA: dict[Any, Any] = {
     vol.Required(COEFFICIENT): vol.All(vol.Coerce(float), vol.Range(min=1, max=3)),
     vol.Required(AUXILIARIES): vol.All(vol.Coerce(float), vol.Range(min=0, max=30)),
     vol.Required(WATER): vol.All(vol.Coerce(float), vol.Range(min=0, max=60)),
+    vol.Required(SETPOINT): vol.All(vol.Coerce(float), vol.Range(min=10, max=26)),
+    vol.Required(SETBACK): vol.All(vol.Coerce(float), vol.Range(min=0, max=10)),
 }
 
 # kg of CO₂ a kWh, as in the DPE (arrêté du 31 mars 2021).
@@ -90,11 +102,61 @@ def _class(value: float, bounds: tuple[int, ...]) -> str:
     return below[0] if below else _LETTERS[-1]
 
 
-def _uses(answer: dict[str, Any], settings: dict[str, float]) -> list[dict[str, Any]]:
+def _mean_temperature(setpoint: float, setback: float) -> float:
+    """Return the mean indoor temperature of a setpoint lowered at night."""
+    return setpoint - setback * _NIGHT_SHARE
+
+
+def _conventional(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, Any]:
+    """Say how much more heating the DPE's setpoint takes than the home's.
+
+    The weather line gives what a degree colder costs a day: moving the home's
+    mean indoor temperature to the DPE's moves its base by as much, on each day
+    of the year. The home's temperature is what its thermometers measured on
+    the heating days, else its setpoint setting. Without a line, nothing moves.
+    """
+    weather = answer["weather"]
+    if not weather or not weather["slope"] or weather["slope"] <= 0:
+        return {"applied": False, "extra": 0.0}
+    base, slope = weather["base"], weather["slope"]
+    days = [
+        day
+        for day in (answer["days"] if answer["measured"] else answer["weather_days"])
+        if day["temperature"] is not None
+    ]
+    measured = [
+        day["indoor"]
+        for day in days
+        if day["indoor"] is not None and day["temperature"] < base
+    ]
+    if measured:
+        indoor, source = sum(measured) / len(measured), "thermometers"
+    else:
+        indoor = _mean_temperature(settings[SETPOINT], settings[SETBACK])
+        source = "setting"
+    shift = _mean_temperature(DPE_SETPOINT, DPE_SETBACK) - indoor
+    extra = slope * sum(
+        max(0.0, base + shift - day["temperature"])
+        - max(0.0, base - day["temperature"])
+        for day in days
+    )
+    return {
+        "applied": True,
+        "source": source,
+        "indoor": round(indoor, 1),
+        "shift": round(shift, 1),
+        "extra": extra,
+    }
+
+
+def _uses(
+    answer: dict[str, Any], settings: dict[str, float], extra: float
+) -> list[dict[str, Any]]:
     """Return the kWh of the heating, the hot water and the auxiliaries.
 
     Each with its energy (gas or not) and where it comes from: measured,
-    estimated (by the Heating tab) or share (a setting). Empty without heating.
+    estimated (by the Heating tab) or share (a setting). `extra` is what the
+    DPE's setpoint adds to the heating. Empty without heating.
     """
     auxiliaries = settings[AUXILIARIES] / 100
     water_share = settings[WATER] / 100
@@ -112,15 +174,17 @@ def _uses(answer: dict[str, Any], settings: dict[str, float]) -> list[dict[str, 
         water = answer["totals"]["water"]
         water_gas = bool(answer["water_gas"])
         water_source = "measured" if answer["water_measured"] else "estimated"
+        heat = max(0.0, heat + extra)
         total = (heat + water) / (1 - auxiliaries)
     elif answer["measured"] and answer["with_water"]:
         # The hot water is in the heating statistics, but can't be told apart.
-        total = heat / (1 - auxiliaries)
-        water = total * water_share
-        heat -= water
+        water = heat / (1 - auxiliaries) * water_share
+        heat = max(0.0, heat - water + extra)
+        total = (heat + water) / (1 - auxiliaries)
         water_gas, water_source = gas, "share"
     else:
         # The hot water is elsewhere, unmeasured: an electric water heater.
+        heat = max(0.0, heat + extra)
         total = heat / (1 - auxiliaries - water_share)
         water = total * water_share
         water_gas, water_source = False, "share"
@@ -139,10 +203,12 @@ def _uses(answer: dict[str, Any], settings: dict[str, float]) -> list[dict[str, 
 def dpe_label(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, Any]:
     """Return the label of a heating answer: its classes and what each use counts.
 
-    `classes` is None when there is no heating to count.
+    `classes` is None when there is no heating to count. `conventional` tells
+    how the heating was moved to the DPE's setpoint.
     """
+    conventional = _conventional(answer, settings)
     rows = []
-    for item in _uses(answer, settings):
+    for item in _uses(answer, settings, conventional["extra"]):
         energy = item["energy"]
         primary = energy * (1.0 if item["gas"] else settings[COEFFICIENT])
         co2 = energy * (_CO2_GAS if item["gas"] else _CO2_ELECTRICITY[item["use"]])
@@ -154,8 +220,9 @@ def dpe_label(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, A
                 "co2": round(co2, 1),
             }
         )
+    conventional["extra"] = round(conventional["extra"], 1)
     if not rows:
-        return {"classes": None, "uses": []}
+        return {"classes": None, "uses": [], "conventional": conventional}
     surface = settings[SURFACE]
     energy = round(sum(row["primary"] for row in rows) / surface)
     climate = round(sum(row["co2"] for row in rows) / surface, 1)
@@ -171,6 +238,7 @@ def dpe_label(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, A
         "energy": energy,
         "climate": climate,
         "uses": rows,
+        "conventional": conventional,
     }
 
 
@@ -190,7 +258,9 @@ async def async_dpe(
     stop = day_start(end + timedelta(days=1))
     first, last = heating_window(entry, start, stop)
     settings = await async_load_settings(hass, entry.entry_id)
-    answer = await async_heating(hass, entry=entry, start=start, end=stop)
+    answer = await async_heating(
+        hass, entry=entry, start=start, end=stop, weather_days=True
+    )
     days = (_local_day(last) - _local_day(first)).days if last > first else 0
     return {
         "settings": settings,

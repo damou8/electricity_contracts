@@ -80,6 +80,12 @@ const STRINGS = {
     dpeInfoPeriod: "The label counts what the heating, the hot water and the auxiliaries (ventilation, pumps) used from {start} to {end}, divided by the living area. Lighting and appliances are not part of it.",
     dpeInfoFactors: "Primary energy: electricity × the coefficient below, gas × 1. Climate: electricity 0.079 kg CO₂/kWh for heating, 0.065 for hot water and 0.064 for the auxiliaries, gas 0.227.",
     dpeInfoClass: "The class shown is the worse of the two labels.",
+    dpeConventionalMeasured: "The DPE heats the home to 19 °C by day and 16 °C at night. Your thermometers measured {indoor} on average on heating days: the heating counts {after} instead of {before}.",
+    dpeConventionalSetting: "The DPE heats the home to 19 °C by day and 16 °C at night. With your setpoint, set below, the heating counts {after} instead of {before}.",
+    dpeConventionalSame: "The DPE heats the home to 19 °C by day and 16 °C at night, like your setpoint set below: the heating counts as it is.",
+    dpeConventionalNone: "The DPE heats the home to 19 °C by day and 16 °C at night. Here the heating counts as it is: it takes an outdoor temperature and enough heating days to know what a degree more costs.",
+    dpeSetpoint: "Heating temperature by day",
+    dpeSetback: "Lowered at night, 22:00 to 6:00",
     dpeInfoNotOfficial: "This is not a real DPE: an assessor rates the home itself (insulation, windows, heating system), not what you used.",
     dpePartial: "Your data starts on {start}: the label only covers {days} days instead of a year.",
     dpeNoData: "Not enough heating data over the last 12 months to compute a label.",
@@ -388,6 +394,12 @@ const STRINGS = {
     dpeInfoPeriod: "L'étiquette compte ce que le chauffage, l'eau chaude et les auxiliaires (ventilation, pompes) ont consommé du {start} au {end}, divisé par la surface habitable. L'éclairage et l'électroménager n'en font pas partie.",
     dpeInfoFactors: "Énergie primaire : électricité × le coefficient ci-dessous, gaz × 1. Climat : électricité 0,079 kg CO₂/kWh pour le chauffage, 0,065 pour l'eau chaude et 0,064 pour les auxiliaires, gaz 0,227.",
     dpeInfoClass: "La classe retenue est la plus mauvaise des deux étiquettes.",
+    dpeConventionalMeasured: "Le DPE chauffe le logement à 19 °C le jour et 16 °C la nuit. Vos thermomètres ont mesuré {indoor} en moyenne les jours de chauffe : le chauffage compte donc pour {after} au lieu de {before}.",
+    dpeConventionalSetting: "Le DPE chauffe le logement à 19 °C le jour et 16 °C la nuit. Avec votre consigne, réglée ci-dessous, le chauffage compte donc pour {after} au lieu de {before}.",
+    dpeConventionalSame: "Le DPE chauffe le logement à 19 °C le jour et 16 °C la nuit, comme votre consigne réglée ci-dessous : le chauffage compte tel quel.",
+    dpeConventionalNone: "Le DPE chauffe le logement à 19 °C le jour et 16 °C la nuit. Ici, le chauffage compte tel quel : il faut une température extérieure et assez de jours de chauffe pour savoir ce que coûte un degré de plus.",
+    dpeSetpoint: "Température de chauffage le jour",
+    dpeSetback: "Baisse la nuit, de 22 h à 6 h",
     dpeInfoNotOfficial: "Ce n'est pas un vrai DPE : un diagnostiqueur calcule l'étiquette d'après le logement lui-même (isolation, fenêtres, système de chauffage), pas d'après ce que vous avez consommé.",
     dpePartial: "Vos données commencent le {start} : l'étiquette ne couvre que {days} jours au lieu d'une année.",
     dpeNoData: "Pas assez de données de chauffage sur les 12 derniers mois pour calculer une étiquette.",
@@ -4351,11 +4363,28 @@ class ElectricityContractsPanel extends HTMLElement {
     const long = { day: "numeric", month: "long", year: "numeric" };
     const partial = dpe.days < DPE_YEAR_DAYS ? h("p", { class: "note" }, this._t("dpePartial", { start: this._dayLabel(dpe.start, long), days: dpe.days })) : null;
     return this._card(title, [this._views.dpe === "table" ? this._dpeTable(dpe) : this._dpeChart(dpe), partial], {
-      info: [this._t("dpeInfoPeriod", { start: this._dayLabel(dpe.start, long), end: this._dayLabel(dpe.end, long) }), this._t("dpeInfoFactors"), this._t("dpeInfoClass"), this._t("dpeInfoNotOfficial")],
+      info: [
+        this._t("dpeInfoPeriod", { start: this._dayLabel(dpe.start, long), end: this._dayLabel(dpe.end, long) }),
+        this._dpeConventional(dpe),
+        this._t("dpeInfoFactors"),
+        this._t("dpeInfoClass"),
+        this._t("dpeInfoNotOfficial"),
+      ],
       extra: this._dpeSettings(dpe),
-      uses: this._uses("heating", "dpeWater", "auxiliaries", "surface"),
+      uses: this._uses("heating", "dpeWater", "auxiliaries", "surface", "outdoor", dpe.conventional.source === "thermometers" ? "indoor" : null),
       tools: this._toggle("dpe"),
     });
+  }
+
+  // How the heating was moved to the DPE's setpoint, 19 °C by day and 16 °C at
+  // night, from the home's.
+  _dpeConventional(dpe) {
+    const conventional = dpe.conventional;
+    if (!conventional.applied) return this._t("dpeConventionalNone");
+    const after = dpe.uses.find((item) => item.use === "heating").energy;
+    const values = { indoor: `${this._number(conventional.indoor, 1)} °C`, after: this._kwh(after), before: this._kwh(after - conventional.extra) };
+    if (conventional.source === "thermometers") return this._t("dpeConventionalMeasured", values);
+    return this._t(conventional.shift === 0 ? "dpeConventionalSame" : "dpeConventionalSetting", values);
   }
 
   async _loadDpe(key, end) {
@@ -4450,6 +4479,7 @@ class ElectricityContractsPanel extends HTMLElement {
     const draft = this._dpeDraft;
     const water = dpe.uses.find((item) => item.use === "water");
     const waterUsed = water.source === "share";
+    const setpoint = dpe.conventional.applied && dpe.conventional.source === "setting";
     const status = h("span", { class: "dpe-status", role: "status" });
     const save = h("button", { type: "submit", class: "toggle primary" }, this._t("dpeSave"));
     let form = null;
@@ -4503,6 +4533,9 @@ class ElectricityContractsPanel extends HTMLElement {
         field("coefficient", this._t("dpeCoefficient"), 1, 3, "kWhEP/kWh"),
         field("auxiliaries", this._t("dpeAuxiliaries"), 0, 30, "%"),
         field("water", this._t("dpeWaterShare"), 0, 60, "%", this._t(waterHelp), waterUsed),
+        // The home's setpoint, without thermometers to measure it.
+        setpoint ? field("setpoint", this._t("dpeSetpoint"), 10, 26, "°C") : null,
+        setpoint ? field("setback", this._t("dpeSetback"), 0, 10, "°C") : null,
       ),
       admin
         ? h(

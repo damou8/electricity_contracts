@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockUser
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
-from custom_components.electricity_contracts.const import DOMAIN
+from custom_components.electricity_contracts.const import CONF_TEMPERATURE, DOMAIN
 from custom_components.electricity_contracts.dpe import (
     DEFAULTS,
     _class,
@@ -17,12 +17,13 @@ from custom_components.electricity_contracts.dpe import (
     settings_store,
 )
 
-from .conftest import make_entry
+from .conftest import TEMPERATURE_ID, TEMPO_CONTRACT, make_entry
 from .test_comparison import setup_entry
 from .test_heating import (
     BASE_CONTRACT,
     DAYS,
     GAS_OPTIONS,
+    cold_days,  # noqa: F401 - a fixture
     gas_home,  # noqa: F401 - a fixture
 )
 from .test_websocket import command, result
@@ -39,6 +40,8 @@ def answer(**changes: Any) -> dict[str, Any]:
         "water_gas": False,
         "totals": {"heating": 6800.0, "water": 1900.0},
         "estimated": None,
+        "weather": None,
+        "days": [],
     }
     return {**base, **changes}
 
@@ -128,11 +131,71 @@ def test_estimated_heating() -> None:
 
 
 def test_no_heating_no_label() -> None:
-    assert dpe_label(answer(totals={"heating": 0.0, "water": 300.0}), DEFAULTS) == {
-        "classes": None,
-        "uses": [],
-    }
+    label = dpe_label(answer(totals={"heating": 0.0, "water": 300.0}), DEFAULTS)
+    assert (label["classes"], label["uses"]) == (None, [])
     assert dpe_label(answer(measured=False, totals=None), DEFAULTS)["classes"] is None
+
+
+WEATHER = {"base": 18.0, "slope": 2.0}
+
+
+def test_moved_to_the_dpe_setpoint_from_thermometers() -> None:
+    # 20 °C measured on the heating day, 2 °C more than the DPE's mean: 2 kWh
+    # less a degree day. The warm day and the day without temperature count not.
+    label = dpe_label(
+        answer(
+            weather=WEATHER,
+            days=[
+                {"temperature": 8.0, "indoor": 20.0},
+                {"temperature": 20.0, "indoor": 24.0},
+                {"temperature": None, "indoor": 20.0},
+            ],
+        ),
+        DEFAULTS,
+    )
+    assert label["conventional"] == {
+        "applied": True,
+        "source": "thermometers",
+        "indoor": 20.0,
+        "shift": -2.0,
+        "extra": -4.0,
+    }
+    assert uses(label)["heating"]["energy"] == 6796.0
+
+
+def test_moved_to_the_dpe_setpoint_from_the_settings() -> None:
+    # Without thermometers, 21 °C day and night: 3 °C more than the DPE's.
+    label = dpe_label(
+        answer(
+            measured=False,
+            with_water=False,
+            water_split=False,
+            totals=None,
+            estimated={"heating": 16.0},
+            weather=WEATHER,
+            weather_days=[{"temperature": 10.0, "indoor": None}],
+        ),
+        {**DEFAULTS, "setpoint": 21.0, "setback": 0.0},
+    )
+    assert label["conventional"]["source"] == "setting"
+    assert label["conventional"]["extra"] == -6.0
+    assert uses(label)["heating"]["energy"] == 10.0
+
+
+def test_a_colder_home_gets_more_heating() -> None:
+    label = dpe_label(
+        answer(weather=WEATHER, days=[{"temperature": 5.0, "indoor": None}]),
+        {**DEFAULTS, "setpoint": 17.0, "setback": 0.0},
+    )
+    assert label["conventional"]["extra"] == 2.0
+
+
+def test_no_weather_line_nothing_moves() -> None:
+    label = dpe_label(
+        answer(weather={"base": 18.0, "slope": None}), {**DEFAULTS, "setpoint": 22.0}
+    )
+    assert label["conventional"] == {"applied": False, "extra": 0.0}
+    assert uses(label)["heating"]["energy"] == 6800.0
 
 
 def test_class_bounds() -> None:
@@ -160,7 +223,14 @@ async def dpe(
     return label
 
 
-SETTINGS = {"surface": 80, "coefficient": 2.3, "auxiliaries": 4, "water": 20}
+SETTINGS = {
+    "surface": 80,
+    "coefficient": 2.3,
+    "auxiliaries": 4,
+    "water": 20,
+    "setpoint": 20,
+    "setback": 2,
+}
 
 
 @pytest.mark.usefixtures("sources")
@@ -188,6 +258,14 @@ async def test_label_of_a_gas_home(
     }
     assert rows["heating"]["energy"] == pytest.approx(sum(gas_home) - 5.0 * DAYS)
     assert label["classes"]["label"] == "A"
+    # The setpoint of the DPE by default: nothing moves.
+    assert label["conventional"] == {
+        "applied": True,
+        "source": "setting",
+        "indoor": 18.0,
+        "shift": 0.0,
+        "extra": 0.0,
+    }
 
     saved = await result(
         hass_ws_client,
@@ -199,8 +277,17 @@ async def test_label_of_a_gas_home(
     assert saved == {key: float(value) for key, value in SETTINGS.items()}
     label = await dpe(hass, hass_ws_client, entry.entry_id, "2026-03-17")
     assert label["settings"] == saved
-    assert uses(label)["auxiliaries"]["energy"] == pytest.approx(
-        sum(gas_home) / 0.96 * 0.04, abs=0.1
+    # 20 °C lowered by 2 °C at night: 19.3 °C, 1.3 °C more than the DPE's.
+    conventional = label["conventional"]
+    assert conventional["source"] == "setting"
+    assert (conventional["indoor"], conventional["shift"]) == (19.3, -1.3)
+    assert conventional["extra"] < 0
+    rows = uses(label)
+    assert rows["heating"]["energy"] == pytest.approx(
+        sum(gas_home) - 5.0 * DAYS + conventional["extra"], abs=0.1
+    )
+    assert rows["auxiliaries"]["energy"] == pytest.approx(
+        (rows["heating"]["energy"] + rows["water"]["energy"]) / 0.96 * 0.04, abs=0.1
     )
 
     # Removing the source forgets its settings.
@@ -224,7 +311,14 @@ async def test_label_before_the_data(
 @pytest.mark.usefixtures("sources")
 @pytest.mark.parametrize(
     "change",
-    [{"surface": 2}, {"coefficient": 4}, {"auxiliaries": 31}, {"water": 61}],
+    [
+        {"surface": 2},
+        {"coefficient": 4},
+        {"auxiliaries": 31},
+        {"water": 61},
+        {"setpoint": 9},
+        {"setback": 11},
+    ],
 )
 async def test_settings_are_bounded(
     hass: HomeAssistant,
@@ -275,3 +369,32 @@ async def test_label_of_an_unknown_entry(
     ):
         response = await command(hass_ws_client, hass, entry_id="unknown", **message)
         assert response["error"]["code"] == "not_found"
+
+
+@pytest.mark.usefixtures("sources")
+async def test_label_of_an_estimated_heating(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    cold_days: list[float],  # noqa: F811
+) -> None:
+    entry = await setup_entry(
+        hass,
+        make_entry([TEMPO_CONTRACT], options={CONF_TEMPERATURE: TEMPERATURE_ID}),
+    )
+    await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/dpe/save",
+        entry_id=entry.entry_id,
+        **{**SETTINGS, "setpoint": 19, "setback": 0},
+    )
+    label = await dpe(hass, hass_ws_client, entry.entry_id, "2026-03-17")
+    # 2 kWh a degree day; 19 °C day and night is 1 °C more than the DPE's, on
+    # the 15 days below 18 °C.
+    rows = uses(label)
+    assert rows["heating"]["source"] == "estimated"
+    assert label["conventional"]["shift"] == -1.0
+    assert label["conventional"]["extra"] == pytest.approx(-2 * 15, abs=0.1)
+    assert rows["heating"]["energy"] == pytest.approx(
+        2 * sum(range(DAYS)) - 30, abs=0.1
+    )
