@@ -926,6 +926,7 @@ main {
 .method p.hint { margin-top: 10px; }
 .dpe { display: flex; align-items: center; gap: 24px; }
 .dpe-letter { width: 64px; height: 64px; flex: none; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 700; }
+.dpe-letter.partial { background: var(--ec-wash); color: var(--ec-muted); border: 2px dashed var(--divider-color, var(--ec-axis)); box-sizing: border-box; }
 .dpe-scales { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .dpe-scale { display: flex; flex-direction: column; gap: 4px; }
 .dpe-scale h3 { margin: 0 0 4px; font-size: 13px; font-weight: 400; color: var(--ec-text-2); }
@@ -4426,13 +4427,15 @@ class ElectricityContractsPanel extends HTMLElement {
         }),
       );
     };
-    // The letter takes the colors of the scale that sets it.
+    // The letter takes the colors of the scale that sets it, grey when the year
+    // isn't whole: without its winter, the class means little.
     const from = classes.label === classes.energy ? "energy" : "climate";
     const [background, color] = DPE_SCALES[from].colors[DPE_LETTERS.indexOf(classes.label)];
+    const partial = dpe.days < DPE_YEAR_DAYS;
     return h(
       "div",
       { class: "dpe" },
-      h("div", { class: "dpe-letter", role: "img", "aria-label": this._t("dpeClass", { letter: classes.label }), style: { background, color } }, classes.label),
+      h("div", { class: partial ? "dpe-letter partial" : "dpe-letter", role: "img", "aria-label": this._t("dpeClass", { letter: classes.label }), style: partial ? {} : { background, color } }, classes.label),
       h("div", { class: "dpe-scales" }, scale("energy", dpe.energy), scale("climate", dpe.climate)),
     );
   }
@@ -4482,7 +4485,8 @@ class ElectricityContractsPanel extends HTMLElement {
     const refresh = () => {
       const changed = Object.keys(dpe.settings).some((key) => Number(draft[key]) !== dpe.settings[key]);
       save.disabled = !changed || !form.checkValidity();
-      status.textContent = changed ? this._t("dpeUnsaved") : this._dpeStatus || "";
+      // What the last save said, until the next keystroke.
+      status.textContent = this._dpeStatus || (changed ? this._t("dpeUnsaved") : "");
     };
     const field = (key, label, min, max, unit, help = null) =>
       h(

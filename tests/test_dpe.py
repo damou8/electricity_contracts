@@ -16,6 +16,7 @@ from custom_components.electricity_contracts.dpe import (
     dpe_label,
     settings_store,
 )
+from custom_components.electricity_contracts.heating import _Day, counted_days
 
 from .conftest import TEMPERATURE_ID, TEMPO_CONTRACT, make_entry
 from .test_comparison import setup_entry
@@ -196,6 +197,12 @@ def test_no_weather_line_nothing_moves() -> None:
     )
     assert label["conventional"] == {"applied": False, "extra": 0.0}
     assert uses(label)["heating"]["energy"] == 6800.0
+
+
+def test_an_estimate_counts_the_days_of_the_source() -> None:
+    # A day with an outdoor temperature but no consumption counts not.
+    first, second = date(2026, 3, 2), date(2026, 3, 3)
+    assert counted_days({first: 5.0, second: 6.0}, {first: _Day()}) == {first: 5.0}
 
 
 def test_class_bounds() -> None:

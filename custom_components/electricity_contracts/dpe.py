@@ -16,7 +16,7 @@ from homeassistant.helpers.storage import Store
 from .comparison import day_start
 from .const import DOMAIN, FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
-from .heating import async_heating, heating_window
+from .heating import async_heating_between, heating_window
 
 STORE_VERSION = 1
 
@@ -258,8 +258,8 @@ async def async_dpe(
     stop = day_start(end + timedelta(days=1))
     first, last = heating_window(entry, start, stop)
     settings = await async_load_settings(hass, entry.entry_id)
-    answer = await async_heating(
-        hass, entry=entry, start=start, end=stop, weather_days=True
+    answer = await async_heating_between(
+        hass, entry=entry, start=first, end=last, weather_days=True
     )
     days = (_local_day(last) - _local_day(first)).days if last > first else 0
     return {
