@@ -647,6 +647,22 @@ def _fitted(weather: dict[str, Any] | None) -> bool:
     return weather is not None and weather["slope"] is not None and weather["slope"] > 0
 
 
+def heating_window(
+    entry: ElectricityContractsConfigEntry, start: datetime, end: datetime
+) -> tuple[datetime, datetime]:
+    """Narrow a window to the hours heating can be read on.
+
+    With a meter, like a comparison, so the figures agree with the other tabs;
+    without one, to where the heating statistics are.
+    """
+    coordinator = entry.runtime_data
+    if coordinator.statistic_id:
+        return narrow_window(coordinator.data.costing, contracts(entry), start, end)
+    start = max(start, day_start(coordinator.data.sources.first_day))
+    heating_end = coordinator.data.heating_end
+    return start, max(start, min(end, heating_end)) if heating_end else start
+
+
 async def async_heating(
     hass: HomeAssistant,
     *,
@@ -663,13 +679,7 @@ async def async_heating(
     heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
     coordinator = entry.runtime_data
     status = coordinator.data.costing
-    if coordinator.statistic_id:
-        start, end = narrow_window(status, contracts(entry), start, end)
-    else:
-        # Without a meter, the window is where the heating statistics are.
-        start = max(start, day_start(coordinator.data.sources.first_day))
-        heating_end = coordinator.data.heating_end
-        end = max(start, min(end, heating_end)) if heating_end else start
+    start, end = heating_window(entry, start, end)
     actual = coordinator.costing.actual_statistics() if status.actual else None
     house_ids = (actual.energy, actual.variable) if actual is not None else None
     measured = [*heating.statistics]
