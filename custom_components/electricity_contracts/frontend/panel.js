@@ -929,6 +929,7 @@ main {
 .uses dd { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
 .tag { display: inline-flex; align-items: center; min-height: 24px; box-sizing: border-box; padding: 2px 9px; border: 1px solid transparent; border-radius: 12px; background: color-mix(in srgb, var(--tag) 22%, transparent); color: var(--ec-text); font-size: 12px; line-height: 1.3; }
 .tag.estimated { border: 1px dashed var(--tag); background: transparent; }
+.uses .use-period { align-self: center; color: var(--ec-text-2); font-size: 12px; }
 .tag.missing { border-color: var(--ec-warn); background: transparent; color: var(--ec-warn); }
 @media (max-width: 480px) { .uses dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } .uses dd { margin-bottom: 6px; } }
 .method p.hint { margin-top: 10px; }
@@ -2053,6 +2054,7 @@ class ElectricityContractsPanel extends HTMLElement {
                         "dd",
                         { style: { "--tag": row.hue } },
                         row.values.map((value) => h("span", { class: row.state ? `tag ${row.state}` : "tag" }, value)),
+                        row.period ? h("span", { class: "use-period" }, row.period) : null,
                       ),
                     ]),
                   ),
@@ -2099,10 +2101,10 @@ class ElectricityContractsPanel extends HTMLElement {
         if (entry.meter === false || !daily) return this._use("consumption");
         const name = inputs.meter === "linky" ? "Linky" : this._t("meterTag");
         const span = (start, end) => this._t("fromTo", { start: this._dayLabel(start), end: this._dayLabel(end) });
-        const rows = [row(ICONS.meter, "var(--ec-money)", "useConsumption", [name, this._t("stepDay"), span(daily.first, daily.last)])];
-        if (this._costed()) {
-          rows.push(row(ICONS.meter, "var(--ec-money)", "useConsumption", [name, this._t("stepHour"), span(this._data.start.slice(0, 10), lastDayOf(this._data.end))]));
-        }
+        // The dates follow the tags, in plain text.
+        const dated = (step, start, end) => ({ ...row(ICONS.meter, "var(--ec-money)", "useConsumption", [name, this._t(step)]), period: span(start, end) });
+        const rows = [dated("stepDay", daily.first, daily.last)];
+        if (this._costed()) rows.push(dated("stepHour", this._data.start.slice(0, 10), lastDayOf(this._data.end)));
         return rows;
       }
       case "contract":
