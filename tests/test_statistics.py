@@ -2,6 +2,7 @@
 
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from elec_tariffs import (
@@ -27,10 +28,15 @@ from homeassistant.const import ATTR_CONFIG_ENTRY_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.recorder import get_instance
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.helpers.update_coordinator import UpdateFailed
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
+from sqlalchemy.exc import OperationalError
 
 from custom_components.electricity_contracts.const import (
     CONF_PERIODS,
@@ -374,6 +380,41 @@ async def test_rewritten_source_rewrites_everything(hass: HomeAssistant) -> None
     await refresh(hass, entry)
     found = (await rows(hass, f"{BASE}_energy_base"))[f"{BASE}_energy_base"]
     assert len(found) == 48
+    assert found[-1]["sum"] == pytest.approx(48.0)
+
+
+async def test_failed_clear_fails_the_update(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    entry = await setup_entry(hass, make_entry([BASE_CONTRACT]))
+    await add_statistic(hass, wh=1000.0)
+    attempted = hass.loop.create_future()
+    error = OperationalError("DELETE", {}, Exception("database is locked"))
+
+    def locked(*args: Any) -> None:
+        del args
+        hass.loop.call_soon_threadsafe(attempted.set_result, None)
+        raise error
+
+    coordinator: ElectricityContractsCoordinator = entry.runtime_data
+    with patch(
+        "homeassistant.components.recorder.statistics.clear_statistics",
+        side_effect=locked,
+    ):
+        update = hass.async_create_task(coordinator.async_refresh())
+        await attempted
+        # The recorder never says the clear is done: the wait gives up.
+        freezer.tick(timedelta(minutes=11))
+        async_fire_time_changed(hass)
+        await update
+    assert not coordinator.last_update_success
+    assert isinstance(coordinator.last_exception, UpdateFailed)
+    assert coordinator.last_exception.translation_key == "recorder_busy"
+
+    # The next update clears and writes again.
+    await refresh(hass, entry)
+    assert coordinator.last_update_success
+    found = (await rows(hass, f"{BASE}_energy_base"))[f"{BASE}_energy_base"]
     assert found[-1]["sum"] == pytest.approx(48.0)
 
 

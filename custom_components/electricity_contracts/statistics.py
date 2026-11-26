@@ -11,6 +11,7 @@ periods, the consumption source, or the source's past values (a Linky import
 started again).
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -77,6 +78,9 @@ _EPOCH = datetime(2000, 1, 1, tzinfo=UTC)
 # How far before the last hour written to read the source again, so that a daily
 # row can be told from an hourly one by the rows around it.
 _LOOKBACK = timedelta(days=2)
+# How long to wait for the recorder to clear statistics, in seconds. A clear
+# queued behind a first import can wait minutes.
+_CLEAR_TIMEOUT = 600
 
 _NAMES: Mapping[str, Mapping[str, str]] = {
     "en": {
@@ -128,6 +132,10 @@ _TRANCHE_NAMES: Mapping[str, Mapping[Tranche, str]] = {
 
 class RecorderNotStartedError(Exception):
     """Statistics must be cleared, and the recorder only does it once started."""
+
+
+class ClearFailedError(Exception):
+    """The recorder didn't clear statistics in time, or failed to."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -756,7 +764,11 @@ async def async_statistic_first_day(
 
 
 async def async_clear_statistics(hass: HomeAssistant, ids: list[str]) -> None:
-    """Clear statistics and wait until the recorder has done it."""
+    """Clear statistics and wait until the recorder has done it.
+
+    Raise ClearFailedError if it hasn't after `_CLEAR_TIMEOUT`: the recorder
+    only says when a clear worked, so after a database error it never would.
+    """
     if not ids:
         return
     # The recorder only runs its queue once Home Assistant has started:
@@ -774,7 +786,11 @@ async def async_clear_statistics(hass: HomeAssistant, ids: list[str]) -> None:
         hass.loop.call_soon_threadsafe(_set_done)
 
     get_instance(hass).async_clear_statistics(ids, on_done=_on_done)
-    await done
+    try:
+        async with asyncio.timeout(_CLEAR_TIMEOUT):
+            await done
+    except TimeoutError as err:
+        raise ClearFailedError from err
 
 
 async def async_remove_statistics(hass: HomeAssistant, entry_id: str) -> None:
