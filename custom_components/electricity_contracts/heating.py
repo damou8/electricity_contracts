@@ -41,7 +41,7 @@ from .data import (
     price_periods,
     source_statistic,
 )
-from .insights import DEGREE_DAY_BASE, daily_means, weather_fit
+from .insights import DEGREE_DAY_BASE, daily_means, line_heating, weather_fit
 from .weather import outdoor_fill, outdoor_ids, outdoor_rows, outdoor_statistic
 
 # kWh below which a day is taken as costed in full.
@@ -349,8 +349,8 @@ def _estimated(
     weather: dict[str, Any], outdoor: dict[date, float], house: dict[date, _Day]
 ) -> dict[str, Any]:
     """Estimate the heating in the source's consumption from its fit."""
-    energy = weather["slope"] * sum(
-        max(0.0, weather["base"] - temperature)
+    energy = sum(
+        line_heating(weather, weather["base"] - temperature)
         for temperature in counted_days(outdoor, house).values()
     )
     house_energy = sum(item.energy for item in house.values())
@@ -415,11 +415,11 @@ class _Answer:
             _house(read.house, *house_ids) if house_ids else ({}, {})
         )
 
-    def _water_per_day(self) -> float | None:
+    def _water_per_day(self, warm_from: float) -> float | None:
         """Return what a warm day of the last year used, None without enough of them.
 
-        Read on the year rather than the window: a winter month has no day
-        without heating.
+        A day is warm from `warm_from` outside. Read on the year rather than the
+        window: a winter month has no day without heating.
         """
         outdoor = self.heating.outdoor
         if outdoor is None:
@@ -437,7 +437,7 @@ class _Answer:
         warm = [
             value
             for day, value in energy.items()
-            if temperatures.get(day, -273.0) >= DEGREE_DAY_BASE
+            if temperatures.get(day, -273.0) >= warm_from
         ]
         return median(warm) if len(warm) >= _MIN_WARM_DAYS else None
 
@@ -504,8 +504,12 @@ class _Answer:
         weather = weather_fit(fit_days, self.outdoor) if heating.outdoor else None
         # Hot water inside the heating statistics and not measured: what a day
         # without heating uses.
+        # No heating from 18 °C, or from the fitted base when it is higher.
+        warm_from = max(DEGREE_DAY_BASE, weather["base"] if weather else 0.0)
         water_per_day = (
-            self._water_per_day() if heating.with_water and water is None else None
+            self._water_per_day(warm_from)
+            if heating.with_water and water is None
+            else None
         )
         split = _split(
             usage,
@@ -552,6 +556,7 @@ class _Answer:
                 "water_measured": water is not None,
                 "water_split": water is not None or water_per_day is not None,
                 "water_per_day": _round(water_per_day, 2),
+                "water_warm_from": warm_from if water_per_day is not None else None,
                 # The hot water is gas, outside the electricity bill.
                 "water_gas": water_gas,
                 "days": split.days,
@@ -623,6 +628,7 @@ class _Answer:
             "water_measured": False,
             "water_split": False,
             "water_per_day": None,
+            "water_warm_from": None,
             "has_outdoor": heating.outdoor is not None,
             "has_indoor": bool(heating.indoor),
             "days": [],

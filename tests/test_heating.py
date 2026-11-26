@@ -355,8 +355,10 @@ async def test_gas_with_hot_water(
     assert answer["water_split"] is True
     assert answer["water_measured"] is False
     assert answer["water_gas"] is True
-    # The median of the warm days, the 3 showers aside.
+    # The median of the warm days, the 3 showers aside: from 18 °C, or from
+    # where the heating starts when that's higher.
     assert answer["water_per_day"] == 5.0
+    assert answer["water_warm_from"] == max(18.0, answer["weather"]["base"])
     totals = answer["totals"]
     # Each day gives up to 5 kWh of hot water: all days use more.
     assert totals["water"] == pytest.approx(5.0 * DAYS)
