@@ -249,8 +249,9 @@ def dpe_label(
     """Return the label of a heating answer: its classes and what each use counts.
 
     `classes` is None when there is no heating to count, or no living area to
-    divide it by: the uses are then still given. `conventional` tells how the
-    heating was moved to the DPE's setpoint.
+    divide it by: the uses are then still given, and `missing` is "surface" when
+    only the area lacks. `conventional` tells how the heating was moved to the
+    DPE's setpoint.
     """
     surface = settings[SURFACE]
     # Only the living area can be missing.
@@ -271,7 +272,12 @@ def dpe_label(
         )
     conventional["extra"] = round(conventional["extra"], 1)
     if not rows or surface is None:
-        return {"classes": None, "uses": rows, "conventional": conventional}
+        return {
+            "classes": None,
+            "missing": "surface" if rows else None,
+            "uses": rows,
+            "conventional": conventional,
+        }
     energy = round(sum(row["primary"] for row in rows) / surface)
     climate = round(sum(row["co2"] for row in rows) / surface, 1)
     energy_class = _class(energy, ENERGY_BOUNDS)
@@ -283,6 +289,7 @@ def dpe_label(
             # The worse of the two.
             "label": max(energy_class, climate_class),
         },
+        "missing": None,
         "energy": energy,
         "climate": climate,
         "uses": rows,

@@ -87,6 +87,20 @@ def test_electric_heating_and_measured_water() -> None:
     # 6 800 x 0.079 + 1 900 x 0.065 + 458 x 0.064, over 100 m².
     assert label["climate"] == 6.9
     assert label["classes"] == {"energy": "C", "climate": "B", "label": "C"}
+    assert label["missing"] is None
+
+
+def test_no_living_area_no_class() -> None:
+    # The uses are still counted: the card asks for the area beside them.
+    label = dpe_label(answer(), {**HOME, "surface": None})
+    assert label["classes"] is None
+    assert label["missing"] == "surface"
+    assert uses(label) == uses(dpe_label(answer(), HOME))
+    # Without heating either, nothing is missing that the area would give.
+    empty = dpe_label(
+        answer(totals={"heating": 0.0, "water": 300.0}), {**HOME, "surface": None}
+    )
+    assert (empty["classes"], empty["missing"]) == (None, None)
 
 
 def test_gas_heating_with_a_hot_water_share() -> None:
@@ -158,7 +172,7 @@ def test_estimated_heating() -> None:
 
 def test_no_heating_no_label() -> None:
     label = dpe_label(answer(totals={"heating": 0.0, "water": 300.0}), HOME)
-    assert (label["classes"], label["uses"]) == (None, [])
+    assert (label["classes"], label["missing"], label["uses"]) == (None, None, [])
     assert dpe_label(answer(measured=False, totals=None), HOME)["classes"] is None
 
 
@@ -291,6 +305,7 @@ async def test_label_of_a_gas_home(
     assert rows["heating"]["energy"] == pytest.approx(sum(gas_home) - 5.0 * DAYS)
     # No living area by default: no class until it's given.
     assert label["classes"] is None
+    assert label["missing"] == "surface"
     assert "energy" not in label
     await result(
         hass_ws_client,

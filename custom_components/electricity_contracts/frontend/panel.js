@@ -94,6 +94,7 @@ const STRINGS = {
     dpeSettings: "Settings",
     dpeSurface: "Living area (Carrez law)",
     dpeSurfaceNeeded: "Enter your home's living area to estimate its label.",
+    dpeSurfaceNeededAdmin: "An administrator must enter the home's living area to estimate its label.",
     dpeCoefficient: "Electricity coefficient",
     dpeAuxiliaries: "Auxiliaries share",
     dpeWaterShare: "Hot water share",
@@ -414,6 +415,7 @@ const STRINGS = {
     dpeSettings: "Réglages",
     dpeSurface: "Surface habitable (loi Carrez)",
     dpeSurfaceNeeded: "Indiquez la surface habitable de votre logement pour estimer son étiquette.",
+    dpeSurfaceNeededAdmin: "Un administrateur doit indiquer la surface habitable du logement pour estimer son étiquette.",
     dpeCoefficient: "Coefficient de l'électricité",
     dpeAuxiliaries: "Part des auxiliaires",
     dpeWaterShare: "Part de l'eau chaude",
@@ -2173,7 +2175,6 @@ class ElectricityContractsPanel extends HTMLElement {
       case "surface": {
         if (!this._dpe) return null;
         const surface = this._dpe.settings.surface;
-        if (surface === null) return null;
         return row(ICONS.area, "var(--ec-s1)", "useSurface", [`${this._number(surface, Number.isInteger(surface) ? 0 : 1)} m²`]);
       }
       case "gasPrice": {
@@ -4489,8 +4490,9 @@ class ElectricityContractsPanel extends HTMLElement {
     const dpe = this._dpeEntry === entry.entry_id ? this._dpe : null;
     if (!dpe) return this._loadingCard();
     // Without a living area, the label waits for it: the settings come first.
-    if (!dpe.classes && dpe.uses.length && dpe.settings.surface === null) {
-      return this._card(title, [h("p", { class: "message" }, this._t("dpeSurfaceNeeded")), this._dpeSettings(dpe)]);
+    if (dpe.missing === "surface") {
+      const admin = Boolean(this._hass.user && this._hass.user.is_admin);
+      return this._card(title, [h("p", { class: "message" }, this._t(admin ? "dpeSurfaceNeeded" : "dpeSurfaceNeededAdmin")), this._dpeSettings(dpe)]);
     }
     if (!dpe.classes) return h("section", { class: "card message" }, this._t("dpeNoData"));
     const long = { day: "numeric", month: "long", year: "numeric" };
@@ -4700,7 +4702,8 @@ class ElectricityContractsPanel extends HTMLElement {
                 type: "button",
                 class: "toggle",
                 onclick: () => {
-                  Object.assign(draft, dpe.defaults);
+                  // The living area has no default: the one typed stays.
+                  Object.assign(draft, { ...dpe.defaults, surface: dpe.defaults.surface ?? draft.surface });
                   for (const input of form.querySelectorAll("input")) input.value = draft[input.name] ?? "";
                   this._dpeStatus = null;
                   refresh();
