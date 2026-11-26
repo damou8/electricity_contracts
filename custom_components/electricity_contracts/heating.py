@@ -386,13 +386,18 @@ def counted_days(
 def _estimated(
     weather: dict[str, Any], outdoor: dict[date, float], house: dict[date, _Day]
 ) -> dict[str, Any]:
-    """Estimate the heating in the source's consumption from its fit."""
+    """Estimate the heating in the source's consumption from its fit.
+
+    Only the days with an outdoor temperature are estimated, so its share and
+    price are those of the same days.
+    """
+    counted = counted_days(outdoor, house)
     energy = sum(
         line_heating(weather, weather["base"] - temperature)
-        for temperature in counted_days(outdoor, house).values()
+        for temperature in counted.values()
     )
-    house_energy = sum(item.energy for item in house.values())
-    house_cost = sum(item.cost for item in house.values())
+    house_energy = sum(house[day].energy for day in counted)
+    house_cost = sum(house[day].cost for day in counted)
     price = house_cost / house_energy if house_energy > 0 else None
     return {
         "heating": round(energy, 3),
