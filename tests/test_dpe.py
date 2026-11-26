@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 from custom_components.electricity_contracts.const import (
     CONF_HEATING_STATISTICS,
     CONF_TEMPERATURE,
+    CONF_WEATHER,
     DOMAIN,
     FRANCE_TIME_ZONE,
     SECTION_HEATING,
@@ -520,6 +521,7 @@ async def test_linky_days_estimate_the_heating_before_the_window(
         "end": "2026-02-28",
         "heating": 336.0,
     }
+    assert label["unestimated"] is None
     rows = uses(label)
     assert rows["heating"]["source"] == "estimated"
     assert rows["heating"]["energy"] == pytest.approx(336.0, abs=0.1)
@@ -536,6 +538,74 @@ async def test_linky_days_estimate_the_heating_before_the_window(
     label = await dpe(hass, hass_ws_client, entry.entry_id, "2026-03-02")
     assert label["conventional"]["extra"] == pytest.approx(-32.0, abs=0.1)
     assert uses(label)["heating"]["energy"] == pytest.approx(304.0, abs=0.1)
+
+
+@pytest.mark.parametrize(
+    ("first_day", "open_meteo", "estimated", "unestimated"),
+    [
+        # No outdoor temperature before the window: the Linky's days are left
+        # out, rather than counted without heating.
+        (None, False, None, ("2026-02-13", "2026-02-28")),
+        # From 15 February only: the estimate starts there, on 16 + 15 + ... + 3
+        # degree days.
+        (
+            2,
+            True,
+            ("2026-02-15", 2.0 * sum(range(3, 17))),
+            ("2026-02-13", "2026-02-14"),
+        ),
+    ],
+)
+@pytest.mark.usefixtures("sources")
+async def test_linky_days_without_temperature_are_left_out(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    *,
+    first_day: int | None,
+    open_meteo: bool,
+    estimated: tuple[str, float] | None,
+    unestimated: tuple[str, str],
+) -> None:
+    await hass.config.async_update(time_zone="Europe/Paris")
+    await add_linky(
+        hass,
+        [(10 + 2 * (18 - index)) * 1000.0 for index in range(16)],
+        datetime(2026, 3, 1, tzinfo=FRANCE_TIME_ZONE),
+        [500.0] * 48,
+    )
+    if first_day is not None:
+        await add_temperature(
+            hass,
+            [float(index) for index in range(first_day, 16) for _ in range(24)],
+            first=_hours_from_first(
+                datetime.combine(FEBRUARY[first_day], time(), FRANCE_TIME_ZONE)
+            ),
+        )
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [TEMPO_CONTRACT],
+            statistic_id=LINKY_DAYS,
+            options={CONF_TEMPERATURE: TEMPERATURE_ID, CONF_WEATHER: open_meteo},
+        ),
+    )
+    label = await dpe(hass, hass_ws_client, entry.entry_id, "2026-03-02")
+    assert label["unestimated"] == {
+        "start": unestimated[0],
+        "end": unestimated[1],
+        "open_meteo": open_meteo,
+    }
+    if estimated is None:
+        assert label["estimated"] is None
+        assert (label["start"], label["days"]) == ("2026-03-01", 2)
+    else:
+        start, heating = estimated
+        assert label["estimated"] == {
+            "start": start,
+            "end": "2026-02-28",
+            "heating": heating,
+        }
+        assert (label["start"], label["days"]) == (start, 16)
 
 
 def test_hot_water_inside_the_heating_before_it_is_measured() -> None:

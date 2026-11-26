@@ -22,7 +22,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .comparison import day_start
-from .const import DOMAIN, FRANCE_TIME_ZONE
+from .const import CONF_WEATHER, DOMAIN, FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
 from .data import Heating, source_statistic
 from .heating import async_heating_between, heating_window
@@ -290,11 +290,14 @@ async def _async_linky_heating(
     entry: ElectricityContractsConfigEntry,
     start: datetime,
     end: datetime,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Estimate the electric heating from `start` to `end` from the Linky's days.
 
     Each day's consumption is fitted on its heating degree days, like the weather
-    line: the slope times the degree days is the heating. Without a line, none.
+    line: the slope times the degree days is the heating. Only the days with an
+    outdoor temperature count, so the estimate starts at the first of them.
+    Without a line, None: those days are left out rather than counted without
+    heating.
     """
     source_id = source_statistic(entry)
     assert source_id is not None
@@ -344,17 +347,16 @@ async def _async_linky_heating(
     weather = weather_fit(
         {day: {"energy": kwh} for day, kwh in energy.items()}, outdoor
     )
-    counted = {day: outdoor[day] for day in energy if day in outdoor}
-    heat = (
-        weather["slope"]
-        * sum(max(0.0, weather["base"] - value) for value in counted.values())
-        if _fitted(weather)
-        else 0.0
+    if not _fitted(weather):
+        return None
+    counted = {day: outdoor[day] for day in sorted(energy) if day in outdoor}
+    heat = weather["slope"] * sum(
+        max(0.0, weather["base"] - value) for value in counted.values()
     )
     return {
-        "start": _local_day(start).isoformat(),
+        "start": min(counted).isoformat(),
         "end": (_local_day(end) - timedelta(days=1)).isoformat(),
-        "days": len(energy),
+        "days": len(counted),
         "heating": heat,
         "weather": weather,
         "weather_days": [
@@ -385,7 +387,8 @@ async def async_dpe(
     `start` and `end` are the days the label counts: the year, narrowed to the
     data. `days` tells a year that isn't whole. `estimated` gives the days whose
     electric heating comes from the Linky and the weather, before the heating
-    tab's window.
+    tab's window. `unestimated` gives the Linky's days before that the label
+    leaves out, for want of an outdoor temperature, and whether Open-Meteo is on.
     """
     start = day_start(_year_before(end) + timedelta(days=1))
     stop = day_start(end + timedelta(days=1))
@@ -398,12 +401,20 @@ async def async_dpe(
     # Before the window, the Linky's days, when the heating is electric.
     coordinator = entry.runtime_data
     begin = first
+    unestimated = None
     if coordinator.statistic_id and not answer["gas"]:
-        begin = max(start, day_start(coordinator.data.sources.first_day))
-        if begin < first:
-            answer["before"] = await _async_linky_heating(hass, entry, begin, first)
-        else:
-            begin = first
+        linky = max(start, day_start(coordinator.data.sources.first_day))
+        if linky < first and (
+            before := await _async_linky_heating(hass, entry, linky, first)
+        ):
+            answer["before"] = before
+            begin = day_start(date.fromisoformat(before["start"]))
+        if linky < begin:
+            unestimated = {
+                "start": _local_day(linky).isoformat(),
+                "end": (_local_day(begin) - timedelta(days=1)).isoformat(),
+                "open_meteo": bool(entry.options.get(CONF_WEATHER)),
+            }
     end_at = max(first, last)
     days = (_local_day(end_at) - _local_day(begin)).days if end_at > begin else 0
     before = answer.get("before")
@@ -422,5 +433,6 @@ async def async_dpe(
             if before
             else None
         ),
+        "unestimated": unestimated,
         **dpe_label(answer, settings),
     }
