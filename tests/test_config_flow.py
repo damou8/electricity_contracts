@@ -4,10 +4,10 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from elec_tariffs import ContractKind, TempoAuthError, TempoError
+from elec_tariffs import ContractKind, GasProfile, TempoAuthError, TempoError
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.recorder.models import StatisticMeanType
 from homeassistant.config_entries import (
-    SOURCE_RECONFIGURE,
     SOURCE_USER,
     ConfigSubentryData,
 )
@@ -21,7 +21,6 @@ from custom_components.electricity_contracts.config_flow import (
 from custom_components.electricity_contracts.const import (
     CONF_ACTIVE_FROM,
     CONF_ACTIVE_TO,
-    CONF_CONTRACT,
     CONF_END,
     CONF_FIXED_PER_YEAR,
     CONF_HEATING_CONTENT,
@@ -31,9 +30,12 @@ from custom_components.electricity_contracts.const import (
     CONF_KIND,
     CONF_KVA,
     CONF_OFF_PEAK,
+    CONF_PERIODS,
     CONF_PRICE,
+    CONF_PRICE_ENTITY,
     CONF_PRICES,
     CONF_PRICING,
+    CONF_PROFILE,
     CONF_RTE_CLIENT_ID,
     CONF_RTE_CLIENT_SECRET,
     CONF_START,
@@ -51,29 +53,33 @@ from custom_components.electricity_contracts.const import (
     ENERGY_GAS,
     NO_METER,
     OFF_PEAK_OTHER,
+    PRICING_ENTITY,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
     SECTION_ACTIVE,
     SECTION_HEATING,
-    SECTION_RTE,
+    SECTION_WATER,
     SUBENTRY_CONTRACT,
-    SUBENTRY_GAS_PRICE,
-    SUBENTRY_PRICE_PERIOD,
+    SUBENTRY_GAS_CONTRACT,
 )
 
 from .conftest import (
     BASE_CONTRACT,
-    MANUAL_CONTRACT,
     OTHER_STATISTIC_ID,
+    PRICE_ID,
     STATISTIC_ID,
     TEMPERATURE_ID,
     TEMPO_CONTRACT,
     Sources,
+    add_price,
     add_statistic,
     add_temperature,
     contract_subentry,
+    gas_contract_subentry,
+    gas_period,
     make_entry,
-    price_period_subentry,
+    manual_contract,
+    manual_period,
 )
 from .test_heating import GAS, HEATER_A, INDOOR, WATER, add_energy, add_indoor
 
@@ -284,25 +290,30 @@ async def test_reconfigure_to_a_configured_statistic(hass: HomeAssistant) -> Non
 # Options.
 
 
-async def options_flow(hass: HomeAssistant, user_input: dict[str, Any]) -> Any:
-    entry = make_entry(options={CONF_RTE_CLIENT_ID: "old", CONF_RTE_CLIENT_SECRET: "x"})
+async def options_page(
+    hass: HomeAssistant,
+    page: str,
+    user_input: dict[str, Any],
+    options: dict[str, Any] | None = None,
+) -> Any:
+    """Open one page of the options from their menu, and fill it."""
+    entry = make_entry(options=options if options is not None else OTHER_OPTIONS)
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.MENU
+    assert result["menu_options"] == ["outdoor", "indoor", "heating", "rte"]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": page}
+    )
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "init"
-    # The frontend always sends every section.
+    assert result["step_id"] == page
     return await hass.config_entries.options.async_configure(
-        result["flow_id"], {SECTION_HEATING: {}, SECTION_RTE: {}, **user_input}
+        result["flow_id"], user_input
     )
 
 
-def credentials(client_id: str | None = None, secret: str | None = None) -> Any:
-    """Fill the RTE section of the options."""
-    values = {CONF_RTE_CLIENT_ID: client_id, CONF_RTE_CLIENT_SECRET: secret}
-    return {
-        SECTION_HEATING: {},
-        SECTION_RTE: {key: value for key, value in values.items() if value},
-    }
+# What the other pages set: each page keeps them.
+OTHER_OPTIONS: dict[str, Any] = {CONF_INDOOR_TEMPERATURES: ["sensor.living_room"]}
 
 
 def suggested(result: Any) -> dict[str, Any]:
@@ -320,31 +331,77 @@ def suggested(result: Any) -> dict[str, Any]:
     return values
 
 
-async def test_options_suggest_the_current_values(hass: HomeAssistant) -> None:
-    entry = make_entry(
-        options={
-            CONF_TEMPERATURE: TEMPERATURE_ID,
-            CONF_WEATHER: True,
-            CONF_RTE_CLIENT_ID: "my-id",
-            CONF_RTE_CLIENT_SECRET: "my-secret",
-        }
-    )
+async def open_page(hass: HomeAssistant, options: dict[str, Any], page: str) -> Any:
+    entry = make_entry(options=options)
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert suggested(result) == {
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": page}
+    )
+
+
+@pytest.mark.parametrize(
+    ("page", "expected"),
+    [
+        pytest.param(
+            "outdoor",
+            {CONF_TEMPERATURE: TEMPERATURE_ID, CONF_WEATHER: True},
+            id="outdoor",
+        ),
+        pytest.param("indoor", {CONF_INDOOR_TEMPERATURES: [INDOOR]}, id="indoor"),
+        pytest.param(
+            "heating",
+            {
+                SECTION_HEATING: {
+                    CONF_HEATING_STATISTICS: [HEATER_A],
+                    CONF_HEATING_ENERGY: ENERGY_GAS,
+                },
+                SECTION_WATER: {CONF_WATER_STATISTIC: WATER},
+            },
+            id="heating",
+        ),
+        pytest.param(
+            "rte",
+            {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "my-secret"},
+            id="rte",
+        ),
+    ],
+)
+async def test_options_suggest_the_current_values(
+    hass: HomeAssistant, page: str, expected: dict[str, Any]
+) -> None:
+    options = {
         CONF_TEMPERATURE: TEMPERATURE_ID,
         CONF_WEATHER: True,
-        SECTION_HEATING: {},
-        SECTION_RTE: {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "my-secret"},
+        CONF_INDOOR_TEMPERATURES: [INDOOR],
+        SECTION_HEATING: {
+            CONF_HEATING_STATISTICS: [HEATER_A],
+            CONF_HEATING_ENERGY: ENERGY_GAS,
+            CONF_WATER_STATISTIC: WATER,
+        },
+        CONF_RTE_CLIENT_ID: "my-id",
+        CONF_RTE_CLIENT_SECRET: "my-secret",
     }
+    result = await open_page(hass, options, page)
+    assert suggested(result) == expected
+
+
+async def test_options_suggest_nothing_when_empty(hass: HomeAssistant) -> None:
+    result = await open_page(hass, {}, "heating")
+    assert suggested(result) == {SECTION_HEATING: {}, SECTION_WATER: {}}
 
 
 async def test_options_save_checked_credentials(
     hass: HomeAssistant, sources: Sources
 ) -> None:
-    result = await options_flow(hass, credentials(" my-id ", "my-secret"))
+    result = await options_page(
+        hass,
+        "rte",
+        {CONF_RTE_CLIENT_ID: " my-id ", CONF_RTE_CLIENT_SECRET: "my-secret"},
+    )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
+        **OTHER_OPTIONS,
         CONF_RTE_CLIENT_ID: "my-id",
         CONF_RTE_CLIENT_SECRET: "my-secret",
     }
@@ -354,7 +411,12 @@ async def test_options_save_checked_credentials(
 
 @pytest.mark.usefixtures("sources")
 async def test_options_clear_credentials(hass: HomeAssistant) -> None:
-    result = await options_flow(hass, credentials())
+    result = await options_page(
+        hass,
+        "rte",
+        {},
+        options={CONF_RTE_CLIENT_ID: "old", CONF_RTE_CLIENT_SECRET: "x"},
+    )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {}
 
@@ -363,16 +425,19 @@ async def test_options_clear_credentials(hass: HomeAssistant) -> None:
     ("user_input", "check_error", "error"),
     [
         pytest.param(
-            credentials("my-id"), None, "incomplete_credentials", id="no_secret"
+            {CONF_RTE_CLIENT_ID: "my-id"},
+            None,
+            "incomplete_credentials",
+            id="no_secret",
         ),
         pytest.param(
-            credentials("my-id", "bad"),
+            {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "bad"},
             TempoAuthError("refused"),
             "invalid_auth",
             id="refused",
         ),
         pytest.param(
-            credentials("my-id", "secret"),
+            {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "secret"},
             TempoError("down"),
             "cannot_connect",
             id="down",
@@ -387,36 +452,33 @@ async def test_options_errors(
     error: str,
 ) -> None:
     sources.official.async_check_credentials.side_effect = check_error
-    result = await options_flow(hass, user_input)
+    result = await options_page(hass, "rte", user_input)
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": error}
     sources.official.async_check_credentials.side_effect = None
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], credentials("my-id", "secret")
+        result["flow_id"], {CONF_RTE_CLIENT_ID: "my-id", CONF_RTE_CLIENT_SECRET: "s"}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
 async def test_options_save_the_temperature(hass: HomeAssistant) -> None:
     await add_temperature(hass, [10.0, 11.0])
-    result = await options_flow(
-        hass, {CONF_TEMPERATURE: TEMPERATURE_ID, **credentials()}
+    result = await options_page(
+        hass,
+        "outdoor",
+        {CONF_TEMPERATURE: TEMPERATURE_ID},
+        options={**OTHER_OPTIONS, CONF_WEATHER: True},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    # Credentials left empty are removed.
-    assert result["data"] == {CONF_TEMPERATURE: TEMPERATURE_ID}
+    # Open-Meteo, left off, is removed.
+    assert result["data"] == {**OTHER_OPTIONS, CONF_TEMPERATURE: TEMPERATURE_ID}
 
 
 async def test_options_save_open_meteo(hass: HomeAssistant) -> None:
-    result = await options_flow(hass, {CONF_WEATHER: True, **credentials()})
+    result = await options_page(hass, "outdoor", {CONF_WEATHER: True})
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"] == {CONF_WEATHER: True}
-
-
-async def test_options_leave_open_meteo_off(hass: HomeAssistant) -> None:
-    result = await options_flow(hass, {CONF_WEATHER: False, **credentials()})
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"] == {}
+    assert result["data"] == {**OTHER_OPTIONS, CONF_WEATHER: True}
 
 
 @pytest.mark.parametrize(
@@ -431,105 +493,135 @@ async def test_options_leave_open_meteo_off(hass: HomeAssistant) -> None:
 )
 async def test_options_temperature_errors(
     hass: HomeAssistant,
-    sources: Sources,
     unit: str | None,
     mean_type: StatisticMeanType | None,
     error: str,
 ) -> None:
     if unit is not None and mean_type is not None:
         await add_temperature(hass, [10.0], unit=unit, mean_type=mean_type)
-    result = await options_flow(
-        hass,
-        {CONF_TEMPERATURE: TEMPERATURE_ID, **credentials("my-id", "secret")},
-    )
+    result = await options_page(hass, "outdoor", {CONF_TEMPERATURE: TEMPERATURE_ID})
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {CONF_TEMPERATURE: error}
-    # The credentials wait for a valid temperature.
-    sources.official.async_check_credentials.assert_not_awaited()
+
+
+async def test_options_save_the_indoor_thermometers(hass: HomeAssistant) -> None:
+    await add_indoor(hass, [19.0, 19.5])
+    result = await options_page(
+        hass, "indoor", {CONF_INDOOR_TEMPERATURES: [INDOOR]}, options={}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {CONF_INDOOR_TEMPERATURES: [INDOOR]}
+
+
+async def test_options_clear_the_indoor_thermometers(hass: HomeAssistant) -> None:
+    result = await options_page(hass, "indoor", {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {}
+
+
+async def test_options_indoor_errors(hass: HomeAssistant) -> None:
+    await add_indoor(hass, [19.0])
+    await add_energy(hass, HEATER_A, [1.0])
+    result = await options_page(
+        hass, "indoor", {CONF_INDOOR_TEMPERATURES: [INDOOR, HEATER_A]}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {
+        CONF_INDOOR_TEMPERATURES: "indoor_statistic_not_temperature"
+    }
+
+
+def heating_page(
+    heating: dict[str, Any] | None = None, water: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Fill the heating page: the frontend always sends both sections."""
+    return {SECTION_HEATING: heating or {}, SECTION_WATER: water or {}}
 
 
 async def test_options_save_the_heating(hass: HomeAssistant) -> None:
     for statistic_id in (HEATER_A, WATER):
         await add_energy(hass, statistic_id, [1.0, 1.0])
-    await add_indoor(hass, [19.0, 19.5])
-    result = await options_flow(
+    result = await options_page(
         hass,
-        {
-            SECTION_HEATING: {
-                # Twice the same: kept once.
+        "heating",
+        heating_page(
+            # Twice the same: kept once.
+            {
                 CONF_HEATING_STATISTICS: [HEATER_A, HEATER_A],
                 CONF_HEATING_CONTENT: CONTENT_HEATING,
-                CONF_WATER_STATISTIC: WATER,
-                CONF_WATER_ENERGY: ENERGY_GAS,
-                CONF_INDOOR_TEMPERATURES: [INDOOR],
             },
-        },
+            {CONF_WATER_STATISTIC: WATER, CONF_WATER_ENERGY: ENERGY_GAS},
+        ),
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
+        **OTHER_OPTIONS,
         SECTION_HEATING: {
             CONF_HEATING_STATISTICS: [HEATER_A],
             CONF_HEATING_ENERGY: ENERGY_ELECTRICITY,
             CONF_HEATING_CONTENT: CONTENT_HEATING,
             CONF_WATER_STATISTIC: WATER,
             CONF_WATER_ENERGY: ENERGY_GAS,
-            CONF_INDOOR_TEMPERATURES: [INDOOR],
-        }
+        },
     }
 
 
 async def test_options_save_only_the_heating_set(hass: HomeAssistant) -> None:
     await add_energy(hass, GAS, [3.0])
-    result = await options_flow(
+    result = await options_page(
         hass,
-        {
-            SECTION_HEATING: {
-                CONF_HEATING_STATISTICS: [GAS],
-                CONF_HEATING_ENERGY: ENERGY_GAS,
-            },
-        },
+        "heating",
+        heating_page({CONF_HEATING_STATISTICS: [GAS], CONF_HEATING_ENERGY: ENERGY_GAS}),
     )
     assert result["data"] == {
+        **OTHER_OPTIONS,
         SECTION_HEATING: {
             CONF_HEATING_STATISTICS: [GAS],
             CONF_HEATING_ENERGY: ENERGY_GAS,
             CONF_HEATING_CONTENT: CONTENT_HEATING,
-        }
+        },
     }
 
 
-async def test_options_suggest_the_heating(hass: HomeAssistant) -> None:
-    heating = {CONF_HEATING_STATISTICS: [HEATER_A], CONF_HEATING_ENERGY: ENERGY_GAS}
-    entry = make_entry(options={SECTION_HEATING: heating})
-    entry.add_to_hass(hass)
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert suggested(result)[SECTION_HEATING] == heating
+async def test_options_clear_the_heating(hass: HomeAssistant) -> None:
+    result = await options_page(
+        hass,
+        "heating",
+        heating_page(),
+        options={SECTION_HEATING: {CONF_HEATING_STATISTICS: [GAS]}},
+    )
+    assert result["data"] == {}
 
 
 @pytest.mark.parametrize(
-    ("heating", "errors"),
+    ("heating", "water", "errors"),
     [
         pytest.param(
             {CONF_HEATING_STATISTICS: [HEATER_A, STATISTIC_ID]},
+            {},
             {"base": "heating_is_source"},
             id="source",
         ),
         pytest.param(
             {CONF_HEATING_STATISTICS: ["sensor.missing"]},
+            {},
             {"base": "heating_statistic_not_found"},
             id="missing",
         ),
         pytest.param(
-            {CONF_HEATING_STATISTICS: [HEATER_A], CONF_WATER_STATISTIC: HEATER_A},
+            {CONF_HEATING_STATISTICS: [HEATER_A]},
+            {CONF_WATER_STATISTIC: HEATER_A},
             {"base": "water_in_heating"},
             id="water_in_heating",
         ),
         pytest.param(
+            {},
             {CONF_WATER_STATISTIC: "sensor.missing"},
             {"base": "water_statistic_not_found"},
             id="water_missing",
         ),
         pytest.param(
+            {},
             {CONF_WATER_STATISTIC: STATISTIC_ID},
             {"base": "water_is_source"},
             id="water_source",
@@ -539,30 +631,27 @@ async def test_options_suggest_the_heating(hass: HomeAssistant) -> None:
                 CONF_HEATING_STATISTICS: [HEATER_A],
                 CONF_HEATING_ENERGY: ENERGY_GAS,
                 CONF_HEATING_CONTENT: CONTENT_HEATING_WATER,
-                CONF_WATER_STATISTIC: WATER,
             },
+            {CONF_WATER_STATISTIC: WATER},
             {"base": "water_other_energy"},
             id="water_other_energy",
-        ),
-        pytest.param(
-            {CONF_INDOOR_TEMPERATURES: [INDOOR, HEATER_A]},
-            {"base": "indoor_statistic_not_temperature"},
-            id="indoor",
         ),
     ],
 )
 async def test_options_heating_errors(
-    hass: HomeAssistant, heating: dict[str, Any], errors: dict[str, str]
+    hass: HomeAssistant,
+    heating: dict[str, Any],
+    water: dict[str, Any],
+    errors: dict[str, str],
 ) -> None:
     await add_energy(hass, HEATER_A, [1.0])
     await add_energy(hass, WATER, [1.0])
-    await add_indoor(hass, [19.0])
-    result = await options_flow(hass, {SECTION_HEATING: heating})
+    result = await options_page(hass, "heating", heating_page(heating, water))
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == errors
 
 
-# Contracts.
+# Electricity contracts.
 
 
 async def start_subentry_flow(
@@ -570,6 +659,12 @@ async def start_subentry_flow(
 ) -> Any:
     return await hass.config_entries.subentries.async_init(
         (entry_id, subentry_type), context={"source": SOURCE_USER}
+    )
+
+
+async def configure(hass: HomeAssistant, result: Any, user_input: Any) -> Any:
+    return await hass.config_entries.subentries.async_configure(
+        result["flow_id"], user_input
     )
 
 
@@ -597,14 +692,10 @@ async def add_contract(
     result = await start_subentry_flow(hass, entry_id, SUBENTRY_CONTRACT)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], first
-    )
+    result = await configure(hass, result, first)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "details"
-    return await hass.config_entries.subentries.async_configure(
-        result["flow_id"], second
-    )
+    return await configure(hass, result, second)
 
 
 @pytest.mark.parametrize(
@@ -638,18 +729,6 @@ async def add_contract(
             },
             id="hphc",
         ),
-        pytest.param(
-            # A manual contract keeps no power.
-            {CONF_KIND: "base", CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"},
-            details("Offer", "2023-01-01", "2023-12-31"),
-            {
-                CONF_KIND: "base",
-                CONF_PRICING: PRICING_MANUAL,
-                CONF_ACTIVE_FROM: "2023-01-01",
-                CONF_ACTIVE_TO: "2023-12-31",
-            },
-            id="manual",
-        ),
     ],
 )
 async def test_add_contract(
@@ -662,15 +741,118 @@ async def test_add_contract(
     entry.add_to_hass(hass)
     result = await add_contract(hass, entry.entry_id, first, second)
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    # The message after it: where the prices go, or where the contract shows.
-    manual = expected[CONF_PRICING] == PRICING_MANUAL
-    assert result["description"] == ("add_prices" if manual else None)
     (subentry,) = entry.subentries.values()
     assert subentry.title == second[CONF_NAME].strip()
     uid = subentry.data[CONF_UID]
     assert len(uid) == 8
     assert subentry.unique_id == uid
     assert dict(subentry.data) == {CONF_UID: uid, **expected}
+
+
+async def test_add_contract_with_its_prices(hass: HomeAssistant) -> None:
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await add_contract(
+        hass,
+        entry.entry_id,
+        # A manual contract keeps no power.
+        {CONF_KIND: "hphc", CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"},
+        details(
+            "Offer",
+            "2025-01-01",
+            off_peak={CONF_OFF_PEAK: "22_06", CONF_WEEKEND_OFF_PEAK: False},
+        ),
+    )
+    assert result["step_id"] == "first_period"
+    # The first prices start with the contract.
+    assert suggested(result) == {CONF_START: "2025-01-01"}
+    assert set(result["data_schema"].schema) == {
+        CONF_START,
+        CONF_END,
+        CONF_FIXED_PER_YEAR,
+        "hc",
+        "hp",
+    }
+    result = await configure(
+        hass,
+        result,
+        {CONF_START: "2025-01-01", CONF_FIXED_PER_YEAR: 151.2, "hc": 0.16, "hp": 0.21},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    (subentry,) = entry.subentries.values()
+    assert subentry.data[CONF_PRICING] == PRICING_MANUAL
+    assert CONF_KVA not in subentry.data
+    assert subentry.data[CONF_PERIODS] == [
+        {
+            CONF_START: "2025-01-01",
+            CONF_END: None,
+            CONF_FIXED_PER_YEAR: 151.2,
+            CONF_PRICES: {"hc": 0.16, "hp": 0.21},
+        }
+    ]
+
+
+async def test_add_contract_priced_by_a_sensor(hass: HomeAssistant) -> None:
+    await add_price(hass, [0.2])
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await add_contract(
+        hass,
+        entry.entry_id,
+        {CONF_KIND: "base", CONF_PRICING: PRICING_ENTITY, CONF_KVA: "6"},
+        details("Dynamic"),
+    )
+    assert result["step_id"] == "price_entity"
+    result = await configure(
+        hass, result, {CONF_PRICE_ENTITY: PRICE_ID, CONF_FIXED_PER_YEAR: 120}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    (subentry,) = entry.subentries.values()
+    assert subentry.data[CONF_PRICE_ENTITY] == PRICE_ID
+    assert subentry.data[CONF_FIXED_PER_YEAR] == 120.0
+    assert CONF_PERIODS not in subentry.data
+
+
+@pytest.mark.parametrize(
+    ("unit", "mean_type", "error"),
+    [
+        pytest.param(
+            "€", StatisticMeanType.ARITHMETIC, "price_entity_not_per_kwh", id="unit"
+        ),
+        # Cents would make every cost 100 times too high.
+        pytest.param(
+            "c€/kWh",
+            StatisticMeanType.ARITHMETIC,
+            "price_entity_not_per_kwh",
+            id="cents",
+        ),
+        pytest.param(
+            "€/kWh", StatisticMeanType.CIRCULAR, "price_entity_no_mean", id="mean"
+        ),
+        pytest.param(None, None, "price_entity_not_found", id="missing"),
+    ],
+)
+async def test_price_entity_errors(
+    hass: HomeAssistant,
+    unit: str | None,
+    mean_type: StatisticMeanType | None,
+    error: str,
+) -> None:
+    if unit is not None and mean_type is not None:
+        await add_price(hass, [0.2], unit=unit, mean_type=mean_type)
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await add_contract(
+        hass,
+        entry.entry_id,
+        {CONF_KIND: "base", CONF_PRICING: PRICING_ENTITY, CONF_KVA: "6"},
+        details("Dynamic"),
+    )
+    result = await configure(
+        hass, result, {CONF_PRICE_ENTITY: PRICE_ID, CONF_FIXED_PER_YEAR: 0}
+    )
+    assert result["step_id"] == "price_entity"
+    assert result["errors"] == {CONF_PRICE_ENTITY: error}
 
 
 @pytest.mark.parametrize(
@@ -687,6 +869,12 @@ async def test_add_contract(
             {CONF_KIND: "tempo", CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"},
             "Tempo · my prices",
             id="manual",
+        ),
+        pytest.param(
+            "fr",
+            {CONF_KIND: "base", CONF_PRICING: PRICING_ENTITY, CONF_KVA: "6"},
+            "Base · prix d'un capteur",
+            id="entity",
         ),
         pytest.param(
             "de",
@@ -706,9 +894,7 @@ async def test_contract_name_is_suggested(
     )
     entry.add_to_hass(hass)
     result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_CONTRACT)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], first
-    )
+    result = await configure(hass, result, first)
     assert result["step_id"] == "details"
     assert suggested(result)[CONF_NAME] == name
 
@@ -719,15 +905,11 @@ async def test_contract_power_must_be_offered(hass: HomeAssistant) -> None:
     result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_CONTRACT)
     # Tempo has no 3 kVA offer.
     tempo = {CONF_KIND: "tempo", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "3"}
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], tempo
-    )
+    result = await configure(hass, result, tempo)
     assert result["step_id"] == "user"
     assert result["errors"] == {CONF_KVA: "kva_not_offered"}
     # Prices set by hand don't depend on it.
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {**tempo, CONF_PRICING: PRICING_MANUAL}
-    )
+    result = await configure(hass, result, {**tempo, CONF_PRICING: PRICING_MANUAL})
     assert result["step_id"] == "details"
 
 
@@ -742,8 +924,8 @@ async def test_add_contract_with_other_off_peak_hours(hass: HomeAssistant) -> No
     )
     assert result["step_id"] == "off_peak"
     assert suggested(result) == {CONF_OFF_PEAK: [""]}
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_OFF_PEAK: ["01:00 - 07:00", "", "12:30-14:30"]}
+    result = await configure(
+        hass, result, {CONF_OFF_PEAK: ["01:00 - 07:00", "", "12:30-14:30"]}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     (subentry,) = entry.subentries.values()
@@ -770,14 +952,10 @@ async def test_other_off_peak_hours_errors(
         {CONF_KIND: "hphc", CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"},
         details(off_peak={CONF_OFF_PEAK: OFF_PEAK_OTHER, CONF_WEEKEND_OFF_PEAK: False}),
     )
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_OFF_PEAK: ranges}
-    )
+    result = await configure(hass, result, {CONF_OFF_PEAK: ranges})
     assert result["step_id"] == "off_peak"
     assert result["errors"] == {CONF_OFF_PEAK: "invalid_off_peak"}
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_OFF_PEAK: ["22:00-06:00"]}
-    )
+    result = await configure(hass, result, {CONF_OFF_PEAK: ["22:00-06:00"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -806,7 +984,8 @@ async def test_other_off_peak_hours_errors(
 async def test_add_contract_errors(
     hass: HomeAssistant, second: dict[str, Any], errors: dict[str, str]
 ) -> None:
-    entry = make_entry([TEMPO_CONTRACT])
+    # A gas contract neither takes a name nor days from electricity contracts.
+    entry = make_entry([TEMPO_CONTRACT, gas_contract_subentry("My contract")])
     entry.add_to_hass(hass)
     result = await add_contract(
         hass,
@@ -817,9 +996,7 @@ async def test_add_contract_errors(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "details"
     assert result["errors"] == errors
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], details()
-    )
+    result = await configure(hass, result, details())
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -835,24 +1012,33 @@ async def test_contract_before_another_one(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
-async def test_reconfigure_contract(hass: HomeAssistant) -> None:
+async def test_reconfigure_contract_to_my_prices(hass: HomeAssistant) -> None:
     entry = make_entry([TEMPO_CONTRACT])
     entry.add_to_hass(hass)
     (subentry,) = entry.subentries.values()
+    # A contract at regulated prices has no menu: its pencil opens it.
     result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "contract"
     assert suggested(result) == {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"}
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"}
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"}
     )
     assert result["step_id"] == "details"
     assert suggested(result) == {
         CONF_NAME: "Tempo",
         SECTION_ACTIVE: {CONF_ACTIVE_FROM: "2024-01-01"},
     }
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], details("My Tempo", "2024-01-01", "2026-10-31")
+    result = await configure(
+        hass, result, details("My Tempo", "2024-01-01", "2026-10-31")
+    )
+    # Without prices yet, it asks for them.
+    assert result["step_id"] == "first_period"
+    prices = dict.fromkeys(
+        ["blue_hc", "blue_hp", "white_hc", "white_hp", "red_hc", "red_hp"], 0.2
+    )
+    result = await configure(
+        hass, result, {CONF_START: "2024-01-01", CONF_FIXED_PER_YEAR: 180, **prices}
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
@@ -864,6 +1050,14 @@ async def test_reconfigure_contract(hass: HomeAssistant) -> None:
         CONF_PRICING: PRICING_MANUAL,
         CONF_ACTIVE_FROM: "2024-01-01",
         CONF_ACTIVE_TO: "2026-10-31",
+        CONF_PERIODS: [
+            {
+                CONF_START: "2024-01-01",
+                CONF_END: None,
+                CONF_FIXED_PER_YEAR: 180.0,
+                CONF_PRICES: prices,
+            }
+        ],
     }
 
 
@@ -872,18 +1066,16 @@ async def test_reconfigure_contract_power(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
     (subentry,) = entry.subentries.values()
     result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "36"}
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "36"}
     )
     # Base stops at 15 kVA.
     assert result["errors"] == {CONF_KVA: "kva_not_offered"}
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "9"}
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "9"}
     )
     # A contract keeps its own name.
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], details("Base")
-    )
+    result = await configure(hass, result, details("Base"))
     assert result["reason"] == "reconfigure_successful"
     assert entry.subentries[subentry.subentry_id].data[CONF_KVA] == 9
 
@@ -910,70 +1102,182 @@ async def test_reconfigure_off_peak_hours(
     entry.add_to_hass(hass)
     (subentry,) = entry.subentries.values()
     result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"}
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_OFFICIAL, CONF_KVA: "6"}
     )
     assert suggested(result)[CONF_OFF_PEAK] == preset
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
+    result = await configure(
+        hass,
+        result,
         details(
             "HP/HC",
             off_peak={CONF_OFF_PEAK: OFF_PEAK_OTHER, CONF_WEEKEND_OFF_PEAK: False},
         ),
     )
     assert suggested(result) == {CONF_OFF_PEAK: typed}
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_OFF_PEAK: ["23:00-07:00"]}
-    )
+    result = await configure(hass, result, {CONF_OFF_PEAK: ["23:00-07:00"]})
     assert result["reason"] == "reconfigure_successful"
     assert entry.subentries[subentry.subentry_id].data[CONF_OFF_PEAK] == ["23:00-07:00"]
 
 
-# Price periods.
-
-
-async def add_price_period(
-    hass: HomeAssistant, entry_id: str, period: dict[str, Any], prices: dict[str, Any]
-) -> Any:
-    result = await start_subentry_flow(hass, entry_id, SUBENTRY_PRICE_PERIOD)
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], period
+async def test_reconfigure_the_sensor(hass: HomeAssistant) -> None:
+    await add_price(hass, [0.2])
+    dynamic = contract_subentry(
+        "Dynamic",
+        uid="dyn00001",
+        kind=ContractKind.BASE,
+        pricing=PRICING_ENTITY,
+        price_entity="sensor.old_price",
+        fixed_per_year=100.0,
     )
-    if result["type"] is not FlowResultType.FORM or result["step_id"] != "prices":
-        return result
-    return await hass.config_entries.subentries.async_configure(
-        result["flow_id"], prices
-    )
-
-
-async def test_price_period_needs_a_manual_contract(hass: HomeAssistant) -> None:
-    entry = make_entry([TEMPO_CONTRACT])
+    entry = make_entry([dynamic])
     entry.add_to_hass(hass)
-    result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_PRICE_PERIOD)
-    assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "no_manual_contracts"
-
-
-async def test_add_price_period(hass: HomeAssistant) -> None:
-    entry = make_entry([TEMPO_CONTRACT, MANUAL_CONTRACT])
-    entry.add_to_hass(hass)
-    result = await add_price_period(
-        hass,
-        entry.entry_id,
-        {CONF_CONTRACT: "offer001", CONF_START: "2026-02-01", CONF_FIXED_PER_YEAR: 150},
-        {"base": 0.19},
+    (subentry,) = entry.subentries.values()
+    result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
+    assert result["step_id"] == "contract"
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_ENTITY, CONF_KVA: "6"}
     )
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Offer · 2026-02-01 → …"
-    assert result["data"] == {
-        CONF_CONTRACT: "offer001",
-        CONF_START: "2026-02-01",
-        CONF_END: None,
-        CONF_FIXED_PER_YEAR: 150.0,
-        CONF_PRICES: {"base": 0.19},
+    result = await configure(hass, result, details("Dynamic"))
+    assert result["step_id"] == "price_entity"
+    assert suggested(result) == {
+        CONF_PRICE_ENTITY: "sensor.old_price",
+        CONF_FIXED_PER_YEAR: 100.0,
     }
+    result = await configure(
+        hass, result, {CONF_PRICE_ENTITY: PRICE_ID, CONF_FIXED_PER_YEAR: 110}
+    )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.subentries[subentry.subentry_id].data[CONF_PRICE_ENTITY] == PRICE_ID
+
+
+# The menu of a contract priced by hand.
+
+TWO_PERIODS = manual_contract(
+    manual_period("2025-01-01", "2026-07-31"), manual_period("2026-08-01", base=0.2)
+)
+
+
+async def open_menu(
+    hass: HomeAssistant, subentries: list[ConfigSubentryData] | None = None
+) -> tuple[Any, Any]:
+    entry = make_entry(subentries or [TWO_PERIODS])
+    entry.add_to_hass(hass)
+    subentry = next(iter(entry.subentries.values()))
+    result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
+    return entry, result
+
+
+@pytest.mark.parametrize(
+    ("language", "labels"),
+    [
+        pytest.param(
+            "fr",
+            {
+                "contract": "Le contrat : nom, prix, heures creuses et dates",
+                "period_0": "Prix du 1er janvier 2025 au 31 juillet 2026",
+                "period_1": "Prix depuis le 1er août 2026",
+                "add_period": "Ajouter une période de prix",
+                "remove_period": "Supprimer une période de prix",
+            },
+            id="fr",
+        ),
+        pytest.param(
+            "de",
+            {
+                "contract": "The contract: name, prices, off-peak hours and dates",
+                "period_0": "Prices from 1 January 2025 to 31 July 2026",
+                "period_1": "Prices since 1 August 2026",
+                "add_period": "Add a price period",
+                "remove_period": "Remove a price period",
+            },
+            id="other",
+        ),
+    ],
+)
+async def test_menu_lists_the_price_periods(
+    hass: HomeAssistant, language: str, labels: dict[str, str]
+) -> None:
+    await hass.config.async_update(language=language)
+    _, result = await open_menu(hass)
+    assert result["type"] is FlowResultType.MENU
+    assert result["step_id"] == "reconfigure"
+    assert result["menu_options"] == labels
+    assert result["description_placeholders"] == {"name": "Offer"}
+
+
+async def test_menu_of_one_period_removes_none(hass: HomeAssistant) -> None:
+    _, result = await open_menu(hass, [manual_contract(manual_period("2026-01-01"))])
+    assert list(result["menu_options"]) == ["contract", "period_0", "add_period"]
+
+
+async def test_change_a_price_period(hass: HomeAssistant) -> None:
+    entry, result = await open_menu(hass)
+    result = await configure(hass, result, {"next_step_id": "period_1"})
+    assert result["step_id"] == "period"
+    assert suggested(result) == {
+        CONF_START: "2026-08-01",
+        CONF_FIXED_PER_YEAR: 150.0,
+        "base": 0.2,
+    }
+    result = await configure(
+        hass,
+        result,
+        {CONF_START: "2026-07-01", CONF_FIXED_PER_YEAR: 150} | {"base": 0.21},
+    )
+    assert result["errors"] == {"base": "overlapping_price_period"}
+    result = await configure(
+        hass,
+        result,
+        {CONF_START: "2026-08-01", CONF_END: "2026-12-31", CONF_FIXED_PER_YEAR: 160}
+        | {"base": 0.21},
+    )
+    assert result["reason"] == "reconfigure_successful"
+    (subentry,) = entry.subentries.values()
+    assert subentry.data[CONF_PERIODS] == [
+        manual_period("2025-01-01", "2026-07-31"),
+        manual_period("2026-08-01", "2026-12-31", base=0.21, fixed=160.0),
+    ]
+
+
+async def test_add_a_price_period_ends_the_open_one(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2027-01-20 12:00:00+01:00")
+    entry, result = await open_menu(hass)
+    result = await configure(hass, result, {"next_step_id": "add_period"})
+    assert result["step_id"] == "period"
+    # New prices start today at the earliest.
+    assert suggested(result) == {CONF_START: "2027-01-20"}
+    result = await configure(
+        hass, result, {CONF_START: "2027-02-01", CONF_FIXED_PER_YEAR: 155, "base": 0.22}
+    )
+    assert result["reason"] == "reconfigure_successful"
+    (subentry,) = entry.subentries.values()
+    assert subentry.data[CONF_PERIODS] == [
+        manual_period("2025-01-01", "2026-07-31"),
+        manual_period("2026-08-01", "2027-01-31", base=0.2),
+        manual_period("2027-02-01", base=0.22, fixed=155.0),
+    ]
+
+
+async def test_add_a_price_period_the_day_the_open_one_starts(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-08-01 12:00:00+02:00")
+    _, result = await open_menu(hass)
+    result = await configure(hass, result, {"next_step_id": "add_period"})
+    # Today would overlap the open prices, which start today.
+    assert suggested(result) == {CONF_START: "2026-08-02"}
+
+
+async def test_add_a_price_period_after_the_last_one(hass: HomeAssistant) -> None:
+    _, result = await open_menu(
+        hass, [manual_contract(manual_period("2025-01-01", "2025-12-31"))]
+    )
+    result = await configure(hass, result, {"next_step_id": "add_period"})
+    # The day after the last prices.
+    assert suggested(result) == {CONF_START: "2026-01-01"}
 
 
 @pytest.mark.parametrize(
@@ -985,7 +1289,7 @@ async def test_add_price_period(hass: HomeAssistant) -> None:
             id="end_before_start",
         ),
         pytest.param(
-            {CONF_START: "2025-12-01", CONF_END: "2026-02-01"},
+            {CONF_START: "2024-12-01", CONF_END: "2025-02-01"},
             {"base": "overlapping_price_period"},
             id="overlap",
         ),
@@ -994,177 +1298,231 @@ async def test_add_price_period(hass: HomeAssistant) -> None:
 async def test_add_price_period_errors(
     hass: HomeAssistant, period: dict[str, str], errors: dict[str, str]
 ) -> None:
-    entry = make_entry(
-        [MANUAL_CONTRACT, price_period_subentry("offer001", "2026-02-01")]
+    _, result = await open_menu(hass)
+    result = await configure(hass, result, {"next_step_id": "add_period"})
+    result = await configure(
+        hass, result, {CONF_FIXED_PER_YEAR: 150, "base": 0.19, **period}
     )
-    entry.add_to_hass(hass)
-    result = await add_price_period(
-        hass,
-        entry.entry_id,
-        {CONF_CONTRACT: "offer001", CONF_FIXED_PER_YEAR: 150, **period},
-        {},
-    )
-    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "period"
     assert result["errors"] == errors
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
-        {
-            CONF_CONTRACT: "offer001",
-            CONF_START: "2025-01-01",
-            CONF_END: "2026-01-31",
-            CONF_FIXED_PER_YEAR: 140,
-        },
+    result = await configure(
+        hass,
+        result,
+        {CONF_START: "2024-01-01", CONF_END: "2024-12-31"}
+        | {CONF_FIXED_PER_YEAR: 140, "base": 0.18},
     )
-    assert result["step_id"] == "prices"
-
-
-async def test_reconfigure_price_period(hass: HomeAssistant) -> None:
-    entry = make_entry(
-        [
-            MANUAL_CONTRACT,
-            price_period_subentry("offer001", "2025-01-01", "2026-01-31"),
-            price_period_subentry("offer001", "2026-02-01"),
-        ]
-    )
-    entry.add_to_hass(hass)
-    subentry = next(
-        subentry
-        for subentry in entry.subentries.values()
-        if subentry.data.get(CONF_START) == "2026-02-01"
-    )
-    result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
-    assert result["description_placeholders"] == {"contract": "Offer"}
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_START: "2026-01-01", CONF_FIXED_PER_YEAR: 150}
-    )
-    assert result["errors"] == {"base": "overlapping_price_period"}
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
-        {CONF_START: "2026-02-01", CONF_END: "2026-12-31", CONF_FIXED_PER_YEAR: 160},
-    )
-    assert result["step_id"] == "prices"
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {"base": 0.2}
-    )
-    assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
-    updated = entry.subentries[subentry.subentry_id]
-    assert updated.title == "Offer · 2026-02-01 → 2026-12-31"
-    assert updated.data[CONF_PRICES] == {"base": 0.2}
-    assert updated.data[CONF_FIXED_PER_YEAR] == 160.0
 
 
-async def test_reconfigure_price_period_of_a_deleted_contract(
-    hass: HomeAssistant,
-) -> None:
-    entry = make_entry([price_period_subentry("gone0001", "2026-02-01")])
-    entry.add_to_hass(hass)
+async def test_remove_a_price_period(hass: HomeAssistant) -> None:
+    entry, result = await open_menu(hass)
+    result = await configure(hass, result, {"next_step_id": "remove_period"})
+    assert result["step_id"] == "remove_period"
+    result = await configure(hass, result, {"period": "0"})
+    assert result["reason"] == "reconfigure_successful"
     (subentry,) = entry.subentries.values()
-    result = await hass.config_entries.subentries.async_init(
-        (entry.entry_id, SUBENTRY_PRICE_PERIOD),
-        context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry.subentry_id},
+    assert subentry.data[CONF_PERIODS] == [manual_period("2026-08-01", base=0.2)]
+
+
+async def test_menu_opens_the_contract(hass: HomeAssistant) -> None:
+    entry, result = await open_menu(hass)
+    result = await configure(hass, result, {"next_step_id": "contract"})
+    assert result["step_id"] == "contract"
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_MANUAL, CONF_KVA: "6"}
     )
-    assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "contract_not_found"
+    result = await configure(hass, result, details("Offer 2"))
+    # Its prices are kept.
+    assert result["reason"] == "reconfigure_successful"
+    (subentry,) = entry.subentries.values()
+    assert subentry.title == "Offer 2"
+    assert len(subentry.data[CONF_PERIODS]) == 2
 
 
-# Gas prices.
+async def test_only_period_steps_are_made_up(hass: HomeAssistant) -> None:
+    _, result = await open_menu(hass)
+    flow: Any = hass.config_entries.subentries._progress[result["flow_id"]]
+    assert hasattr(flow, "async_step_period_1")
+    assert not hasattr(flow, "async_step_period_x")
+    assert not hasattr(flow, "async_step_other")
 
 
-async def add_gas_price(
-    hass: HomeAssistant, entry_id: str, price: dict[str, Any]
+# Gas contracts.
+
+
+async def add_gas_contract(
+    hass: HomeAssistant, entry_id: str, first: dict[str, Any], second: dict[str, Any]
 ) -> Any:
-    result = await start_subentry_flow(hass, entry_id, SUBENTRY_GAS_PRICE)
+    result = await start_subentry_flow(hass, entry_id, SUBENTRY_GAS_CONTRACT)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
-    return await hass.config_entries.subentries.async_configure(
-        result["flow_id"], price
-    )
-
-
-async def test_add_gas_price(hass: HomeAssistant) -> None:
-    entry = make_entry([TEMPO_CONTRACT])
-    entry.add_to_hass(hass)
-    result = await add_gas_price(
-        hass, entry.entry_id, {CONF_PRICE: 0.105, CONF_START: "2026-08-01"}
-    )
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "0.1050 €/kWh · 2026-08-01 → …"
-    assert result["data"] == {
-        CONF_START: "2026-08-01",
-        CONF_END: None,
-        CONF_PRICE: 0.105,
-    }
+    result = await configure(hass, result, first)
+    assert result["step_id"] == "details"
+    return await configure(hass, result, second)
 
 
 @pytest.mark.parametrize(
-    ("price", "errors"),
+    ("language", "profile", "name"),
     [
+        pytest.param("fr", "heating", "Gaz · prix repère chauffage", id="heating"),
         pytest.param(
-            {CONF_START: "2026-08-01", CONF_END: "2026-07-31"},
-            {CONF_END: "end_before_start"},
-            id="end_before_start",
-        ),
-        pytest.param(
-            {CONF_START: "2026-01-01", CONF_END: "2026-08-01"},
-            {"base": "overlapping_gas_price"},
-            id="overlap",
+            "en",
+            "cooking_water",
+            "Gas · reference price, cooking and hot water",
+            id="cooking",
         ),
     ],
 )
-async def test_add_gas_price_errors(
-    hass: HomeAssistant, price: dict[str, str], errors: dict[str, str]
+async def test_add_gas_contract_at_the_reference_price(
+    hass: HomeAssistant, language: str, profile: str, name: str
 ) -> None:
-    entry = make_entry([gas_price_subentry("2026-08-01")])
+    await hass.config.async_update(language=language)
+    entry = make_entry()
     entry.add_to_hass(hass)
-    result = await add_gas_price(hass, entry.entry_id, {CONF_PRICE: 0.1, **price})
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == errors
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
-        {CONF_PRICE: 0.1, CONF_START: "2026-01-01", CONF_END: "2026-07-31"},
+    result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_GAS_CONTRACT)
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_OFFICIAL, CONF_PROFILE: profile}
     )
+    assert suggested(result) == {CONF_NAME: name, SECTION_ACTIVE: {}}
+    result = await configure(hass, result, {CONF_NAME: name, SECTION_ACTIVE: {}})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    (subentry,) = entry.subentries.values()
+    assert subentry.subentry_type == SUBENTRY_GAS_CONTRACT
+    assert subentry.title == name
+    assert dict(subentry.data) == {
+        CONF_UID: subentry.unique_id,
+        CONF_PRICING: PRICING_OFFICIAL,
+        CONF_PROFILE: profile,
+        CONF_ACTIVE_FROM: None,
+        CONF_ACTIVE_TO: None,
+    }
+
+
+async def test_add_gas_contract_with_my_prices(hass: HomeAssistant) -> None:
+    await hass.config.async_update(language="fr")
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await start_subentry_flow(hass, entry.entry_id, SUBENTRY_GAS_CONTRACT)
+    # The profile only counts with the reference price.
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_MANUAL, CONF_PROFILE: "heating"}
+    )
+    assert suggested(result)[CONF_NAME] == "Gaz · mes prix"
+    result = await configure(hass, result, details("Gaz", "2026-08-01"))
+    assert result["step_id"] == "first_period"
+    assert set(result["data_schema"].schema) == {
+        CONF_START,
+        CONF_END,
+        CONF_FIXED_PER_YEAR,
+        CONF_PRICE,
+    }
+    assert suggested(result) == {CONF_START: "2026-08-01"}
+    result = await configure(
+        hass,
+        result,
+        {CONF_START: "2026-08-01", CONF_FIXED_PER_YEAR: 281.4, CONF_PRICE: 0.105},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    (subentry,) = entry.subentries.values()
+    assert CONF_PROFILE not in subentry.data
+    assert subentry.data[CONF_PERIODS] == [
+        {
+            CONF_START: "2026-08-01",
+            CONF_END: None,
+            CONF_FIXED_PER_YEAR: 281.4,
+            CONF_PRICE: 0.105,
+        }
+    ]
+
+
+async def test_add_gas_contract_priced_by_a_sensor(hass: HomeAssistant) -> None:
+    await add_price(hass, [0.1])
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await add_gas_contract(
+        hass,
+        entry.entry_id,
+        {CONF_PRICING: PRICING_ENTITY, CONF_PROFILE: "heating"},
+        details("Gas"),
+    )
+    assert result["step_id"] == "price_entity"
+    result = await configure(
+        hass, result, {CONF_PRICE_ENTITY: PRICE_ID, CONF_FIXED_PER_YEAR: 250}
+    )
+    (subentry,) = entry.subentries.values()
+    assert subentry.data[CONF_PRICE_ENTITY] == PRICE_ID
+    assert subentry.data[CONF_FIXED_PER_YEAR] == 250.0
+
+
+@pytest.mark.parametrize(
+    ("second", "errors"),
+    [
+        # The first gas contract is in force since always.
+        pytest.param(
+            details("Gas 2"), {SECTION_ACTIVE: "overlapping_active_period"}, id="always"
+        ),
+        pytest.param(
+            details("Gas", "2026-08-01"), {CONF_NAME: "duplicate_name"}, id="taken_name"
+        ),
+    ],
+)
+async def test_add_gas_contract_errors(
+    hass: HomeAssistant, second: dict[str, Any], errors: dict[str, str]
+) -> None:
+    entry = make_entry([gas_contract_subentry("Gas", active_to="2026-07-31")])
+    entry.add_to_hass(hass)
+    result = await add_gas_contract(
+        hass,
+        entry.entry_id,
+        {CONF_PRICING: PRICING_OFFICIAL, CONF_PROFILE: "heating"},
+        second,
+    )
+    assert result["step_id"] == "details"
+    assert result["errors"] == errors
+    result = await configure(hass, result, details("New gas", "2026-08-01"))
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
-def gas_price_subentry(start: str, end: str | None = None) -> ConfigSubentryData:
-    return ConfigSubentryData(
-        data={CONF_PRICE: 0.1, CONF_START: start, CONF_END: end},
-        subentry_type=SUBENTRY_GAS_PRICE,
-        title="0.1",
-        unique_id=None,
-    )
-
-
-async def test_reconfigure_gas_price(hass: HomeAssistant) -> None:
+async def test_reconfigure_gas_contract(hass: HomeAssistant) -> None:
     entry = make_entry(
         [
-            gas_price_subentry("2025-08-01", "2026-07-31"),
-            gas_price_subentry("2026-08-01"),
+            gas_contract_subentry(
+                "Gas", pricing=PRICING_OFFICIAL, profile=GasProfile.HEATING
+            )
         ]
     )
     entry.add_to_hass(hass)
-    subentry = next(
-        subentry
-        for subentry in entry.subentries.values()
-        if subentry.data[CONF_START] == "2026-08-01"
-    )
+    (subentry,) = entry.subentries.values()
     result = await entry.start_subentry_reconfigure_flow(hass, subentry.subentry_id)
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "contract"
     assert suggested(result) == {
-        CONF_PRICE: 0.1,
-        CONF_START: "2026-08-01",
-        CONF_END: None,
+        CONF_PRICING: PRICING_OFFICIAL,
+        CONF_PROFILE: "heating",
     }
-    # Its own days don't overlap with it.
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_PRICE: 0.12, CONF_START: "2026-08-01"}
+    result = await configure(
+        hass, result, {CONF_PRICING: PRICING_OFFICIAL, CONF_PROFILE: "cooking_water"}
     )
-    assert result["type"] is FlowResultType.ABORT
+    # Its own days don't overlap another contract.
+    result = await configure(hass, result, details("Gas"))
     assert result["reason"] == "reconfigure_successful"
-    updated = entry.subentries[subentry.subentry_id]
-    assert updated.title == "0.1200 €/kWh · 2026-08-01 → …"
-    assert updated.data[CONF_PRICE] == 0.12
+    assert entry.subentries[subentry.subentry_id].data[CONF_PROFILE] == "cooking_water"
+
+
+async def test_gas_contract_menu(hass: HomeAssistant) -> None:
+    gas = gas_contract_subentry("Gas", periods=[gas_period(0.1, "2026-01-01")])
+    entry, result = await open_menu(hass, [gas])
+    assert result["menu_options"]["contract"] == "The contract: name, prices and dates"
+    result = await configure(hass, result, {"next_step_id": "period_0"})
+    assert suggested(result) == {
+        CONF_START: "2026-01-01",
+        CONF_FIXED_PER_YEAR: 0.0,
+        CONF_PRICE: 0.1,
+    }
+    result = await configure(
+        hass,
+        result,
+        {CONF_START: "2026-01-01", CONF_FIXED_PER_YEAR: 200, CONF_PRICE: 0.11},
+    )
+    assert result["reason"] == "reconfigure_successful"
+    (subentry,) = entry.subentries.values()
+    assert subentry.data[CONF_PERIODS] == [gas_period(0.11, "2026-01-01", fixed=200.0)]

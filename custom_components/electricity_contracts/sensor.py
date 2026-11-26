@@ -22,7 +22,7 @@ from .coordinator import (
     ElectricityContractsConfigEntry,
     ElectricityContractsCoordinator,
 )
-from .data import contracts, in_force, manual_prices, price_periods
+from .data import contracts, in_force, price_periods
 from .outlook import tranche_at
 
 # The coordinator does the updates.
@@ -86,9 +86,7 @@ class ContractNowSensor(
         tranche = tranche_at(local, contract.rules, sources.calendar)
         if tranche is None:
             return None, None
-        periods = price_periods(
-            contract, manual_prices(self._entry), sources.official_prices
-        )
+        periods = price_periods(self.hass, contract, sources.official_prices)
         period = next((item for item in periods if item.covers(local.date())), None)
         return tranche, period.prices.get(tranche) if period else None
 

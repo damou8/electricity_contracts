@@ -9,8 +9,12 @@ from typing import Any
 from elec_tariffs import (
     ContractKind,
     FallbackTempoSource,
+    GasPricePeriod,
+    GasProfile,
     OpenMeteoClient,
     PricePeriod,
+    PrvgClient,
+    PrvgError,
     RteOfficialTempoClient,
     RtePublicTempoClient,
     TempoAuthError,
@@ -50,7 +54,13 @@ from .const import (
     TOMORROW_PUBLISHED,
     TOMORROW_RETRY_MINUTES,
 )
-from .data import Contract, Heating, contracts, manual_prices, source_statistic
+from .data import (
+    Contract,
+    Heating,
+    contracts,
+    gas_contracts,
+    source_statistic,
+)
 from .statistics import (
     CostingStatus,
     RecorderNotStartedError,
@@ -65,6 +75,7 @@ _LOGGER = logging.getLogger(__name__)
 SOURCE_TEMPO = "tempo"
 SOURCE_PRICES = "prices"
 SOURCE_WEATHER = "weather"
+SOURCE_GAS = "gas_prices"
 _HOUR = timedelta(hours=1)
 
 type ElectricityContractsConfigEntry = ConfigEntry[ElectricityContractsCoordinator]
@@ -78,6 +89,8 @@ class SourcesData:
     first_day: date
     calendar: dict[date, TempoColor]
     official_prices: dict[PricesKey, list[PricePeriod]]
+    gas_prices: dict[GasProfile, list[GasPricePeriod]] = field(default_factory=dict)
+    """The reference prices of the profiles the gas contracts follow."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -112,6 +125,24 @@ def _period_from_store(data: dict[str, Any]) -> PricePeriod:
     )
 
 
+def _gas_period_to_store(period: GasPricePeriod) -> dict[str, Any]:
+    return {
+        "start": period.start.isoformat(),
+        "end": period.end.isoformat() if period.end else None,
+        "fixed_per_year": period.fixed_per_year,
+        "price": period.price,
+    }
+
+
+def _gas_period_from_store(data: dict[str, Any]) -> GasPricePeriod:
+    return GasPricePeriod(
+        start=date.fromisoformat(data["start"]),
+        end=date.fromisoformat(data["end"]) if data["end"] else None,
+        fixed_per_year=float(data["fixed_per_year"]),
+        price=float(data["price"]),
+    )
+
+
 def _time(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
@@ -125,6 +156,8 @@ class _Cache:
     tomorrow_checked: datetime | None = None
     prices: dict[str, list[PricePeriod]] = field(default_factory=dict)
     prices_fetched: dict[str, datetime] = field(default_factory=dict)
+    gas_prices: dict[GasProfile, list[GasPricePeriod]] = field(default_factory=dict)
+    gas_fetched: dict[GasProfile, datetime] = field(default_factory=dict)
     failing_since: dict[str, datetime] = field(default_factory=dict)
 
     @classmethod
@@ -150,6 +183,17 @@ class _Cache:
                 prices_fetched={
                     key: datetime.fromisoformat(when)
                     for key, when in data["prices_fetched"].items()
+                },
+                # Kept since 0.7.
+                gas_prices={
+                    GasProfile(profile): [
+                        _gas_period_from_store(period) for period in periods
+                    ]
+                    for profile, periods in data.get("gas_prices", {}).items()
+                },
+                gas_fetched={
+                    GasProfile(profile): datetime.fromisoformat(when)
+                    for profile, when in data.get("gas_fetched", {}).items()
                 },
                 failing_since={
                     source: datetime.fromisoformat(when)
@@ -179,6 +223,14 @@ class _Cache:
             },
             "prices_fetched": {
                 key: when.isoformat() for key, when in self.prices_fetched.items()
+            },
+            "gas_prices": {
+                profile.value: [_gas_period_to_store(period) for period in periods]
+                for profile, periods in self.gas_prices.items()
+            },
+            "gas_fetched": {
+                profile.value: when.isoformat()
+                for profile, when in self.gas_fetched.items()
             },
             "failing_since": {
                 source: when.isoformat() for source, when in self.failing_since.items()
@@ -210,6 +262,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         session = async_get_clientsession(hass)
         self.statistic_id = source_statistic(config_entry)
         self.trv = TrvClient(session)
+        self.prvg = PrvgClient(session)
         sources: list[TempoCalendarSource] = [RtePublicTempoClient(session)]
         options = config_entry.options
         self.has_credentials = CONF_RTE_CLIENT_ID in options
@@ -305,9 +358,18 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         needs_tempo = any(
             contract.kind is ContractKind.TEMPO for contract in entry_contracts
         )
+        needed_gas = sorted(
+            {
+                contract.profile
+                for contract in gas_contracts(self.config_entry)
+                if contract.profile is not None
+            }
+        )
         changed = False
         if needed_prices:
             changed |= await self._async_refresh_prices(needed_prices, now)
+        if needed_gas:
+            changed |= await self._async_refresh_gas(needed_gas, now)
         if needs_tempo:
             # Hours before 6:00 on the first day belong to the day before's color.
             changed |= await self._async_refresh_tempo(
@@ -320,6 +382,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             now,
             needs_tempo=needs_tempo,
             needs_prices=bool(needed_prices),
+            needs_gas=bool(needed_gas),
             needs_weather=self.weather.enabled,
         )
 
@@ -342,6 +405,12 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             official_prices={
                 (kind, kva): self._cache.prices[_prices_key(kind, kva)]
                 for kind, kva in needed_prices
+            },
+            # The gas only prices the heating: without its prices, the heating
+            # is counted in kWh until they come.
+            gas_prices={
+                profile: self._cache.gas_prices.get(profile, [])
+                for profile in needed_gas
             },
         )
         # Where each series stopped is read back from the statistics, and so
@@ -380,15 +449,15 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         the Contracts page shows it waiting, with a link to add them.
         """
         prefix = f"missing_price_{self.config_entry.entry_id}_"
-        priced = {prices.contract_uid for prices in manual_prices(self.config_entry)}
         wanted: dict[str, tuple[Contract, date]] = {}
         for contract in entry_contracts:
             status = costing.contracts.get(contract.uid)
+            # A sensor's price of the last hours comes with its next statistics.
             if (
                 status
                 and status.waiting
                 and status.waiting.reason == "price"
-                and (contract.official or contract.uid in priced)
+                and (contract.official or contract.periods)
             ):
                 wanted[f"{prefix}{contract.uid}"] = (contract, status.waiting.day)
         registry = ir.async_get(self.hass)
@@ -439,6 +508,24 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             self._cache.prices[key] = periods
             self._cache.prices_fetched[key] = now
             self._record_success(SOURCE_PRICES)
+            changed = True
+        return changed
+
+    async def _async_refresh_gas(self, needed: list[GasProfile], now: datetime) -> bool:
+        changed = False
+        max_age = timedelta(hours=PRICES_MAX_AGE_HOURS)
+        for profile in needed:
+            fetched = self._cache.gas_fetched.get(profile)
+            if fetched and now - fetched < max_age:
+                continue
+            try:
+                periods = await self.prvg.async_price_periods(profile)
+            except PrvgError as err:
+                changed |= self._record_failure(SOURCE_GAS, err, now)
+                continue
+            self._cache.gas_prices[profile] = periods
+            self._cache.gas_fetched[profile] = now
+            self._record_success(SOURCE_GAS)
             changed = True
         return changed
 
@@ -557,6 +644,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         *,
         needs_tempo: bool,
         needs_prices: bool,
+        needs_gas: bool,
         needs_weather: bool,
     ) -> None:
         threshold = timedelta(hours=SOURCE_ISSUE_AFTER_HOURS)
@@ -569,6 +657,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
                 else "tempo_unavailable",
             ),
             (SOURCE_PRICES, needs_prices, "prices_unavailable"),
+            (SOURCE_GAS, needs_gas, "gas_prices_unavailable"),
             (SOURCE_WEATHER, needs_weather, "weather_unavailable"),
         ):
             issue_id = f"{source}_unavailable_{self.config_entry.entry_id}"
@@ -617,6 +706,16 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
                 }
                 for key, periods in self._cache.prices.items()
             },
+            "gas_prices": {
+                profile.value: {
+                    "fetched": self._cache.gas_fetched[profile].isoformat()
+                    if profile in self._cache.gas_fetched
+                    else None,
+                    "periods": len(periods),
+                    "latest": _gas_period_to_store(periods[-1]) if periods else None,
+                }
+                for profile, periods in self._cache.gas_prices.items()
+            },
             "failing_since": {
                 source: when.isoformat()
                 for source, when in self._cache.failing_since.items()
@@ -631,6 +730,7 @@ def _series_diagnostics(status: SeriesStatus | None) -> dict[str, Any] | None:
     if status is None:
         return None
     return {
+        "first_hour": status.first_hour.isoformat() if status.first_hour else None,
         "last_hour": status.last_hour.isoformat() if status.last_hour else None,
         "waiting": (
             {"reason": status.waiting.reason, "day": status.waiting.day.isoformat()}
@@ -659,6 +759,7 @@ def async_delete_issues(hass: HomeAssistant, entry_id: str) -> None:
         "rte_credentials_refused",
         f"{SOURCE_TEMPO}_unavailable",
         f"{SOURCE_PRICES}_unavailable",
+        f"{SOURCE_GAS}_unavailable",
         f"{SOURCE_WEATHER}_unavailable",
     ):
         ir.async_delete_issue(hass, DOMAIN, f"{prefix}_{entry_id}")

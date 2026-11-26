@@ -47,6 +47,7 @@ async def test_diagnostics_hide_personal_data(
     assert sources["prices"]["tempo:6"]["periods"] == 2
     costing = sources["costing"]
     assert costing["contracts"]["tempo001"] == {
+        "first_hour": "2026-03-01T00:00:00+00:00",
         "last_hour": "2026-03-02T23:00:00+00:00",
         "waiting": None,
     }
@@ -63,6 +64,7 @@ async def test_diagnostics_of_a_waiting_contract(
     result = await get_diagnostics_for_config_entry(hass, hass_client, entry)
     costing = result["sources"]["costing"]
     assert costing["contracts"]["offer001"] == {
+        "first_hour": None,
         "last_hour": None,
         "waiting": {"reason": "price", "day": "2026-03-01"},
     }

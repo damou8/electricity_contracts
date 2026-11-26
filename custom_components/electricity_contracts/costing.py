@@ -3,6 +3,7 @@
 Pure functions, without Home Assistant: they run in the executor.
 """
 
+from bisect import bisect_left
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -16,6 +17,7 @@ from elec_tariffs import (
     MissingPriceError,
     PricePeriod,
     cost_hour,
+    cost_hour_at_price,
 )
 
 from .const import FRANCE_TIME_ZONE
@@ -104,6 +106,38 @@ def in_force(day: date, active_from: date | None, active_to: date | None) -> boo
     )
 
 
+class SensorPrices:
+    """The hourly prices of a sensor, from its first one.
+
+    An hour before the sensor's first price isn't priced. An hour missing
+    between two prices, while Home Assistant was off or the sensor unavailable,
+    takes the price before it. An hour after the last price waits for it.
+    """
+
+    def __init__(
+        self, prices: Mapping[datetime, float], first: datetime | None
+    ) -> None:
+        """Keep the prices by UTC start, and the start of the sensor's first one."""
+        self._prices = dict(prices)
+        self._hours = sorted(self._prices)
+        self.first = first if first is not None or not self._hours else self._hours[0]
+
+    def before_first(self, hour: datetime) -> bool:
+        """Tell whether `hour` comes before the sensor's first price."""
+        return self.first is not None and hour < self.first
+
+    def at(self, hour: datetime) -> float | None:
+        """Return the price of the hour starting at `hour`; None if it has none."""
+        hour = hour.astimezone(UTC)
+        if (price := self._prices.get(hour)) is not None:
+            return price
+        if not self._hours or self.before_first(hour) or hour > self._hours[-1]:
+            return None
+        index = bisect_left(self._hours, hour)
+        # Without the price before, read too far back: the one after.
+        return self._prices[self._hours[index - 1 if index else 0]]
+
+
 @dataclass(frozen=True, kw_only=True)
 class ContractInput:
     """What costing a contract needs."""
@@ -113,6 +147,10 @@ class ContractInput:
     periods: Sequence[PricePeriod]
     active_from: date | None
     active_to: date | None
+    sensor_prices: SensorPrices | None = None
+    """For a contract priced by a sensor: the price of each hour."""
+    fixed_per_year: float = 0.0
+    """For a contract priced by a sensor: its subscription."""
 
     def active_on(self, day: date) -> bool:
         """Tell whether the contract was in force on `day`."""
@@ -151,10 +189,30 @@ def cost_contract(
     costs: dict[datetime, HourCost] = {}
     for hour in hours:
         local = hour.start.astimezone(FRANCE_TIME_ZONE)
+        sensor = contract.sensor_prices
+        price: float | None = None
+        if sensor is not None:
+            # Compared from the sensor's first price only.
+            if sensor.before_first(hour.start):
+                continue
+            if (price := sensor.at(hour.start)) is None:
+                return Costed(
+                    costs=costs, waiting=Waiting(reason="price", day=local.date())
+                )
         try:
-            costs[hour.start] = cost_hour(
-                local, hour.kwh, contract.rules, contract.periods, calendar
-            )
+            if price is None:
+                costs[hour.start] = cost_hour(
+                    local, hour.kwh, contract.rules, contract.periods, calendar
+                )
+            else:
+                costs[hour.start] = cost_hour_at_price(
+                    local,
+                    hour.kwh,
+                    contract.rules,
+                    calendar,
+                    price=price,
+                    fixed_per_year=contract.fixed_per_year,
+                )
         except MissingColorError as err:
             return Costed(costs=costs, waiting=Waiting(reason="color", day=err.day))
         except MissingPriceError as err:
@@ -162,19 +220,31 @@ def cost_contract(
     return Costed(costs=costs)
 
 
+def _before_sensor(contract: ContractInput, hour: Hour) -> bool:
+    """Tell whether `hour` comes before the first price of a contract's sensor."""
+    return contract.sensor_prices is not None and contract.sensor_prices.before_first(
+        hour.start
+    )
+
+
 def cost_actual(
     contracts: Sequence[ContractInput],
     costed: Mapping[str, Costed],
     hours: Sequence[Hour],
 ) -> ActualCosted:
-    """Cost each hour under the contract in force that day, nothing if none was."""
+    """Cost each hour under the contract in force that day.
+
+    Nothing when none was, or before the first price of its sensor.
+    """
     costs: dict[datetime, ActualCost] = {}
     for hour in hours:
         day = hour.start.astimezone(FRANCE_TIME_ZONE).date()
         active = next(
             (contract for contract in contracts if contract.active_on(day)), None
         )
-        if active is None:
+        if active is None or _before_sensor(active, hour):
+            # No contract in force, or one priced by a sensor that had no
+            # price yet: nothing is known of what the hour cost.
             costs[hour.start] = ActualCost(variable=0.0, fixed=0.0, energy=0.0)
             continue
         result = costed[active.uid]

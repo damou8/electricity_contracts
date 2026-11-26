@@ -20,8 +20,8 @@ const STRINGS = {
     electricity: "Electricity",
     heatingCost: "Heating cost",
     atContractPrices: "at your contract's prices, excluding subscription",
-    atGasPrice: "at the gas price, excluding subscription",
-    noGasPrice: "add a gas price in the options for euros",
+    atGasPrice: "at the gas contract's prices, subscription included",
+    noGasPrice: "add a gas contract for euros",
     partlyPriced: "some hours have no price yet",
     fromTheWeather: "from the consumption on cold days",
     heatingShareLabel: "Share of the home",
@@ -41,14 +41,14 @@ const STRINGS = {
     heatingMissing: "{count} days without an outdoor temperature or a Linky reading aren't counted.",
     heatingBeforeAll: "Your heating statistics start on {date}. Before, the heating is estimated from how much the whole consumption rises on cold days.",
     ofWhichEstimated: "of which {energy} estimated",
-    heatingByDayGasInfo: "What the heating used each day, at the gas price of that day. Below, the average outdoor temperature of each day.",
+    heatingByDayGasInfo: "What the heating used each day, at the price of the gas contract in force that day, with its share of the subscription. Below, the average outdoor temperature of each day.",
     whereHeatingGoes: "Where the heating goes",
     byHeater: "By heater",
     byTranche: "By tranche",
     whereHeatingInfo: "Your heating statistics added up hour by hour, each hour at the price of its tranche. Days known only by their total count in kWh, without a price.",
     homeEnergy: "The home's energy",
     homeEnergyInfo: "What the home spent on energy over the period, excluding the subscriptions: gas for the heating and the hot water, and electricity.",
-    homeEnergyKwh: "Without a gas price, in kWh.",
+    homeEnergyKwh: "Without a gas contract, in kWh.",
     heatingProfile: "Heating, typical day",
     heatingProfileInfo: "What the heating uses at each hour of the day, on average over the {days} days with hourly values.",
     heatingWeatherInfo: "Each dot is a day with its outdoor temperature and what the heating used. Below {base}, it uses on average {slope} more a day per degree colder, {cost} at the average price of your heating.",
@@ -162,7 +162,7 @@ const STRINGS = {
     hintOutdoor: "With an outdoor temperature, from a sensor or Open-Meteo, in the integration's options, the temperature of each day would show below.",
     hintHeatingStatistics: "With heating statistics, in the heating options, the heating would be measured rather than estimated.",
     hintWaterHeater: "With a water heater tracked on its own, in the heating options, the hot water would be measured.",
-    hintGasPrice: "With a gas price, added on the integration's page, the gas would be counted in euros.",
+    hintGasPrice: "With a gas contract, added on the integration's page, the gas would be counted in euros.",
     weatherOpen: "Open the options",
     weatherNoData: "No outdoor temperature recorded over this period.",
     weatherFewDays: "Too few days to tell the heating apart.",
@@ -200,6 +200,7 @@ const STRINGS = {
     priceDrop: "With the same consumption, today's prices cost {amount} less per year than the ones before ({change}).",
     regulated: "regulated prices",
     manualPrices: "prices entered by hand",
+    sensorPrices: "prices read from a sensor",
     since: "since {date}",
     untilDay: "until {date}",
     offPeakHours: "off-peak {ranges}",
@@ -267,6 +268,7 @@ const STRINGS = {
     notCompared: "Not compared yet",
     waitingPrices: "Priced by hand, without a price period yet: not compared",
     waitingPrice: "Not compared yet: its prices for {day} are missing",
+    waitingSensor: "Not compared yet: its sensor has no price for {day}",
     waitingColor: "Not compared yet: the Tempo color of {day} isn't known",
     addPrices: "Add its prices",
     untilTime: "until {time}",
@@ -354,8 +356,8 @@ const STRINGS = {
     electricity: "Électricité",
     heatingCost: "Coût du chauffage",
     atContractPrices: "aux prix de votre contrat, hors abonnement",
-    atGasPrice: "au prix du gaz, hors abonnement",
-    noGasPrice: "ajoutez un prix du gaz dans les options pour les euros",
+    atGasPrice: "aux prix du contrat de gaz, abonnement compris",
+    noGasPrice: "ajoutez un contrat de gaz pour les euros",
     partlyPriced: "des heures n'ont pas encore de prix",
     fromTheWeather: "d'après la consommation des jours froids",
     heatingShareLabel: "Part de la maison",
@@ -375,14 +377,14 @@ const STRINGS = {
     heatingMissing: "{count} jours sans température extérieure ou sans relevé du Linky ne sont pas comptés.",
     heatingBeforeAll: "Vos statistiques de chauffage commencent le {date}. Avant, le chauffage est estimé d'après ce que toute la consommation augmente les jours froids.",
     ofWhichEstimated: "dont {energy} estimés",
-    heatingByDayGasInfo: "Ce que le chauffage a consommé chaque jour, au prix du gaz de ce jour. Dessous, la température extérieure moyenne de chaque jour.",
+    heatingByDayGasInfo: "Ce que le chauffage a consommé chaque jour, au prix du contrat de gaz en vigueur ce jour-là, avec sa part de l'abonnement. Dessous, la température extérieure moyenne de chaque jour.",
     whereHeatingGoes: "Où va le chauffage",
     byHeater: "Par radiateur",
     byTranche: "Par tranche",
     whereHeatingInfo: "Vos statistiques de chauffage additionnées heure par heure, chaque heure au prix de sa tranche. Les jours connus seulement par leur total comptent en kWh, sans prix.",
     homeEnergy: "Énergie de la maison",
     homeEnergyInfo: "Ce que la maison a dépensé en énergie sur la période, hors abonnements : le gaz du chauffage et de l'eau chaude, et l'électricité.",
-    homeEnergyKwh: "Sans prix du gaz, en kWh.",
+    homeEnergyKwh: "Sans contrat de gaz, en kWh.",
     heatingProfile: "Journée type du chauffage",
     heatingProfileInfo: "Ce que le chauffage consomme à chaque heure de la journée, en moyenne sur les {days} jours connus heure par heure.",
     heatingWeatherInfo: "Chaque point est une journée avec sa température extérieure et ce que le chauffage a consommé. Sous {base}, il consomme en moyenne {slope} de plus par jour et par degré de moins, soit {cost} au prix moyen de votre chauffage.",
@@ -496,7 +498,7 @@ const STRINGS = {
     hintOutdoor: "Avec une température extérieure, d'un capteur ou d'Open-Meteo, dans les options de l'intégration, la température de chaque jour s'afficherait dessous.",
     hintHeatingStatistics: "Avec des statistiques de chauffage, dans les options du chauffage, le chauffage serait mesuré au lieu d'être estimé.",
     hintWaterHeater: "Avec un ballon d'eau chaude suivi à part, dans les options du chauffage, l'eau chaude serait mesurée.",
-    hintGasPrice: "Avec un prix du gaz, ajouté sur la page de l'intégration, le gaz serait compté en euros.",
+    hintGasPrice: "Avec un contrat de gaz, ajouté sur la page de l'intégration, le gaz serait compté en euros.",
     weatherOpen: "Ouvrir les options",
     weatherNoData: "Aucune température extérieure enregistrée sur cette période.",
     weatherFewDays: "Trop peu de jours pour isoler le chauffage.",
@@ -534,6 +536,7 @@ const STRINGS = {
     priceDrop: "À consommation identique, les prix actuels coûtent {amount} de moins par an que les précédents ({change}).",
     regulated: "tarif réglementé",
     manualPrices: "prix saisis à la main",
+    sensorPrices: "prix lus dans un capteur",
     since: "depuis le {date}",
     untilDay: "jusqu'au {date}",
     offPeakHours: "heures creuses {ranges}",
@@ -601,6 +604,7 @@ const STRINGS = {
     notCompared: "Pas encore comparé",
     waitingPrices: "Prix saisis à la main, sans période de prix pour l'instant : pas encore comparé",
     waitingPrice: "Pas encore comparé : il manque ses prix du {day}",
+    waitingSensor: "Pas encore comparé : son capteur n'a pas de prix pour le {day}",
     waitingColor: "Pas encore comparé : la couleur Tempo du {day} n'est pas encore connue",
     addPrices: "Ajouter ses prix",
     untilTime: "jusqu'à {time}",
@@ -2264,7 +2268,7 @@ class ElectricityContractsPanel extends HTMLElement {
   }
 
   _contractFacts(contract) {
-    return [contract.name, contract.kva ? `${contract.kva} kVA` : null, this._t(contract.official ? "regulated" : "manualPrices")].filter(Boolean);
+    return [contract.name, contract.kva ? `${contract.kva} kVA` : null, this._t(this._pricingKey(contract))].filter(Boolean);
   }
 
   // The name of a statistic: its entity's, or the recorder's for one imported.
@@ -2567,7 +2571,7 @@ class ElectricityContractsPanel extends HTMLElement {
           // The kind says nothing more when the contract is named after it.
           kind !== contract.name ? kind : null,
           contract.kva ? `${contract.kva} kVA` : null,
-          this._t(contract.official ? "regulated" : "manualPrices"),
+          this._t(this._pricingKey(contract)),
           this._t("since", { date: this._dayLabel(contract.active_from) }),
           contract.off_peak.length ? this._t("offPeakHours", { ranges: contract.off_peak.join(", ") }) : null,
           contract.weekend_off_peak ? this._t("weekendOffPeak") : null,
@@ -4297,6 +4301,11 @@ class ElectricityContractsPanel extends HTMLElement {
     });
   }
 
+  // Where a contract's prices come from, as a translation key.
+  _pricingKey(contract) {
+    return { official: "regulated", entity: "sensorPrices" }[contract.pricing] || "manualPrices";
+  }
+
   // The contracts not compared yet, and why: one priced by hand waits for its
   // prices, which the integration's page adds.
   _pendingRanks() {
@@ -4306,19 +4315,20 @@ class ElectricityContractsPanel extends HTMLElement {
         const waiting = contract.waiting;
         const day = waiting ? this._dayLabel(waiting.day, { day: "numeric", month: "long", year: "numeric" }) : null;
         let why = this._t("notCompared");
-        if (!contract.official && !contract.prices.length) {
+        if (contract.pricing === "manual" && !contract.prices.length) {
           why = this._t("waitingPrices");
         } else if (waiting) {
-          why = this._t(waiting.reason === "color" ? "waitingColor" : "waitingPrice", { day });
+          const reason = waiting.reason === "color" ? "waitingColor" : contract.pricing === "entity" ? "waitingSensor" : "waitingPrice";
+          why = this._t(reason, { day });
         }
         return h(
           "div",
           { class: "rank pending" },
           h("span", { class: "position" }, "–"),
           h("span", { class: "who" }, h("span", { class: "name" }, contract.name), h("span", { class: "sub" }, why)),
-          contract.official
-            ? null
-            : h("a", { class: "cta", href: `/config/integrations/integration/${DOMAIN}` }, icon(ICONS.plus), this._t("addPrices")),
+          contract.pricing === "manual"
+            ? h("a", { class: "cta", href: `/config/integrations/integration/${DOMAIN}` }, icon(ICONS.plus), this._t("addPrices"))
+            : null,
         );
       });
   }

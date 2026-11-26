@@ -22,7 +22,7 @@ Home Assistant 2026.10 ou plus récent. L'intégration a besoin du recorder.
 
 Ensuite :
 1. choisissez la statistique horaire de votre compteur, ou laissez vide sans compteur (prix, Tempo et chauffage seulement) ;
-2. sur la page de l'intégration, **Ajouter un contrat** pour chacun de vos contrats, passés ou à comparer ;
+2. sur la page de l'intégration, **Ajouter un contrat d'électricité** pour chacun de vos contrats, passés ou à comparer, et **Ajouter un contrat de gaz** si le gaz chauffe la maison ;
 3. ouvrez **Contrats** dans le menu latéral.
 
 Le détail des champs et des options est dans [Configuration](docs/configuration.md).
@@ -72,7 +72,7 @@ Les comparaisons, leurs capteurs et les capteurs de la source (coût réel du de
 
 ## Documentation
 
-- [Configuration](docs/configuration.md) : source, contrats, périodes de prix, options, compte RTE.
+- [Configuration](docs/configuration.md) : source, contrats d'électricité et de gaz, leurs prix, options, compte RTE.
 - [Statistiques et actions](docs/statistics.md) : statistiques écrites, tableau Énergie, graphiques, recalculs, action `compare`, mise à jour des données, historique quotidien.
 - [Limites, dépannage et désinstallation](docs/troubleshooting.md).
 
@@ -104,7 +104,7 @@ Home Assistant 2026.10 or later. The integration needs the recorder.
 
 Then:
 1. choose the hourly statistic of your meter, or leave it empty without a meter (prices, Tempo and heating only);
-2. on the integration's page, **Add contract** for each of your contracts, past ones or ones to compare;
+2. on the integration's page, **Add an electricity contract** for each of your contracts, past ones or ones to compare, and **Add a gas contract** if gas heats the home;
 3. open **Contracts** in the sidebar.
 
 Every field and option is described in [Configuration](docs/configuration.md#english).
@@ -147,7 +147,7 @@ The comparisons, their sensors and the source's sensors (actual cost of the last
 
 ### Documentation
 
-- [Configuration](docs/configuration.md#english): source, contracts, price periods, options, RTE account.
+- [Configuration](docs/configuration.md#english): source, electricity and gas contracts, their prices, options, RTE account.
 - [Statistics and actions](docs/statistics.md#english): statistics written, Energy dashboard, charts, recomputing, `compare` action, data updates, daily history.
 - [Limitations, troubleshooting and removal](docs/troubleshooting.md#english).
 

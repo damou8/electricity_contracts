@@ -1,10 +1,13 @@
 """Cost the hourly consumption of a Linky meter under several electricity contracts."""
 
 import logging
+import secrets
 from datetime import timedelta
+from types import MappingProxyType
+from typing import Any
 
 import probatio as vol
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState, ConfigSubentry
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID, Platform
 from homeassistant.core import (
     HomeAssistant,
@@ -20,14 +23,35 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 
 from .comparison import async_compare, comparison_response, day_start
-from .const import DOMAIN, SERVICE_COMPARE, SERVICE_RECOMPUTE, SUBENTRY_COMPARISON
+from .const import (
+    CONF_CONTRACT,
+    CONF_END,
+    CONF_FIXED_PER_YEAR,
+    CONF_INDOOR_TEMPERATURES,
+    CONF_PERIODS,
+    CONF_PRICE,
+    CONF_PRICES,
+    CONF_PRICING,
+    CONF_START,
+    CONF_UID,
+    DOMAIN,
+    PRICING_MANUAL,
+    SECTION_HEATING,
+    SERVICE_COMPARE,
+    SERVICE_RECOMPUTE,
+    SUBENTRY_COMPARISON,
+    SUBENTRY_CONTRACT,
+    SUBENTRY_GAS_CONTRACT,
+    SUBENTRY_GAS_PRICE,
+    SUBENTRY_PRICE_PERIOD,
+)
 from .coordinator import (
     ElectricityContractsConfigEntry,
     ElectricityContractsCoordinator,
     async_delete_issues,
     cache_store,
 )
-from .data import contracts, manual_prices
+from .data import contracts
 from .dpe import settings_store
 from .panel import async_register_panel, async_remove_panel, async_setup_frontend
 from .statistics import async_remove_statistics
@@ -128,7 +152,6 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> bool:
     """Set up a consumption source from a config entry."""
-    _async_remove_orphan_price_periods(hass, entry)
     # Before the first refresh, which takes minutes when a contract was added:
     # the page tells it is preparing the figures meanwhile.
     await async_register_panel(hass)
@@ -137,7 +160,7 @@ async def async_setup_entry(
     entry.runtime_data = coordinator
     # A coordinator only refreshes on schedule while something listens to it.
     entry.async_on_unload(coordinator.async_add_listener(_async_no_op))
-    # Contracts, price periods and options change through subentry and options
+    # Contracts and options change through subentry and options
     # flows; reloading applies them.
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -168,6 +191,10 @@ async def async_migrate_entry(
     if entry.minor_version < 2:  # noqa: PLR2004
         _async_remove_comparisons(hass, entry)
         hass.config_entries.async_update_entry(entry, minor_version=2)
+    if entry.minor_version < 3:  # noqa: PLR2004
+        _async_move_prices_into_contracts(hass, entry)
+        _async_move_indoor_temperatures(hass, entry)
+        hass.config_entries.async_update_entry(entry, minor_version=3)
     return True
 
 
@@ -225,15 +252,93 @@ def _async_remove_comparisons(
         devices.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
 
 
+# The name of the gas contract the gas prices of 0.6 move into.
+_MY_GAS_PRICES = {"en": "Gas · my prices", "fr": "Gaz · mes prix"}
+
+
 @callback
-def _async_remove_orphan_price_periods(
+def _async_move_prices_into_contracts(
     hass: HomeAssistant, entry: ElectricityContractsConfigEntry
 ) -> None:
-    """Remove the price periods of contracts that were deleted."""
-    known = {contract.uid for contract in contracts(entry)}
-    for prices in manual_prices(entry):
-        if prices.contract_uid not in known:
-            _LOGGER.debug(
-                "Removing price period %s of a deleted contract", prices.subentry_id
+    """Move the price periods into their contract, and the gas prices into one.
+
+    Until 0.6, each price period and each gas price was a subentry of its own.
+    The periods of a deleted contract are dropped; the gas prices become one gas
+    contract priced by hand, always in force, with no subscription.
+    """
+    periods: dict[str, list[dict[str, Any]]] = {}
+    gas: list[dict[str, Any]] = []
+    for subentry in list(entry.subentries.values()):
+        data = subentry.data
+        if subentry.subentry_type == SUBENTRY_PRICE_PERIOD:
+            periods.setdefault(data[CONF_CONTRACT], []).append(
+                {
+                    CONF_START: data[CONF_START],
+                    CONF_END: data.get(CONF_END),
+                    CONF_FIXED_PER_YEAR: data[CONF_FIXED_PER_YEAR],
+                    CONF_PRICES: dict(data[CONF_PRICES]),
+                }
             )
-            hass.config_entries.async_remove_subentry(entry, prices.subentry_id)
+        elif subentry.subentry_type == SUBENTRY_GAS_PRICE:
+            gas.append(
+                {
+                    CONF_START: data[CONF_START],
+                    CONF_END: data.get(CONF_END),
+                    CONF_FIXED_PER_YEAR: 0.0,
+                    CONF_PRICE: data[CONF_PRICE],
+                }
+            )
+        else:
+            continue
+        hass.config_entries.async_remove_subentry(entry, subentry.subentry_id)
+    for subentry in list(entry.subentries.values()):
+        if (
+            subentry.subentry_type == SUBENTRY_CONTRACT
+            and subentry.data[CONF_PRICING] == PRICING_MANUAL
+        ):
+            moved = periods.get(subentry.data[CONF_UID], [])
+            hass.config_entries.async_update_subentry(
+                entry,
+                subentry,
+                data={
+                    **subentry.data,
+                    CONF_PERIODS: sorted(moved, key=lambda item: item[CONF_START]),
+                },
+            )
+    if gas:
+        used = {subentry.data.get(CONF_UID) for subentry in entry.subentries.values()}
+        while (uid := secrets.token_hex(4)) in used:
+            continue  # pragma: no cover - a collision among 4 billion values
+        language = hass.config.language.split("-")[0]
+        hass.config_entries.async_add_subentry(
+            entry,
+            ConfigSubentry(
+                data=MappingProxyType(
+                    {
+                        CONF_UID: uid,
+                        CONF_PRICING: PRICING_MANUAL,
+                        CONF_PERIODS: sorted(gas, key=lambda item: item[CONF_START]),
+                    }
+                ),
+                subentry_type=SUBENTRY_GAS_CONTRACT,
+                title=_MY_GAS_PRICES.get(language, _MY_GAS_PRICES["en"]),
+                unique_id=uid,
+            ),
+        )
+
+
+@callback
+def _async_move_indoor_temperatures(
+    hass: HomeAssistant, entry: ElectricityContractsConfigEntry
+) -> None:
+    """Move the indoor thermometers out of the heating options: a page of their own."""
+    heating = dict(entry.options.get(SECTION_HEATING) or {})
+    indoor = heating.pop(CONF_INDOOR_TEMPERATURES, None)
+    if indoor is None:
+        return
+    options = {**entry.options, CONF_INDOOR_TEMPERATURES: indoor}
+    if heating:
+        options[SECTION_HEATING] = heating
+    else:
+        options.pop(SECTION_HEATING, None)
+    hass.config_entries.async_update_entry(entry, options=options)

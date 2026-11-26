@@ -18,6 +18,8 @@ CONF_TEMPERATURE: Final = "temperature"
 CONF_WEATHER: Final = "open_meteo"
 # The options' collapsed section of the RTE credentials.
 SECTION_RTE: Final = "rte"
+# The heating options page's section of the hot water.
+SECTION_WATER: Final = "water"
 # The options' section of what heats the home and its water.
 SECTION_HEATING: Final = "heating"
 CONF_HEATING_STATISTICS: Final = "heating_statistics"
@@ -35,6 +37,8 @@ SERVICE_RECOMPUTE: Final = "recompute"
 SERVICE_COMPARE: Final = "compare"
 
 SUBENTRY_CONTRACT: Final = "contract"
+SUBENTRY_GAS_CONTRACT: Final = "gas_contract"
+# Removed in 0.7: their prices moved into their contract (minor version 3).
 SUBENTRY_PRICE_PERIOD: Final = "price_period"
 SUBENTRY_GAS_PRICE: Final = "gas_price"
 CONF_PRICE: Final = "price"
@@ -57,10 +61,17 @@ CONF_START: Final = "start"
 CONF_END: Final = "end"
 CONF_FIXED_PER_YEAR: Final = "fixed_per_year"
 CONF_PRICES: Final = "prices"
+# The price periods of a contract priced by hand, oldest first.
+CONF_PERIODS: Final = "periods"
+# The CRE profile of a gas contract at the reference price.
+CONF_PROFILE: Final = "profile"
+# The sensor a contract reads the price of a kWh from, hour by hour.
+CONF_PRICE_ENTITY: Final = "price_entity"
 
 
 PRICING_OFFICIAL: Final = "official"
 PRICING_MANUAL: Final = "manual"
+PRICING_ENTITY: Final = "entity"
 
 DEFAULT_KVA: Final = 6
 # The off-peak hours meters most often have, offered in a list; the others are

@@ -33,8 +33,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 )
 
 from custom_components.electricity_contracts.const import (
-    CONF_FIXED_PER_YEAR,
-    CONF_PRICES,
+    CONF_PERIODS,
     CONF_STATISTIC_ID,
     DOMAIN,
     FRANCE_TIME_ZONE,
@@ -61,7 +60,8 @@ from .conftest import (
     color_of,
     contract_subentry,
     make_entry,
-    price_period_subentry,
+    manual_contract,
+    manual_period,
     published_calendar,
 )
 
@@ -327,18 +327,17 @@ async def test_daily_rows_are_not_costed(hass: HomeAssistant) -> None:
 async def test_manual_price_change_rewrites_the_contract(hass: HomeAssistant) -> None:
     entry = await setup_entry(
         hass,
-        make_entry([MANUAL_CONTRACT, price_period_subentry("offer001", "2026-01-01")]),
+        make_entry([manual_contract(manual_period("2026-01-01"))]),
     )
     assert await last_sum(hass, f"{OFFER}_cost_base") == pytest.approx(24 * 0.19)
-    period = next(
-        subentry
-        for subentry in entry.subentries.values()
-        if subentry.subentry_type == "price_period"
-    )
+    contract = next(iter(entry.subentries.values()))
     hass.config_entries.async_update_subentry(
         entry,
-        period,
-        data={**period.data, CONF_PRICES: {"base": 0.25}, CONF_FIXED_PER_YEAR: 0.0},
+        contract,
+        data={
+            **contract.data,
+            CONF_PERIODS: [manual_period("2026-01-01", base=0.25, fixed=0.0)],
+        },
     )
     await settle(hass)
     assert entry.state is ConfigEntryState.LOADED

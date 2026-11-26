@@ -11,7 +11,6 @@ from homeassistant.components.recorder.models import (
     StatisticMetaData,
 )
 from homeassistant.components.recorder.statistics import async_import_statistics
-from homeassistant.config_entries import ConfigSubentryData
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
@@ -23,13 +22,10 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
 from custom_components.electricity_contracts.const import (
-    CONF_END,
     CONF_HEATING_CONTENT,
     CONF_HEATING_ENERGY,
     CONF_HEATING_STATISTICS,
     CONF_INDOOR_TEMPERATURES,
-    CONF_PRICE,
-    CONF_START,
     CONF_TEMPERATURE,
     CONF_WATER_ENERGY,
     CONF_WATER_STATISTIC,
@@ -37,7 +33,6 @@ from custom_components.electricity_contracts.const import (
     DOMAIN,
     ENERGY_GAS,
     SECTION_HEATING,
-    SUBENTRY_GAS_PRICE,
 )
 
 from .conftest import (
@@ -48,6 +43,7 @@ from .conftest import (
     add_statistic,
     add_temperature,
     contract_subentry,
+    gas_price,
     make_entry,
 )
 from .test_comparison import setup_entry
@@ -130,15 +126,6 @@ def hourly(per_day: list[float]) -> list[float]:
     return [value / 24 for value in per_day for _ in range(24)]
 
 
-def gas_price(price: float, start: str, end: str | None = None) -> ConfigSubentryData:
-    return ConfigSubentryData(
-        data={CONF_PRICE: price, CONF_START: start, CONF_END: end},
-        subentry_type=SUBENTRY_GAS_PRICE,
-        title=f"{price} €/kWh",
-        unique_id=None,
-    )
-
-
 async def heating(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
@@ -209,10 +196,8 @@ async def test_electric_heaters(
             [TEMPO_CONTRACT],
             options={
                 CONF_TEMPERATURE: TEMPERATURE_ID,
-                SECTION_HEATING: {
-                    CONF_HEATING_STATISTICS: [HEATER_A, HEATER_B],
-                    CONF_INDOOR_TEMPERATURES: [INDOOR],
-                },
+                SECTION_HEATING: {CONF_HEATING_STATISTICS: [HEATER_A, HEATER_B]},
+                CONF_INDOOR_TEMPERATURES: [INDOOR],
             },
         ),
     )
