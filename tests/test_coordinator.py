@@ -343,5 +343,21 @@ async def test_statistic_without_rows(hass: HomeAssistant, sources: Sources) -> 
     assert calls(sources) == [(date(2026, 9, 1), TOMORROW)]
 
 
+async def test_older_history_brings_its_seasons(
+    hass: HomeAssistant, sources: Sources
+) -> None:
+    await add_statistic(hass, "linky:empty", hours=0)
+    entry = await setup_entry(
+        hass, make_entry([TEMPO_CONTRACT], statistic_id="linky:empty")
+    )
+    # The Linky app imports the history from 1 March 2026 after the setup.
+    await add_statistic(hass, "linky:empty")
+    await coordinator(entry).async_refresh()
+    await async_wait_recording_done(hass)
+    assert coordinator(entry).data.sources.first_day == date(2026, 3, 1)
+    assert (date(2025, 9, 1), date(2026, 8, 31)) in calls(sources)
+    assert min(coordinator(entry).data.sources.calendar) == date(2025, 9, 1)
+
+
 async def test_now_is_frozen() -> None:
     assert datetime.now(tz=NOW.tzinfo) == NOW
