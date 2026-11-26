@@ -175,6 +175,21 @@ def test_history_spreads_the_days_known_in_total() -> None:
     assert len(hours) == 26
 
 
+def test_history_keeps_the_hours_before_an_outage() -> None:
+    # Hours up to 14:00 on 1 December, then nothing for more than a day.
+    first = paris(2026, 12, 1).astimezone(UTC)
+    rows = [((first + timedelta(hours=hour)).timestamp(), 1.0) for hour in range(15)]
+    rows.append((paris(2026, 12, 2, 16).astimezone(UTC).timestamp(), 1.0))
+    hours = {
+        moment.replace(tzinfo=FRANCE_TIME_ZONE): value
+        for moment, value in _history(rows, []).items()
+    }
+    assert hours == {
+        **{paris(2026, 12, 1, hour): 1.0 for hour in range(15)},
+        paris(2026, 12, 2, 16): 1.0,
+    }
+
+
 def test_peak_shares() -> None:
     shares = _peak_shares(
         {

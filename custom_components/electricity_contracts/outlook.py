@@ -36,6 +36,7 @@ from .comparison import (
 )
 from .const import FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
+from .costing import daily_totals, hourly_rows
 from .data import (
     Contract,
     contracts,
@@ -55,8 +56,6 @@ _SUNDAY = 6
 
 _HOUR = timedelta(hours=1)
 _DAY = timedelta(days=1)
-# Linky rows at least this far apart hold a whole day.
-_DAILY = timedelta(hours=23)
 # The typical day the daily totals are spread with.
 _SHAPE_WEEKS = timedelta(weeks=8)
 _HALF_HOUR = timedelta(minutes=30)
@@ -357,8 +356,8 @@ def _history(
 ) -> dict[datetime, float]:
     """Return what each hour consumed (French clock time) from the source's rows.
 
-    A row the next one follows a day later holds a whole day: it is spread like
-    the typical day of the `recent` hours.
+    A row that holds a whole day (as `costing` tells them) is spread like the
+    typical day of the `recent` hours. An hour followed by an outage stays an hour.
     """
     days: dict[date, list[float]] = {}
     for timestamp, energy in recent:
@@ -366,19 +365,12 @@ def _history(
             energy
         )
     shape = DayShape.learn(days)
-    hours: dict[datetime, float] = {}
-    for index, (timestamp, energy) in enumerate(rows):
-        start = dt_util.utc_from_timestamp(timestamp)
-        following = rows[index + 1][0] if index + 1 < len(rows) else None
-        if following is not None and following - timestamp >= _DAILY.total_seconds():
-            day = _wall(start).date()
-            day_hours = _local_hours(day_start(day), day_start(day + _DAY))
-            for hour, value in zip(
-                day_hours, shape.spread(day_hours, energy), strict=True
-            ):
-                hours[_wall(hour)] = value
-        else:
-            hours[_wall(start)] = energy
+    starts = [(dt_util.utc_from_timestamp(start), energy) for start, energy in rows]
+    hours = {_wall(hour.start): hour.kwh for hour in hourly_rows(starts)}
+    for day, energy in daily_totals(starts).items():
+        day_hours = _local_hours(day_start(day), day_start(day + _DAY))
+        for hour, value in zip(day_hours, shape.spread(day_hours, energy), strict=True):
+            hours[_wall(hour)] = value
     return hours
 
 
