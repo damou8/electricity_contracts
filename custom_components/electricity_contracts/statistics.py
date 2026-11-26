@@ -15,7 +15,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from typing import Any
@@ -60,11 +60,11 @@ from .data import (
     Contract,
     contracts,
     format_time_range,
-    manual_prices,
     price_periods,
     source_object,
     source_statistic,
 )
+from .prices import first_statistic_hour, hourly_prices
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -136,6 +136,8 @@ class SeriesStatus:
 
     last_hour: datetime | None
     waiting: Waiting | None
+    first_hour: datetime | None = None
+    """First hour costed: a contract priced by a sensor starts at its first price."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -209,6 +211,7 @@ class _State:
                 str(key): {
                     "fingerprint": str(value["fingerprint"]),
                     "ids": [str(item) for item in value["ids"]],
+                    "first_hour": value.get("first_hour"),
                 }
                 for key, value in data["series"].items()
             }
@@ -329,7 +332,9 @@ class StatisticsWriter:
         )
         source_rows, last_row = await self._async_source_rows(fetch_from)
 
-        contract_inputs = [inputs[key] for key in inputs]
+        contract_inputs = await self._async_with_hourly_prices(
+            [inputs[key] for key in inputs], source_rows
+        )
         costed, actual = await self.hass.async_add_executor_job(
             partial(
                 _cost_all,
@@ -346,14 +351,26 @@ class StatisticsWriter:
             costs = actual if key == ACTUAL else costed[key]
             assert costs is not None
             written = self._write(item, costs, last_start, sums)
+            # Kept while the series is resumed: rewritten, it starts again.
+            first: float | None = (
+                self._state.series.get(key, {}).get("first_hour")
+                if last_start is not None
+                else None
+            )
             if last_start is None and written is not None and costs.costs:
                 first = min(costs.costs).timestamp()
                 if self._state.first_hour is None or first < self._state.first_hour:
                     self._state.first_hour = first
             status[key] = SeriesStatus(
-                last_hour=written or last_start, waiting=costs.waiting
+                last_hour=written or last_start,
+                waiting=costs.waiting,
+                first_hour=_time(first),
             )
-            self._state.series[key] = {"fingerprint": item.fingerprint, "ids": item.ids}
+            self._state.series[key] = {
+                "fingerprint": item.fingerprint,
+                "ids": item.ids,
+                "first_hour": first,
+            }
 
         self._state.source_object = self.prefix
         if last_row is not None:
@@ -366,22 +383,51 @@ class StatisticsWriter:
             first_hour=_time(self._state.first_hour),
         )
 
+    async def _async_with_hourly_prices(
+        self, inputs: list[ContractInput], rows: list[tuple[datetime, float]]
+    ) -> list[ContractInput]:
+        """Give the contracts priced by a sensor the price of the hours to cost."""
+        entities = {
+            contract.uid: contract.entity.entity_id
+            for contract in contracts(self.entry)
+            if contract.entity is not None
+        }
+        if not entities or not rows:
+            return inputs
+        start = rows[0][0]
+        prices = await get_instance(self.hass).async_add_executor_job(
+            hourly_prices, self.hass, set(entities.values()), start, None
+        )
+        return [
+            replace(item, sensor_prices=prices[entities[item.uid]])
+            if item.uid in entities
+            else item
+            for item in inputs
+        ]
+
     def _wanted(
         self, official_prices: Mapping[tuple[ContractKind, int], list[PricePeriod]]
     ) -> tuple[dict[str, ContractInput], dict[str, _Series]]:
         entry_contracts = contracts(self.entry)
-        manual = manual_prices(self.entry)
         inputs: dict[str, ContractInput] = {}
         series: dict[str, _Series] = {}
         fingerprints: dict[str, str] = {}
         for contract in entry_contracts:
-            periods = price_periods(contract, manual, official_prices)
+            # A sensor's prices are read hour by hour, with the source's rows.
+            periods = (
+                []
+                if contract.entity is not None
+                else price_periods(self.hass, contract, official_prices)
+            )
             inputs[contract.uid] = ContractInput(
                 uid=contract.uid,
                 rules=contract.rules,
                 periods=periods,
                 active_from=contract.active_from,
                 active_to=contract.active_to,
+                fixed_per_year=(
+                    contract.entity.fixed_per_year if contract.entity else 0.0
+                ),
             )
             fingerprints[contract.uid] = self._contract_fingerprint(contract, periods)
             series[contract.uid] = self._contract_series(
@@ -430,18 +476,23 @@ class StatisticsWriter:
     def _contract_fingerprint(
         self, contract: Contract, periods: list[PricePeriod]
     ) -> str:
-        return _fingerprint(
-            {
-                "version": COSTING_VERSION,
-                "name": contract.name,
-                "names": self._names["energy"],
-                "currency": self._currency,
-                "kind": contract.kind,
-                "off_peak": [format_time_range(r) for r in contract.rules.off_peak],
-                "weekend": contract.rules.weekend_off_peak,
-                "periods": _periods_value(periods),
-            }
-        )
+        value: dict[str, Any] = {
+            "version": COSTING_VERSION,
+            "name": contract.name,
+            "names": self._names["energy"],
+            "currency": self._currency,
+            "kind": contract.kind,
+            "off_peak": [format_time_range(r) for r in contract.rules.off_peak],
+            "weekend": contract.rules.weekend_off_peak,
+            "periods": _periods_value(periods),
+        }
+        # Only when set: the statistics written before 0.7 stay as they are.
+        if contract.entity is not None:
+            value["entity"] = [
+                contract.entity.entity_id,
+                contract.entity.fixed_per_year,
+            ]
+        return _fingerprint(value)
 
     def _contract_series(self, contract: Contract, fingerprint: str) -> _Series:
         ids = self.contract_statistics(contract.uid, contract.kind)
@@ -698,34 +749,10 @@ async def async_statistic_first_day(
     hass: HomeAssistant, statistic_id: str
 ) -> date | None:
     """Return the day, French time, of a statistic's first hour; None without one."""
-    recorder = get_instance(hass)
-    months = await recorder.async_add_executor_job(
-        statistics_during_period,
-        hass,
-        datetime(2000, 1, 1, tzinfo=UTC),
-        None,
-        {statistic_id},
-        "month",
-        None,
-        {"mean", "sum"},
+    first = await get_instance(hass).async_add_executor_job(
+        first_statistic_hour, hass, statistic_id
     )
-    if not months.get(statistic_id):
-        return None
-    # Months follow the server's time zone: look for the first hour in the
-    # first month only.
-    month_start = datetime.fromtimestamp(months[statistic_id][0]["start"], UTC)
-    hours = await recorder.async_add_executor_job(
-        statistics_during_period,
-        hass,
-        month_start,
-        month_start + timedelta(days=32),
-        {statistic_id},
-        "hour",
-        None,
-        {"mean", "sum"},
-    )
-    start = hours[statistic_id][0]["start"]
-    return datetime.fromtimestamp(start, FRANCE_TIME_ZONE).date()
+    return first.astimezone(FRANCE_TIME_ZONE).date() if first else None
 
 
 async def async_clear_statistics(hass: HomeAssistant, ids: list[str]) -> None:

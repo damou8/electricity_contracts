@@ -26,6 +26,7 @@ from .conftest import (
     TEMPO_CONTRACT,
     Sources,
     add_statistic,
+    gas_price,
     make_entry,
 )
 from .test_comparison import setup_entry
@@ -38,7 +39,6 @@ from .test_heating import (
     HEATER_B,
     add_energy,
     gas_home,  # noqa: F401 - a fixture
-    gas_price,
     heating,
     hourly,
 )

@@ -12,6 +12,7 @@ from elec_tariffs import (
     PricePeriod,
     TempoColor,
     cost_hour,
+    cost_hour_at_price,
 )
 from homeassistant.components.recorder.statistics import (
     StatisticsRow,
@@ -34,14 +35,13 @@ from .data import (
     Contract,
     Heating,
     contracts,
-    gas_price_on,
-    gas_prices,
+    gas_contracts,
     in_force,
-    manual_prices,
     price_periods,
     source_statistic,
 )
 from .insights import DEGREE_DAY_BASE, daily_means, line_heating, weather_fit
+from .prices import GasPricer, HourlyPrices, hourly_prices, price_entities
 from .weather import outdoor_fill, outdoor_ids, outdoor_rows, outdoor_statistic
 
 # kWh below which a day is taken as costed in full.
@@ -66,6 +66,13 @@ class _Day:
     uncosted: float = 0.0
     """kWh with no cost: daily values, or hours whose price or color isn't known."""
 
+    def add(self, cost: float | None, kwh: float) -> None:
+        """Add the cost of `kwh`; None when they couldn't be costed."""
+        if cost is None:
+            self.uncosted += kwh
+        else:
+            self.cost += cost
+
     @property
     def priced(self) -> float | None:
         return self.cost if self.uncosted <= _UNCOSTED_TOLERANCE else None
@@ -87,22 +94,24 @@ class _Usage:
 
 
 class _Pricer:
-    """Cost kWh at the prices of the contract in force, or of the gas."""
+    """Cost kWh at the prices of the contract in force, or of the gas contract."""
 
     def __init__(
         self,
+        hass: HomeAssistant,
         entry: ElectricityContractsConfigEntry,
         entry_contracts: list[Contract],
+        hourly: HourlyPrices,
     ) -> None:
         sources = entry.runtime_data.data.sources
         self._calendar = sources.calendar
-        manual = manual_prices(entry)
         self._contracts = entry_contracts
+        self._hourly = hourly
         self._periods = {
-            contract.uid: price_periods(contract, manual, sources.official_prices)
+            contract.uid: price_periods(hass, contract, sources.official_prices)
             for contract in entry_contracts
         }
-        self._gas = gas_prices(entry)
+        self._gas = GasPricer(hass, gas_contracts(entry), sources.gas_prices, hourly)
 
     def electricity(
         self, start: datetime, kwh: float
@@ -113,9 +122,27 @@ class _Pricer:
         if contract is None:
             return None
         try:
-            cost = cost_hour(
-                local, kwh, contract.rules, self._periods[contract.uid], self._calendar
-            )
+            if contract.entity is not None:
+                sensor = self._hourly.get(contract.entity.entity_id)
+                price = sensor.at(start) if sensor is not None else None
+                if price is None:
+                    return None
+                cost = cost_hour_at_price(
+                    local,
+                    kwh,
+                    contract.rules,
+                    self._calendar,
+                    price=price,
+                    fixed_per_year=contract.entity.fixed_per_year,
+                )
+            else:
+                cost = cost_hour(
+                    local,
+                    kwh,
+                    contract.rules,
+                    self._periods[contract.uid],
+                    self._calendar,
+                )
         except MissingColorError, MissingPriceError:
             return None
         return {
@@ -123,10 +150,17 @@ class _Pricer:
             for tranche, energy in cost.energy.items()
         }
 
-    def gas(self, day: date, kwh: float) -> float | None:
-        """Cost kWh of gas used on `day`; None without a price that day."""
-        price = gas_price_on(self._gas, day)
-        return kwh * price if price is not None else None
+    def gas_hour(self, start: datetime, kwh: float) -> float | None:
+        """Cost an hour of gas; None without a price that hour."""
+        return self._gas.hour(start, kwh)
+
+    def gas_day(self, day: date, kwh: float) -> float | None:
+        """Cost gas only known for the whole day; None without a price that day."""
+        return self._gas.day(day, kwh)
+
+    def gas_fixed(self, day: date) -> float | None:
+        """Return the day's share of the gas subscription."""
+        return self._gas.fixed(day)
 
     def contract_today(self, today: date) -> tuple[Contract, PricePeriod] | None:
         """Return the contract in force today and its prices of the day."""
@@ -140,7 +174,7 @@ class _Pricer:
 
     def gas_today(self, today: date) -> float | None:
         """Return the price of a kWh of gas today."""
-        return gas_price_on(self._gas, today)
+        return self._gas.today(today)
 
 
 def _summed(
@@ -165,8 +199,13 @@ def _usage(
     *,
     gas: bool,
     pricer: _Pricer,
+    subscription: bool = False,
 ) -> _Usage:
-    """Count and cost what statistics used, by day, hour of the day and tranche."""
+    """Count and cost what statistics used, by day, hour of the day and tranche.
+
+    With `subscription`, each day of gas also costs its share of the gas
+    subscription: the statistics are the main use of the gas.
+    """
     usage = _Usage()
     hourly, daily = _summed(rows_by_id)
     for start, kwh in sorted(hourly.items()):
@@ -176,11 +215,7 @@ def _usage(
         usage.hours[local.hour][0] += kwh
         usage.hourly_days.add(local.date())
         if gas:
-            cost = pricer.gas(local.date(), kwh)
-            if cost is None:
-                day.uncosted += kwh
-            else:
-                day.cost += cost
+            day.add(pricer.gas_hour(start, kwh), kwh)
             continue
         costed = pricer.electricity(start, kwh)
         if costed is None:
@@ -195,11 +230,11 @@ def _usage(
         local = start.astimezone(FRANCE_TIME_ZONE)
         day = usage.day(local.date())
         day.energy += kwh
-        cost = pricer.gas(local.date(), kwh) if gas else None
-        if cost is None:
-            day.uncosted += kwh
-        else:
-            day.cost += cost
+        day.add(pricer.gas_day(local.date(), kwh) if gas else None, kwh)
+    if gas and subscription:
+        for day_of, costed_day in usage.days.items():
+            if (fixed := pricer.gas_fixed(day_of)) is not None:
+                costed_day.cost += fixed
     for counted in usage.hours:
         counted[1] = len(usage.hourly_days)
     return usage
@@ -254,6 +289,8 @@ class _Read:
     # Daily rows of the year before the window's end, when hot water is estimated.
     year_energy: dict[str, list[StatisticsRow]] = field(default_factory=dict)
     year_temperature: dict[str, list[StatisticsRow]] = field(default_factory=dict)
+    # The hourly prices of the sensors contracts are priced by.
+    prices: HourlyPrices = field(default_factory=dict)
 
 
 @dataclass(kw_only=True)
@@ -393,7 +430,7 @@ class _Answer:
     ) -> None:
         self._hass = hass
         self.heating = heating
-        self.pricer = _Pricer(entry, contracts(entry))
+        self.pricer = _Pricer(hass, entry, contracts(entry), read.prices)
         self.meter = source_statistic(entry) is not None
         self.calendar = entry.runtime_data.data.sources.calendar
         self.read = read
@@ -470,16 +507,20 @@ class _Answer:
                 today=today,
             )
 
+        # The gas subscription goes with the heating when it is gas, else with
+        # the hot water.
         usage = _usage(
             [self._rows(item) for item in heating.statistics],
             gas=heating.gas,
             pricer=self.pricer,
+            subscription=heating.gas,
         )
         water = (
             _usage(
                 [self._rows(heating.water_statistic)],
                 gas=heating.water_gas,
                 pricer=self.pricer,
+                subscription=heating.water_gas and not heating.gas,
             )
             if heating.water_statistic
             else None
@@ -928,6 +969,7 @@ async def async_heating_between(  # noqa: PLR0913 - the window and how to read i
     # Hot water mixed with the heating is told apart on the warm days of a year.
     outdoor = heating.outdoor
     year = heating.measured and heating.with_water and not heating.water_statistic
+    price_ids = price_entities([*contracts(entry), *gas_contracts(entry)])
 
     def read() -> _Read:
         if end <= start:
@@ -967,6 +1009,7 @@ async def async_heating_between(  # noqa: PLR0913 - the window and how to read i
                 if heating.statistics
                 else {}
             ),
+            prices=hourly_prices(hass, price_ids, start, end),
             **(read_year() if year and outdoor else {}),
         )
 

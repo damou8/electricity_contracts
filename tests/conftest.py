@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from elec_tariffs import (
     ContractKind,
+    GasPricePeriod,
+    GasProfile,
     PricePeriod,
     TempoColor,
     TempoError,
@@ -42,24 +44,51 @@ from custom_components.electricity_contracts.const import (
     CONF_KIND,
     CONF_KVA,
     CONF_OFF_PEAK,
+    CONF_PERIODS,
+    CONF_PRICE,
+    CONF_PRICE_ENTITY,
     CONF_PRICES,
     CONF_PRICING,
+    CONF_PROFILE,
     CONF_START,
     CONF_STATISTIC_ID,
     CONF_UID,
     CONF_WEEKEND_OFF_PEAK,
     DOMAIN,
     NO_METER,
+    PRICING_ENTITY,
     PRICING_MANUAL,
     PRICING_OFFICIAL,
     SUBENTRY_COMPARISON,
     SUBENTRY_CONTRACT,
+    SUBENTRY_GAS_CONTRACT,
+    SUBENTRY_GAS_PRICE,
     SUBENTRY_PRICE_PERIOD,
 )
 
 STATISTIC_ID = "linky:00000000000000"
+# The CRE reference prices: one month, then the month in force since.
+GAS_PERIODS = {
+    GasProfile.HEATING: [
+        GasPricePeriod(
+            start=date(2026, 1, 1),
+            end=date(2026, 1, 31),
+            fixed_per_year=365.0,
+            price=0.12,
+        ),
+        GasPricePeriod(
+            start=date(2026, 2, 1), end=None, fixed_per_year=365.0, price=0.1
+        ),
+    ],
+    GasProfile.COOKING_WATER: [
+        GasPricePeriod(
+            start=date(2026, 1, 1), end=None, fixed_per_year=150.0, price=0.2
+        ),
+    ],
+}
 OTHER_STATISTIC_ID = "linky:11111111111111"
 TEMPERATURE_ID = "sensor.outdoor_temperature"
+PRICE_ID = "sensor.price"
 FIRST_HOUR = datetime(2026, 3, 1, tzinfo=UTC)
 NOW = datetime(2026, 11, 7, 9, tzinfo=UTC)  # 10:00 in Paris
 
@@ -217,6 +246,34 @@ async def add_temperature(
     await async_wait_recording_done(hass)
 
 
+async def add_price(
+    hass: HomeAssistant,
+    means: list[float],
+    *,
+    first: int = 0,
+    unit: str = "€/kWh",
+    mean_type: StatisticMeanType = StatisticMeanType.ARITHMETIC,
+) -> None:
+    """Import the hourly means of a price sensor, `first` hours after FIRST_HOUR."""
+    metadata = StatisticMetaData(
+        mean_type=mean_type,
+        has_sum=False,
+        name="Price",
+        source="recorder",
+        statistic_id=PRICE_ID,
+        unit_class=None,
+        unit_of_measurement=unit,
+    )
+    rows = [
+        StatisticData(
+            start=FIRST_HOUR + timedelta(hours=hour), mean=mean, min=mean, max=mean
+        )
+        for hour, mean in enumerate(means, start=first)
+    ]
+    async_import_statistics(hass, metadata, rows)
+    await async_wait_recording_done(hass)
+
+
 @pytest.fixture
 async def statistic(hass: HomeAssistant) -> str:
     """Import the Linky statistic of the tests."""
@@ -234,6 +291,18 @@ def busy_recorder(hass: HomeAssistant) -> asyncio.Future[None]:
     return busy
 
 
+def manual_period(
+    start: str, end: str | None = None, *, base: float = 0.19, fixed: float = 150.0
+) -> dict[str, Any]:
+    """Build a price period of a Base contract priced by hand."""
+    return {
+        CONF_START: start,
+        CONF_END: end,
+        CONF_FIXED_PER_YEAR: fixed,
+        CONF_PRICES: {"base": base},
+    }
+
+
 def contract_subentry(
     title: str,
     *,
@@ -244,6 +313,9 @@ def contract_subentry(
     active_from: str | None = None,
     active_to: str | None = None,
     off_peak: list[str] | None = None,
+    periods: list[dict[str, Any]] | None = None,
+    price_entity: str | None = None,
+    fixed_per_year: float = 0.0,
 ) -> ConfigSubentryData:
     """Build the subentry of a contract."""
     data: dict[str, Any] = {
@@ -255,6 +327,11 @@ def contract_subentry(
     }
     if pricing == PRICING_OFFICIAL:
         data[CONF_KVA] = kva
+    if pricing == PRICING_MANUAL:
+        data[CONF_PERIODS] = periods or []
+    if pricing == PRICING_ENTITY:
+        data[CONF_PRICE_ENTITY] = price_entity
+        data[CONF_FIXED_PER_YEAR] = fixed_per_year
     if kind is ContractKind.HPHC:
         data[CONF_OFF_PEAK] = off_peak or ["22:00-06:00"]
         data[CONF_WEEKEND_OFF_PEAK] = False
@@ -263,10 +340,70 @@ def contract_subentry(
     )
 
 
-def price_period_subentry(
+def gas_period(
+    price: float, start: str, end: str | None = None, *, fixed: float = 0.0
+) -> dict[str, Any]:
+    """Build a gas price period entered by hand."""
+    return {
+        CONF_START: start,
+        CONF_END: end,
+        CONF_FIXED_PER_YEAR: fixed,
+        CONF_PRICE: price,
+    }
+
+
+def gas_contract_subentry(
+    title: str = "Gas",
+    *,
+    uid: str = "gas00001",
+    pricing: str = PRICING_MANUAL,
+    profile: GasProfile = GasProfile.HEATING,
+    periods: list[dict[str, Any]] | None = None,
+    price_entity: str | None = None,
+    fixed_per_year: float = 0.0,
+    active_from: str | None = None,
+    active_to: str | None = None,
+) -> ConfigSubentryData:
+    """Build the subentry of a gas contract, always in force by default."""
+    data: dict[str, Any] = {
+        CONF_UID: uid,
+        CONF_PRICING: pricing,
+        CONF_ACTIVE_FROM: active_from,
+        CONF_ACTIVE_TO: active_to,
+    }
+    if pricing == PRICING_OFFICIAL:
+        data[CONF_PROFILE] = profile.value
+    if pricing == PRICING_MANUAL:
+        data[CONF_PERIODS] = periods or []
+    if pricing == PRICING_ENTITY:
+        data[CONF_PRICE_ENTITY] = price_entity
+        data[CONF_FIXED_PER_YEAR] = fixed_per_year
+    return ConfigSubentryData(
+        data=data, subentry_type=SUBENTRY_GAS_CONTRACT, title=title, unique_id=uid
+    )
+
+
+def gas_price(price: float, start: str, end: str | None = None) -> ConfigSubentryData:
+    """Build a gas contract with one price period and no subscription."""
+    return gas_contract_subentry(periods=[gas_period(price, start, end)])
+
+
+def legacy_gas_price(
+    price: float, start: str, end: str | None = None
+) -> ConfigSubentryData:
+    """Build a gas price subentry, as 0.6 stored it."""
+    return ConfigSubentryData(
+        data={CONF_PRICE: price, CONF_START: start, CONF_END: end},
+        subentry_type=SUBENTRY_GAS_PRICE,
+        title=f"{price} €/kWh",
+        unique_id=None,
+    )
+
+
+def legacy_price_period(
     contract_uid: str, start: str, end: str | None = None
 ) -> ConfigSubentryData:
-    """Build the subentry of a price period of a Base contract."""
+    """Build the subentry of a price period of a Base contract, as 0.6 stored it."""
     return ConfigSubentryData(
         data={
             CONF_CONTRACT: contract_uid,
@@ -312,15 +449,27 @@ MANUAL_CONTRACT = contract_subentry(
 )
 
 
+def manual_contract(*periods: dict[str, Any]) -> ConfigSubentryData:
+    """Build the Offer contract, a Base contract priced by hand, with its prices."""
+    return contract_subentry(
+        "Offer",
+        uid="offer001",
+        kind=ContractKind.BASE,
+        pricing=PRICING_MANUAL,
+        periods=list(periods),
+    )
+
+
 def make_entry(
     subentries: list[ConfigSubentryData] | None = None,
     options: dict[str, Any] | None = None,
     statistic_id: str | None = STATISTIC_ID,
+    minor_version: int = 3,
 ) -> MockConfigEntry:
     """Build the config entry of a consumption source; None for no meter."""
     return MockConfigEntry(
         domain=DOMAIN,
-        minor_version=2,
+        minor_version=minor_version,
         title="Linky 00000000000000" if statistic_id else "No meter",
         unique_id=statistic_id or NO_METER,
         data={CONF_STATISTIC_ID: statistic_id} if statistic_id else {},
@@ -348,6 +497,8 @@ class Sources:
         )
         self.official.async_check_credentials = AsyncMock()
         self.official_class = MagicMock(return_value=self.official)
+        self.prvg = MagicMock()
+        self.prvg.async_price_periods = AsyncMock(side_effect=self._gas_prices)
         self.weather = MagicMock()
         self.weather.async_hourly_temperatures = AsyncMock(
             side_effect=self._temperatures
@@ -361,6 +512,10 @@ class Sources:
             ContractKind.BASE: BASE_PERIODS,
             ContractKind.HPHC: HPHC_PERIODS,
         }[kind]
+
+    @staticmethod
+    async def _gas_prices(profile: GasProfile) -> list[GasPricePeriod]:
+        return GAS_PERIODS[profile]
 
     @staticmethod
     async def _temperatures(
@@ -392,6 +547,7 @@ def sources() -> Generator[Sources]:
     module = "custom_components.electricity_contracts"
     with (
         patch(f"{module}.coordinator.TrvClient", return_value=mocks.trv),
+        patch(f"{module}.coordinator.PrvgClient", return_value=mocks.prvg),
         patch(f"{module}.coordinator.RtePublicTempoClient", return_value=mocks.public),
         patch(f"{module}.coordinator.RteOfficialTempoClient", mocks.official_class),
         patch(f"{module}.config_flow.RteOfficialTempoClient", mocks.official_class),

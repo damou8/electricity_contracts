@@ -40,7 +40,6 @@ from .data import (
     Contract,
     contracts,
     in_force,
-    manual_prices,
     price_periods,
     source_statistic,
 )
@@ -105,7 +104,7 @@ async def async_outlook(
     if contract is None:
         return {"contract": None, "prices": [], "season": None}
     sources = entry.runtime_data.data.sources
-    periods = price_periods(contract, manual_prices(entry), sources.official_prices)
+    periods = price_periods(hass, contract, sources.official_prices)
     return {
         "contract": {"id": contract.uid, "name": contract.name},
         "prices": _timeline(now, contract.rules, periods, sources.calendar),

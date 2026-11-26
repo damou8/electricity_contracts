@@ -37,43 +37,74 @@
     "step": {
       "init": {
         "title": "Options",
-        "description": "Les coûts et les comparaisons sont dans la page [Contrats](/electricity-contracts) du menu latéral.",
+        "description": "Les coûts et les comparaisons sont dans la page [Contrats](/electricity-contracts) du menu latéral. Choisissez ce que vous voulez régler.",
+        "menu_options": {
+          "outdoor": "Température extérieure",
+          "indoor": "Température intérieure",
+          "heating": "Chauffage et eau chaude",
+          "rte": "Secours Tempo : API officielle de RTE"
+        },
+        "menu_option_descriptions": {
+          "outdoor": "Un thermomètre extérieur, ou la météo Open-Meteo.",
+          "indoor": "Les thermomètres de la maison, pour le simulateur de réglage.",
+          "heating": "Les statistiques qui mesurent le chauffage et l'eau chaude.",
+          "rte": "Des identifiants RTE, pour le jour où le calendrier Tempo public ne répond plus."
+        }
+      },
+      "outdoor": {
+        "title": "Température extérieure",
         "data": {
-          "temperature": "Température extérieure (facultatif)",
+          "temperature": "Thermomètre extérieur (facultatif)",
           "open_meteo": "Utiliser la météo Open-Meteo"
         },
         "data_description": {
-          "temperature": "Relie la consommation à la météo, dans l'onglet Chauffage. Le capteur doit garder des statistiques. Il passe avant Open-Meteo.",
-          "open_meteo": "Prend la température extérieure heure par heure sur Open-Meteo.com, gratuit et sans compte. Avec un capteur extérieur, Open-Meteo ne donne que les jours d'avant ses premières mesures. La position de votre maison, arrondie à environ 10 km, est envoyée à Open-Meteo."
+          "temperature": "L'onglet Chauffage met la consommation en regard de la météo. Le capteur doit garder des statistiques. Il passe avant Open-Meteo.",
+          "open_meteo": "L'intégration prend la température extérieure heure par heure sur Open-Meteo.com, gratuit et sans compte. Avec un thermomètre extérieur, Open-Meteo ne donne que les jours d'avant ses premières mesures. La position de votre maison, arrondie à environ 10 km, est envoyée à Open-Meteo."
+        }
+      },
+      "indoor": {
+        "title": "Température intérieure",
+        "description": "Facultatif. Le simulateur de réglage de l'onglet Chauffage part de la moyenne de ces thermomètres. Sans eux, il est désactivé.",
+        "data": {
+          "indoor_temperatures": "Thermomètres intérieurs"
         },
+        "data_description": {
+          "indoor_temperatures": "Chaque capteur doit garder des statistiques."
+        }
+      },
+      "heating": {
+        "title": "Chauffage et eau chaude",
+        "description": "Ces statistiques mesurent votre chauffage. Sans elles, l'onglet Chauffage l'estime d'après la consommation du Linky et la température extérieure.",
         "sections": {
           "heating": {
-            "name": "Chauffage et eau chaude",
-            "description": "Facultatif : les statistiques qui mesurent votre chauffage. Sans elles, l'onglet Chauffage l'estime à partir de la consommation et de la température extérieure.",
+            "name": "Chauffage",
             "data": {
               "heating_statistics": "Statistiques de consommation du chauffage",
-              "heating_energy": "Énergie",
-              "heating_content": "Ce qu'elles mesurent",
-              "water_statistic": "Ballon d'eau chaude (facultatif)",
-              "water_energy": "Énergie du ballon",
-              "indoor_temperatures": "Thermomètres intérieurs (facultatif)"
+              "heating_energy": "Énergie du chauffage",
+              "heating_content": "Ce que mesurent ces statistiques"
             },
             "data_description": {
-              "heating_statistics": "Un ou plusieurs totaux d'énergie (un par radiateur, ou le compteur de gaz), additionnés. L'électricité est déjà comptée dans la source de consommation.",
-              "heating_energy": "L'électricité est valorisée aux prix de vos contrats, heure par heure ; le gaz aux prix du gaz que vous ajoutez dans « Prix du gaz ».",
-              "heating_content": "Quand elles comptent aussi l'eau chaude, celle-ci est estimée à partir des jours sans chauffage, sauf si le ballon a sa propre statistique.",
-              "water_statistic": "Sa propre statistique, s'il est suivi à part : l'eau chaude est alors mesurée.",
-              "indoor_temperatures": "Moyennés. Le simulateur de réglage part de cette température ; sans elle, il est désactivé."
+              "heating_statistics": "Un ou plusieurs totaux d'énergie, par exemple un par radiateur ou le compteur de gaz. L'intégration les additionne.",
+              "heating_energy": "L'électricité est déjà comptée par le Linky, aux prix de vos contrats d'électricité. Le gaz est compté au prix du contrat de gaz en vigueur chaque jour, abonnement compris.",
+              "heating_content": "Quand elles comptent aussi l'eau chaude, l'intégration l'estime d'après les jours sans chauffage, sauf si l'eau chaude a sa propre statistique."
             }
           },
-          "rte": {
-            "name": "Secours Tempo : API officielle RTE",
-            "description": "Facultatif, si le calendrier public de RTE ne répond plus : créez une application gratuite pour l'API « Tempo Like Supply Contract » sur data.rte-france.com et saisissez ses identifiants.",
+          "water": {
+            "name": "Eau chaude",
+            "description": "Facultatif. Choisissez sa statistique si l'eau chaude est suivie à part : elle est alors mesurée plutôt qu'estimée.",
             "data": {
-              "rte_client_id": "ID client",
-              "rte_client_secret": "Secret client"
+              "water_statistic": "Statistique de l'eau chaude",
+              "water_energy": "Énergie de l'eau chaude"
             }
           }
+        }
+      },
+      "rte": {
+        "title": "Secours Tempo : API officielle de RTE",
+        "description": "Facultatif. Si le calendrier public de RTE ne répond plus, l'API officielle prend le relais. Créez une application gratuite pour l'API « Tempo Like Supply Contract » sur data.rte-france.com, puis saisissez ses identifiants. Videz les deux champs pour ne plus l'utiliser.",
+        "data": {
+          "rte_client_id": "ID client",
+          "rte_client_secret": "Secret client"
         }
       }
     },
@@ -89,13 +120,13 @@
       "heating_statistic_not_energy": "Statistiques du chauffage : l'une d'elles n'est pas une énergie (Wh, kWh…).",
       "heating_statistic_no_sum": "Statistiques du chauffage : l'une d'elles n'a pas de total cumulé. Choisissez des statistiques de consommation.",
       "heating_statistic_no_data": "Statistiques du chauffage : l'une d'elles n'a pas encore de données.",
-      "water_is_source": "Ballon d'eau chaude : c'est la source de consommation elle-même. Choisissez la statistique du ballon seul.",
-      "water_statistic_not_found": "Ballon d'eau chaude : cette statistique n'existe pas.",
-      "water_statistic_not_energy": "Ballon d'eau chaude : cette statistique n'est pas une énergie (Wh, kWh…).",
-      "water_statistic_no_sum": "Ballon d'eau chaude : cette statistique n'a pas de total cumulé. Choisissez une statistique de consommation.",
-      "water_statistic_no_data": "Ballon d'eau chaude : cette statistique n'a pas encore de données.",
-      "water_in_heating": "Ballon d'eau chaude : il fait déjà partie des statistiques du chauffage.",
-      "water_other_energy": "Ballon d'eau chaude : vos statistiques du chauffage comptent l'eau chaude, le ballon doit donc avoir la même énergie qu'elles.",
+      "water_is_source": "Eau chaude : c'est la source de consommation elle-même. Choisissez la statistique de l'eau chaude seule.",
+      "water_statistic_not_found": "Eau chaude : cette statistique n'existe pas.",
+      "water_statistic_not_energy": "Eau chaude : cette statistique n'est pas une énergie (Wh, kWh…).",
+      "water_statistic_no_sum": "Eau chaude : cette statistique n'a pas de total cumulé. Choisissez une statistique de consommation.",
+      "water_statistic_no_data": "Eau chaude : cette statistique n'a pas encore de données.",
+      "water_in_heating": "Eau chaude : elle fait déjà partie des statistiques du chauffage.",
+      "water_other_energy": "Eau chaude : vos statistiques du chauffage comptent déjà l'eau chaude, sa statistique doit donc avoir la même énergie qu'elles.",
       "indoor_statistic_not_found": "Thermomètres intérieurs : l'un d'eux ne garde pas de statistiques. Il lui faut la classe d'état measurement.",
       "indoor_statistic_not_temperature": "Thermomètres intérieurs : l'un d'eux ne mesure pas une température (°C, °F…).",
       "indoor_statistic_no_mean": "Thermomètres intérieurs : l'un d'eux n'a pas de moyenne horaire. Il lui faut la classe d'état measurement."
@@ -103,37 +134,37 @@
   },
   "config_subentries": {
     "contract": {
-      "entry_type": "Contrat",
+      "entry_type": "Contrat d'électricité",
       "initiate_flow": {
-        "user": "Ajouter un contrat",
+        "user": "Ajouter un contrat d'électricité",
         "reconfigure": "Modifier le contrat"
       },
       "step": {
         "user": {
-          "title": "Ajouter un contrat",
+          "title": "Contrat d'électricité",
           "data": {
             "kind": "Type de contrat",
             "pricing": "Prix",
             "kva": "Puissance souscrite"
           },
           "data_description": {
-            "pricing": "Les prix que vous fixez vous-même se saisissent ensuite, en périodes de prix.",
-            "kva": "Écrite sur votre facture ; 6 kVA est la plus courante. Les tarifs réglementés en dépendent."
+            "pricing": "Avec vos propres prix, vous les saisissez aux étapes suivantes. Avec un capteur, l'intégration lit son prix heure par heure.",
+            "kva": "Elle est écrite sur votre facture ; 6 kVA est la plus courante. Les tarifs réglementés en dépendent."
           }
         },
-        "reconfigure": {
+        "contract": {
           "title": "Modifier {name}",
           "data": {
             "pricing": "Prix",
             "kva": "Puissance souscrite"
           },
           "data_description": {
-            "pricing": "Les prix que vous fixez vous-même se saisissent en périodes de prix.",
-            "kva": "Écrite sur votre facture. Les tarifs réglementés en dépendent."
+            "pricing": "Vos propres prix se gèrent ensuite dans le menu du contrat, période par période.",
+            "kva": "Elle est écrite sur votre facture. Les tarifs réglementés en dépendent."
           }
         },
         "details": {
-          "title": "Le contrat",
+          "title": "Nom et dates",
           "data": {
             "name": "Nom",
             "off_peak": "Heures creuses",
@@ -149,12 +180,12 @@
               "name": "Période d'activité (facultatif)",
               "description": "Laissez vide si ce contrat sert seulement à comparer.",
               "data": {
-                "active_from": "Du",
-                "active_to": "Au"
+                "active_from": "Premier jour",
+                "active_to": "Dernier jour"
               },
               "data_description": {
-                "active_from": "Premier jour facturé avec ce contrat.",
-                "active_to": "Dernier jour ; vide s'il est toujours en vigueur."
+                "active_from": "Le premier jour facturé avec ce contrat.",
+                "active_to": "Laissez vide s'il est toujours en vigueur."
               }
             }
           }
@@ -165,62 +196,13 @@
           "data": {
             "off_peak": "Plage"
           }
-        }
-      },
-      "error": {
-        "duplicate_name": "Un autre contrat porte déjà ce nom.",
-        "empty_name": "Saisissez un nom.",
-        "invalid_off_peak": "Saisissez au moins une plage comme 22:00-06:00, à l'heure ou à la demi-heure.",
-        "active_to_without_from": "Saisissez aussi le premier jour.",
-        "end_before_start": "Le dernier jour est avant le premier.",
-        "overlapping_active_period": "Un autre contrat était en vigueur pendant une partie de ces jours.",
-        "kva_not_offered": "Ce type de contrat n'a pas de tarif réglementé à cette puissance."
-      },
-      "create_entry": {
-        "default": "Le contrat apparaît dans la page [Contrats](/electricity-contracts) dès que ses coûts sont calculés sur tout l'historique.",
-        "add_prices": "Dernière étape : saisissez ses prix avec « Ajouter une période de prix », sur cette page."
-      }
-    },
-    "price_period": {
-      "entry_type": "Période de prix",
-      "initiate_flow": {
-        "user": "Ajouter une période de prix",
-        "reconfigure": "Modifier la période de prix"
-      },
-      "step": {
-        "user": {
-          "title": "Nouvelle période de prix",
-          "description": "Prix d'un contrat saisi à la main, d'un jour à un autre.",
-          "data": {
-            "contract": "Contrat",
-            "start": "Premier jour",
-            "end": "Dernier jour",
-            "fixed_per_year": "Abonnement par an, TTC"
-          },
-          "data_description": {
-            "start": "Jour d'entrée en vigueur des prix.",
-            "end": "Laissez vide si les prix sont toujours en vigueur.",
-            "fixed_per_year": "Part fixe annuelle, répartie sur chaque heure de l'année."
-          }
         },
-        "reconfigure": {
-          "title": "Modifier la période de prix",
-          "description": "Prix de {contract}.",
+        "first_period": {
+          "title": "Prix de {name}",
           "data": {
             "start": "Premier jour",
             "end": "Dernier jour",
-            "fixed_per_year": "Abonnement par an, TTC"
-          },
-          "data_description": {
-            "start": "Jour d'entrée en vigueur des prix.",
-            "end": "Laissez vide si les prix sont toujours en vigueur.",
-            "fixed_per_year": "Part fixe annuelle, répartie sur chaque heure de l'année."
-          }
-        },
-        "prices": {
-          "title": "Prix au kWh",
-          "description": "Prix de {contract} au kWh, TTC.",
-          "data": {
+            "fixed_per_year": "Abonnement par an, TTC",
             "base": "Base",
             "hc": "Heures creuses",
             "hp": "Heures pleines",
@@ -230,55 +212,198 @@
             "white_hp": "Jour blanc, heures pleines",
             "red_hc": "Jour rouge, heures creuses",
             "red_hp": "Jour rouge, heures pleines"
+          },
+          "data_description": {
+            "start": "Le jour où ces prix entrent en vigueur.",
+            "end": "Laissez vide si ces prix sont toujours en vigueur.",
+            "fixed_per_year": "L'abonnement est réparti sur chaque heure de l'année."
+          },
+          "description": "Saisissez les prix TTC, tels qu'ils figurent sur la facture. Quand ils changent, le crayon du contrat permet d'ajouter une nouvelle période de prix."
+        },
+        "period": {
+          "title": "Prix de {name}",
+          "data": {
+            "start": "Premier jour",
+            "end": "Dernier jour",
+            "fixed_per_year": "Abonnement par an, TTC",
+            "base": "Base",
+            "hc": "Heures creuses",
+            "hp": "Heures pleines",
+            "blue_hc": "Jour bleu, heures creuses",
+            "blue_hp": "Jour bleu, heures pleines",
+            "white_hc": "Jour blanc, heures creuses",
+            "white_hp": "Jour blanc, heures pleines",
+            "red_hc": "Jour rouge, heures creuses",
+            "red_hp": "Jour rouge, heures pleines"
+          },
+          "data_description": {
+            "start": "Le jour où ces prix entrent en vigueur.",
+            "end": "Laissez vide si ces prix sont toujours en vigueur.",
+            "fixed_per_year": "L'abonnement est réparti sur chaque heure de l'année."
+          },
+          "description": "Saisissez les prix TTC, tels qu'ils figurent sur la facture."
+        },
+        "price_entity": {
+          "title": "Prix lu dans un capteur",
+          "data": {
+            "price_entity": "Capteur du prix du kWh",
+            "fixed_per_year": "Abonnement par an, TTC"
+          },
+          "data_description": {
+            "price_entity": "Son unité doit être un prix du kWh, comme €/kWh, et il doit garder des statistiques (classe d'état measurement). Les heures d'avant ses premières statistiques n'ont pas de prix.",
+            "fixed_per_year": "L'abonnement est réparti sur chaque heure de l'année."
+          },
+          "description": "L'intégration compte chaque heure au prix que ce capteur affichait à cette heure-là, pour toutes les tranches du contrat."
+        },
+        "reconfigure": {
+          "title": "{name}",
+          "description": "Ses prix sont saisis à la main, période par période. Choisissez ce que vous voulez modifier."
+        },
+        "remove_period": {
+          "title": "Supprimer une période de prix",
+          "description": "La période supprimée ne compte plus dans les coûts de {name} : ces jours-là n'ont plus de prix, sauf si une autre période les couvre.",
+          "data": {
+            "period": "Période"
           }
         }
       },
       "error": {
+        "empty_name": "Saisissez un nom.",
+        "active_to_without_from": "Saisissez aussi le premier jour.",
         "end_before_start": "Le dernier jour est avant le premier.",
-        "overlapping_price_period": "Une autre période de prix de ce contrat couvre une partie de ces jours."
+        "overlapping_price_period": "Une autre période de prix de ce contrat couvre une partie de ces jours.",
+        "price_entity_not_found": "Ce capteur ne garde pas de statistiques : il lui faut la classe d'état measurement.",
+        "price_entity_not_per_kwh": "Ce capteur ne donne pas un prix du kWh en euros : son unité doit être €/kWh ou EUR/kWh.",
+        "price_entity_no_mean": "Ce capteur n'a pas de moyenne horaire : il lui faut la classe d'état measurement.",
+        "duplicate_name": "Un autre contrat d'électricité porte déjà ce nom.",
+        "invalid_off_peak": "Saisissez au moins une plage comme 22:00-06:00, à l'heure ou à la demi-heure.",
+        "overlapping_active_period": "Un autre contrat d'électricité était en vigueur pendant une partie de ces jours.",
+        "kva_not_offered": "Ce type de contrat n'a pas de tarif réglementé à cette puissance."
       },
-      "abort": {
-        "no_manual_contracts": "Ajoutez d'abord un contrat dont vous fixez les prix vous-même.",
-        "contract_not_found": "Le contrat de cette période de prix n'existe plus, ou utilise maintenant les tarifs réglementés."
+      "create_entry": {
+        "default": "Le contrat apparaît dans la page [Contrats](/electricity-contracts) dès que ses coûts sont calculés sur tout l'historique."
       }
     },
-    "gas_price": {
-      "entry_type": "Prix du gaz",
+    "gas_contract": {
+      "entry_type": "Contrat de gaz",
       "initiate_flow": {
-        "user": "Ajouter un prix du gaz",
-        "reconfigure": "Modifier le prix du gaz"
+        "user": "Ajouter un contrat de gaz",
+        "reconfigure": "Modifier le contrat"
       },
       "step": {
         "user": {
-          "title": "Nouveau prix du gaz",
-          "description": "Le prix d'un kWh de gaz, d'un jour à un autre. Il donne le chauffage au gaz en euros.",
+          "title": "Contrat de gaz",
+          "description": "Le contrat de gaz donne en euros le gaz du chauffage et de l'eau chaude, dans l'onglet Chauffage.",
           "data": {
-            "price": "Prix du kWh, TTC",
-            "start": "Premier jour",
-            "end": "Dernier jour"
+            "pricing": "Prix",
+            "profile": "Profil du prix repère"
           },
           "data_description": {
-            "start": "Jour d'entrée en vigueur du prix.",
-            "end": "Laissez vide si le prix est toujours en vigueur."
+            "pricing": "La CRE publie chaque mois un prix repère, avec un abonnement et un prix du kWh. Il a remplacé le tarif réglementé du gaz en juillet 2023.",
+            "profile": "La CRE publie un prix repère pour chaque profil. Choisissez Chauffage si le gaz chauffe la maison. Le profil ne compte qu'avec le prix repère."
           }
         },
-        "reconfigure": {
-          "title": "Modifier le prix du gaz",
-          "description": "Le prix d'un kWh de gaz, d'un jour à un autre.",
+        "contract": {
+          "title": "Modifier {name}",
           "data": {
-            "price": "Prix du kWh, TTC",
-            "start": "Premier jour",
-            "end": "Dernier jour"
+            "pricing": "Prix",
+            "profile": "Profil du prix repère"
           },
           "data_description": {
-            "start": "Jour d'entrée en vigueur du prix.",
-            "end": "Laissez vide si le prix est toujours en vigueur."
+            "pricing": "Vos propres prix se gèrent ensuite dans le menu du contrat, période par période.",
+            "profile": "Le profil ne compte qu'avec le prix repère."
+          }
+        },
+        "details": {
+          "title": "Nom et dates",
+          "data": {
+            "name": "Nom"
+          },
+          "data_description": {
+            "name": "Tel qu'il apparaît sur la page de l'intégration."
+          },
+          "sections": {
+            "active_period": {
+              "name": "Période d'activité (facultatif)",
+              "description": "Laissez vide si ce contrat est toujours celui en vigueur.",
+              "data": {
+                "active_from": "Premier jour",
+                "active_to": "Dernier jour"
+              },
+              "data_description": {
+                "active_from": "Le premier jour facturé avec ce contrat. Vide, il a toujours été en vigueur.",
+                "active_to": "Laissez vide s'il est toujours en vigueur."
+              }
+            }
+          }
+        },
+        "first_period": {
+          "title": "Prix de {name}",
+          "data": {
+            "start": "Premier jour",
+            "end": "Dernier jour",
+            "fixed_per_year": "Abonnement par an, TTC",
+            "price": "Prix du kWh, TTC"
+          },
+          "data_description": {
+            "start": "Le jour où ces prix entrent en vigueur.",
+            "end": "Laissez vide si ces prix sont toujours en vigueur.",
+            "fixed_per_year": "L'abonnement est réparti sur chaque jour de l'année."
+          },
+          "description": "Saisissez les prix TTC de votre offre, tels qu'ils figurent sur la facture. Quand ils changent, le crayon du contrat permet d'ajouter une nouvelle période de prix."
+        },
+        "period": {
+          "title": "Prix de {name}",
+          "data": {
+            "start": "Premier jour",
+            "end": "Dernier jour",
+            "fixed_per_year": "Abonnement par an, TTC",
+            "price": "Prix du kWh, TTC"
+          },
+          "data_description": {
+            "start": "Le jour où ces prix entrent en vigueur.",
+            "end": "Laissez vide si ces prix sont toujours en vigueur.",
+            "fixed_per_year": "L'abonnement est réparti sur chaque jour de l'année."
+          },
+          "description": "Saisissez les prix TTC de votre offre, tels qu'ils figurent sur la facture."
+        },
+        "price_entity": {
+          "title": "Prix lu dans un capteur",
+          "data": {
+            "price_entity": "Capteur du prix du kWh",
+            "fixed_per_year": "Abonnement par an, TTC"
+          },
+          "data_description": {
+            "price_entity": "Son unité doit être un prix du kWh, comme €/kWh, et il doit garder des statistiques (classe d'état measurement). Les heures d'avant ses premières statistiques n'ont pas de prix.",
+            "fixed_per_year": "L'abonnement est réparti sur chaque jour de l'année."
+          },
+          "description": "L'intégration compte le gaz de chaque heure au prix que ce capteur affichait à cette heure-là."
+        },
+        "reconfigure": {
+          "title": "{name}",
+          "description": "Ses prix sont saisis à la main, période par période. Choisissez ce que vous voulez modifier."
+        },
+        "remove_period": {
+          "title": "Supprimer une période de prix",
+          "description": "La période supprimée ne compte plus dans les coûts de {name} : ces jours-là n'ont plus de prix, sauf si une autre période les couvre.",
+          "data": {
+            "period": "Période"
           }
         }
       },
       "error": {
+        "empty_name": "Saisissez un nom.",
+        "active_to_without_from": "Saisissez aussi le premier jour.",
         "end_before_start": "Le dernier jour est avant le premier.",
-        "overlapping_gas_price": "Un autre prix du gaz couvre une partie de ces jours."
+        "overlapping_price_period": "Une autre période de prix de ce contrat couvre une partie de ces jours.",
+        "price_entity_not_found": "Ce capteur ne garde pas de statistiques : il lui faut la classe d'état measurement.",
+        "price_entity_not_per_kwh": "Ce capteur ne donne pas un prix du kWh en euros : son unité doit être €/kWh ou EUR/kWh.",
+        "price_entity_no_mean": "Ce capteur n'a pas de moyenne horaire : il lui faut la classe d'état measurement.",
+        "duplicate_name": "Un autre contrat de gaz porte déjà ce nom.",
+        "overlapping_active_period": "Un autre contrat de gaz était en vigueur pendant une partie de ces jours."
+      },
+      "create_entry": {
+        "default": "L'onglet Chauffage de la page [Contrats](/electricity-contracts) compte maintenant le gaz au prix de ce contrat."
       }
     }
   },
@@ -293,7 +418,8 @@
     "pricing": {
       "options": {
         "official": "Tarifs réglementés : mis à jour tout seuls à chaque hausse",
-        "manual": "Mes propres prix : une offre de marché, dont vous saisissez les prix ensuite"
+        "manual": "Mes propres prix : une offre de marché, dont vous saisissez les prix",
+        "entity": "Prix d'un capteur : un prix du kWh qui change, lu heure par heure"
       }
     },
     "off_peak": {
@@ -314,6 +440,19 @@
       "options": {
         "heating": "Le chauffage",
         "heating_water": "Le chauffage et l'eau chaude"
+      }
+    },
+    "gas_pricing": {
+      "options": {
+        "official": "Prix repère de la CRE : mis à jour tout seul chaque mois",
+        "manual": "Mes propres prix : vous saisissez l'abonnement et le prix du kWh",
+        "entity": "Prix d'un capteur : un prix du kWh lu heure par heure"
+      }
+    },
+    "profile": {
+      "options": {
+        "heating": "Chauffage : le gaz chauffe la maison (environ 11 000 kWh par an)",
+        "cooking_water": "Cuisson et eau chaude : sans chauffage au gaz (environ 1 500 kWh par an)"
       }
     }
   },
@@ -385,7 +524,7 @@
     },
     "missing_price": {
       "title": "{contract} n'a pas de prix pour le {day}",
-      "description": "{contract} a des prix saisis à la main, et aucune période de prix ne couvre le {day} : ses coûts s'arrêtent ce jour-là, et les comparaisons avec lui aussi.\n\nAjoutez à {contract} une période de prix qui couvre le {day}. Pour comparer une offre sur des jours passés, sa première période de prix peut commencer avant que l'offre existe. Les coûts reprennent dès que la période est enregistrée."
+      "description": "{contract} a des prix saisis à la main, et aucune période de prix ne couvre le {day} : ses coûts s'arrêtent ce jour-là, et les comparaisons avec lui aussi.\n\nAjoutez à {contract} une période de prix qui couvre le {day} : le crayon de {contract}, sur la page de l'intégration, ouvre son menu. Pour comparer une offre sur des jours passés, sa première période de prix peut commencer avant que l'offre existe. Les coûts reprennent dès que la période est enregistrée."
     },
     "missing_price_official": {
       "title": "{contract} n'a pas de tarif réglementé pour le {day}",
@@ -394,6 +533,10 @@
     "weather_unavailable": {
       "title": "La météo Open-Meteo ne peut pas être mise à jour",
       "description": "La température extérieure n'a pas pu être téléchargée sur Open-Meteo depuis le {since} ({error}). {title} garde les heures déjà connues, et les coûts n'en dépendent pas."
+    },
+    "gas_prices_unavailable": {
+      "title": "Le prix repère du gaz ne se met plus à jour",
+      "description": "Le prix repère du gaz n'a pas pu être téléchargé sur le site de la CRE depuis le {since} ({error}). {title} garde les prix déjà connus. Le gaz des jours sans prix connu n'est compté qu'en kWh, jusqu'à ce que le téléchargement fonctionne à nouveau."
     }
   },
   "services": {

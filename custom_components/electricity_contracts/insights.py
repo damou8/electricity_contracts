@@ -28,7 +28,6 @@ from .data import (
     Contract,
     contracts,
     in_force,
-    manual_prices,
     price_periods,
     source_statistic,
 )
@@ -497,8 +496,8 @@ def _tempo(
         peak = sum(split[0] for split in same_days.values()) / len(same_days)
         off_peak = sum(split[1] for split in same_days.values()) / len(same_days)
         periods = price_periods(
+            entry.runtime_data.hass,
             contract,
-            manual_prices(entry),
             entry.runtime_data.data.sources.official_prices,
         )
         period = next((item for item in periods if item.covers(tomorrow)), None)

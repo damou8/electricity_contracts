@@ -43,7 +43,6 @@ from .data import (
     Heating,
     contracts,
     format_time_range,
-    manual_prices,
     price_periods,
     source_statistic,
 )
@@ -127,6 +126,7 @@ def _contract(
         "name": contract.name,
         "kind": contract.kind.value,
         "official": contract.official,
+        "pricing": contract.pricing,
         "costed": series is not None and series.last_hour is not None,
         "waiting": (
             {"reason": waiting.reason, "day": waiting.day.isoformat()}
@@ -220,7 +220,6 @@ async def ws_entries(
     result: list[dict[str, Any]] = []
     # Read again: an entry may have been unloaded meanwhile.
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-        manual = manual_prices(entry)
         coordinator: ElectricityContractsCoordinator = entry.runtime_data
         status = coordinator.data.costing
         entry_contracts = contracts(entry)
@@ -250,7 +249,7 @@ async def ws_entries(
                     _contract(
                         contract,
                         price_periods(
-                            contract, manual, coordinator.data.sources.official_prices
+                            hass, contract, coordinator.data.sources.official_prices
                         ),
                         status.contracts.get(contract.uid),
                     )
@@ -390,9 +389,7 @@ async def ws_bill(
         writer=coordinator.costing,
         status=coordinator.data.costing,
         contract=contract,
-        periods=price_periods(
-            contract, manual_prices(entry), coordinator.data.sources.official_prices
-        ),
+        periods=price_periods(hass, contract, coordinator.data.sources.official_prices),
         start=day_start(start),
         end=day_start(end + timedelta(days=1)),
     )

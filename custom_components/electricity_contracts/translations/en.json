@@ -37,43 +37,74 @@
     "step": {
       "init": {
         "title": "Options",
-        "description": "Costs and comparisons are on the [Contracts](/electricity-contracts) page of the sidebar.",
+        "description": "Costs and comparisons are on the [Contracts](/electricity-contracts) page of the sidebar. Choose what to set.",
+        "menu_options": {
+          "outdoor": "Outdoor temperature",
+          "indoor": "Indoor temperature",
+          "heating": "Heating and hot water",
+          "rte": "Tempo backup: RTE's official API"
+        },
+        "menu_option_descriptions": {
+          "outdoor": "An outdoor thermometer, or the Open-Meteo weather.",
+          "indoor": "The thermometers of the home, for the setting simulator.",
+          "heating": "The statistics that measure the heating and the hot water.",
+          "rte": "RTE credentials, for when the public Tempo calendar stops answering."
+        }
+      },
+      "outdoor": {
+        "title": "Outdoor temperature",
         "data": {
-          "temperature": "Outdoor temperature (optional)",
+          "temperature": "Outdoor thermometer (optional)",
           "open_meteo": "Use Open-Meteo weather"
         },
         "data_description": {
-          "temperature": "Puts the consumption next to the weather, in the Heating tab. The sensor must keep statistics. It takes the place of Open-Meteo.",
-          "open_meteo": "Takes the hourly outdoor temperature from Open-Meteo.com, free and without an account. With an outdoor sensor, Open-Meteo only gives the days before its first readings. Your home's location, rounded to about 10 km, is sent to Open-Meteo."
+          "temperature": "The Heating tab puts the consumption next to the weather. The sensor must keep statistics. It takes the place of Open-Meteo.",
+          "open_meteo": "The integration takes the hourly outdoor temperature from Open-Meteo.com, free and without an account. With an outdoor thermometer, Open-Meteo only gives the days before its first measurements. The position of your home, rounded to about 10 km, is sent to Open-Meteo."
+        }
+      },
+      "indoor": {
+        "title": "Indoor temperature",
+        "description": "Optional. The setting simulator of the Heating tab starts from the average of these thermometers. Without them, it is turned off.",
+        "data": {
+          "indoor_temperatures": "Indoor thermometers"
         },
+        "data_description": {
+          "indoor_temperatures": "Each sensor must keep statistics."
+        }
+      },
+      "heating": {
+        "title": "Heating and hot water",
+        "description": "These statistics measure your heating. Without them, the Heating tab estimates it from the Linky's consumption and the outdoor temperature.",
         "sections": {
           "heating": {
-            "name": "Heating and hot water",
-            "description": "Optional: the statistics that measure your heating. Without them, the Heating tab estimates it from the consumption and the outdoor temperature.",
+            "name": "Heating",
             "data": {
               "heating_statistics": "Heating consumption statistics",
-              "heating_energy": "Energy",
-              "heating_content": "What they measure",
-              "water_statistic": "Water heater (optional)",
-              "water_energy": "Water heater energy",
-              "indoor_temperatures": "Indoor thermometers (optional)"
+              "heating_energy": "Energy of the heating",
+              "heating_content": "What these statistics measure"
             },
             "data_description": {
-              "heating_statistics": "One or several energy totals (one per heater, or the gas meter); they are summed. Electric ones are already part of the consumption source.",
-              "heating_energy": "Electricity is costed at the prices of your contracts, hour by hour; gas at the gas prices you add as \"Gas price\".",
-              "heating_content": "When the statistics also hold the hot water, it is estimated from the days without heating, unless the water heater has its own statistic.",
-              "water_statistic": "Its own statistic, if it is tracked separately: hot water is then measured.",
-              "indoor_temperatures": "Averaged. The setting simulator starts from this temperature; without it, the simulator is off."
+              "heating_statistics": "One or more energy totals, for example one per heater, or the gas meter. The integration adds them up.",
+              "heating_energy": "Electricity is already counted by the Linky, at the prices of your electricity contracts. Gas is counted at the price of the gas contract in force each day, subscription included.",
+              "heating_content": "When they hold the hot water too, the integration estimates it from the days without heating, unless the hot water has a statistic of its own."
             }
           },
-          "rte": {
-            "name": "Tempo backup: RTE's official API",
-            "description": "Optional, for when RTE's public calendar stops answering: create a free application for the \"Tempo Like Supply Contract\" API on data.rte-france.com and enter its credentials.",
+          "water": {
+            "name": "Hot water",
+            "description": "Optional. Choose its statistic if the hot water is measured on its own: it is then measured instead of estimated.",
             "data": {
-              "rte_client_id": "Client ID",
-              "rte_client_secret": "Client secret"
+              "water_statistic": "Hot water statistic",
+              "water_energy": "Energy of the hot water"
             }
           }
+        }
+      },
+      "rte": {
+        "title": "Tempo backup: RTE's official API",
+        "description": "Optional. If RTE's public calendar stops answering, the official API takes over. Create a free application for the “Tempo Like Supply Contract” API on data.rte-france.com, then enter its credentials. Clear both fields to stop using it.",
+        "data": {
+          "rte_client_id": "Client ID",
+          "rte_client_secret": "Client secret"
         }
       }
     },
@@ -89,13 +120,13 @@
       "heating_statistic_not_energy": "Heating statistics: one of them isn't an energy (Wh, kWh…).",
       "heating_statistic_no_sum": "Heating statistics: one of them has no running total. Choose consumption statistics.",
       "heating_statistic_no_data": "Heating statistics: one of them has no data yet.",
-      "water_is_source": "Water heater: this is the consumption source itself. Choose the statistic of the water heater alone.",
-      "water_statistic_not_found": "Water heater: this statistic doesn't exist.",
-      "water_statistic_not_energy": "Water heater: this statistic isn't an energy (Wh, kWh…).",
-      "water_statistic_no_sum": "Water heater: this statistic has no running total. Choose a consumption statistic.",
-      "water_statistic_no_data": "Water heater: this statistic has no data yet.",
-      "water_in_heating": "Water heater: it is already one of the heating statistics.",
-      "water_other_energy": "Water heater: your heating statistics hold the hot water, so the water heater must use the same energy.",
+      "water_is_source": "Hot water: this is the consumption source itself. Choose the statistic of the hot water alone.",
+      "water_statistic_not_found": "Hot water: this statistic doesn't exist.",
+      "water_statistic_not_energy": "Hot water: this statistic isn't an energy (Wh, kWh…).",
+      "water_statistic_no_sum": "Hot water: this statistic has no running total. Choose a consumption statistic.",
+      "water_statistic_no_data": "Hot water: this statistic has no data yet.",
+      "water_in_heating": "Hot water: it is already one of the heating statistics.",
+      "water_other_energy": "Hot water: your heating statistics already count the hot water, so its own statistic must use the same energy.",
       "indoor_statistic_not_found": "Indoor thermometers: one of them keeps no statistics. It needs the measurement state class.",
       "indoor_statistic_not_temperature": "Indoor thermometers: one of them doesn't measure a temperature (°C, °F…).",
       "indoor_statistic_no_mean": "Indoor thermometers: one of them has no hourly mean. It needs the measurement state class."
@@ -103,37 +134,37 @@
   },
   "config_subentries": {
     "contract": {
-      "entry_type": "Contract",
+      "entry_type": "Electricity contract",
       "initiate_flow": {
-        "user": "Add contract",
-        "reconfigure": "Change contract"
+        "user": "Add an electricity contract",
+        "reconfigure": "Change the contract"
       },
       "step": {
         "user": {
-          "title": "Add a contract",
+          "title": "Electricity contract",
           "data": {
             "kind": "Kind of contract",
             "pricing": "Prices",
             "kva": "Subscribed power"
           },
           "data_description": {
-            "pricing": "Prices you set yourself are entered afterwards, as price periods.",
-            "kva": "Written on your bill; 6 kVA is the most common. Regulated prices depend on it."
+            "pricing": "With your own prices, you enter them in the next steps. With a sensor, the integration reads its price hour by hour.",
+            "kva": "It is written on your bill; 6 kVA is the most common. Regulated prices depend on it."
           }
         },
-        "reconfigure": {
+        "contract": {
           "title": "Change {name}",
           "data": {
             "pricing": "Prices",
             "kva": "Subscribed power"
           },
           "data_description": {
-            "pricing": "Prices you set yourself are entered as price periods.",
-            "kva": "Written on your bill. Regulated prices depend on it."
+            "pricing": "Your own prices are then managed in the contract's menu, period by period.",
+            "kva": "It is written on your bill. Regulated prices depend on it."
           }
         },
         "details": {
-          "title": "The contract",
+          "title": "Name and dates",
           "data": {
             "name": "Name",
             "off_peak": "Off-peak hours",
@@ -149,12 +180,12 @@
               "name": "Days in force (optional)",
               "description": "Leave empty for a contract you only want to compare.",
               "data": {
-                "active_from": "From",
-                "active_to": "To"
+                "active_from": "First day",
+                "active_to": "Last day"
               },
               "data_description": {
-                "active_from": "First day you were billed under this contract.",
-                "active_to": "Last day; empty while it is in force."
+                "active_from": "The first day you were billed under this contract.",
+                "active_to": "Leave empty while it is in force."
               }
             }
           }
@@ -165,120 +196,214 @@
           "data": {
             "off_peak": "Range"
           }
+        },
+        "first_period": {
+          "title": "Prices of {name}",
+          "data": {
+            "start": "First day",
+            "end": "Last day",
+            "fixed_per_year": "Subscription per year, with taxes",
+            "base": "Base",
+            "hc": "Off-peak hours",
+            "hp": "Peak hours",
+            "blue_hc": "Blue day, off-peak hours",
+            "blue_hp": "Blue day, peak hours",
+            "white_hc": "White day, off-peak hours",
+            "white_hp": "White day, peak hours",
+            "red_hc": "Red day, off-peak hours",
+            "red_hp": "Red day, peak hours"
+          },
+          "data_description": {
+            "start": "The day these prices come into force.",
+            "end": "Leave empty while these prices are in force.",
+            "fixed_per_year": "The subscription is spread over every hour of the year."
+          },
+          "description": "Enter the prices with taxes, as they show on the bill. When they change, the contract's pencil adds a new price period."
+        },
+        "period": {
+          "title": "Prices of {name}",
+          "data": {
+            "start": "First day",
+            "end": "Last day",
+            "fixed_per_year": "Subscription per year, with taxes",
+            "base": "Base",
+            "hc": "Off-peak hours",
+            "hp": "Peak hours",
+            "blue_hc": "Blue day, off-peak hours",
+            "blue_hp": "Blue day, peak hours",
+            "white_hc": "White day, off-peak hours",
+            "white_hp": "White day, peak hours",
+            "red_hc": "Red day, off-peak hours",
+            "red_hp": "Red day, peak hours"
+          },
+          "data_description": {
+            "start": "The day these prices come into force.",
+            "end": "Leave empty while these prices are in force.",
+            "fixed_per_year": "The subscription is spread over every hour of the year."
+          },
+          "description": "Enter the prices with taxes, as they show on the bill."
+        },
+        "price_entity": {
+          "title": "Price read from a sensor",
+          "data": {
+            "price_entity": "Sensor of the price of a kWh",
+            "fixed_per_year": "Subscription per year, with taxes"
+          },
+          "data_description": {
+            "price_entity": "Its unit must be a price of a kWh, like €/kWh, and it must keep statistics (measurement state class). The hours before its first statistics have no price.",
+            "fixed_per_year": "The subscription is spread over every hour of the year."
+          },
+          "description": "The integration counts each hour at the price this sensor showed then, for every tranche of the contract."
+        },
+        "reconfigure": {
+          "title": "{name}",
+          "description": "Its prices are entered by hand, period by period. Choose what to change."
+        },
+        "remove_period": {
+          "title": "Remove a price period",
+          "description": "The removed period no longer counts in the costs of {name}: those days have no price any more, unless another period covers them.",
+          "data": {
+            "period": "Period"
+          }
         }
       },
       "error": {
-        "duplicate_name": "Another contract already has this name.",
         "empty_name": "Enter a name.",
-        "invalid_off_peak": "Enter at least one range like 22:00-06:00, on whole or half hours.",
         "active_to_without_from": "Enter the first day too.",
         "end_before_start": "The last day is before the first day.",
-        "overlapping_active_period": "Another contract was in force during part of these days.",
+        "overlapping_price_period": "Another price period of this contract covers part of these days.",
+        "price_entity_not_found": "This sensor keeps no statistics: it needs the measurement state class.",
+        "price_entity_not_per_kwh": "This sensor doesn't give a price of a kWh in euros: its unit must be €/kWh or EUR/kWh.",
+        "price_entity_no_mean": "This sensor has no hourly mean: it needs the measurement state class.",
+        "duplicate_name": "Another electricity contract already has this name.",
+        "invalid_off_peak": "Enter at least one range like 22:00-06:00, on whole or half hours.",
+        "overlapping_active_period": "Another electricity contract was in force during part of these days.",
         "kva_not_offered": "This kind of contract has no regulated price at this power."
       },
       "create_entry": {
-        "default": "The contract shows on the [Contracts](/electricity-contracts) page once its costs are computed over the whole history.",
-        "add_prices": "Last step: enter its prices with “Add price period”, on this page."
+        "default": "The contract shows on the [Contracts](/electricity-contracts) page once its costs are computed over the whole history."
       }
     },
-    "price_period": {
-      "entry_type": "Price period",
+    "gas_contract": {
+      "entry_type": "Gas contract",
       "initiate_flow": {
-        "user": "Add price period",
-        "reconfigure": "Change price period"
+        "user": "Add a gas contract",
+        "reconfigure": "Change the contract"
       },
       "step": {
         "user": {
-          "title": "New price period",
-          "description": "Prices of a contract priced by hand, from one day to another.",
+          "title": "Gas contract",
+          "description": "The gas contract gives the gas of the heating and the hot water in euros, in the Heating tab.",
           "data": {
-            "contract": "Contract",
-            "start": "First day",
-            "end": "Last day",
-            "fixed_per_year": "Subscription per year, taxes included"
+            "pricing": "Prices",
+            "profile": "Profile of the reference price"
           },
           "data_description": {
-            "start": "Day the prices took effect.",
-            "end": "Leave empty if the prices are still in force.",
-            "fixed_per_year": "Yearly fixed part, spread over every hour of the year."
+            "pricing": "The CRE publishes a reference price every month, with a subscription and a price of a kWh. It replaced the regulated gas tariff in July 2023.",
+            "profile": "The CRE publishes a reference price for each profile. Choose Heating if gas heats the home. The profile only counts with the reference price."
           }
+        },
+        "contract": {
+          "title": "Change {name}",
+          "data": {
+            "pricing": "Prices",
+            "profile": "Profile of the reference price"
+          },
+          "data_description": {
+            "pricing": "Your own prices are then managed in the contract's menu, period by period.",
+            "profile": "The profile only counts with the reference price."
+          }
+        },
+        "details": {
+          "title": "Name and dates",
+          "data": {
+            "name": "Name"
+          },
+          "data_description": {
+            "name": "As it shows on the integration's page."
+          },
+          "sections": {
+            "active_period": {
+              "name": "Days in force (optional)",
+              "description": "Leave empty if this contract is still the one in force.",
+              "data": {
+                "active_from": "First day",
+                "active_to": "Last day"
+              },
+              "data_description": {
+                "active_from": "The first day you were billed under this contract. Empty, it was always in force.",
+                "active_to": "Leave empty while it is in force."
+              }
+            }
+          }
+        },
+        "first_period": {
+          "title": "Prices of {name}",
+          "data": {
+            "start": "First day",
+            "end": "Last day",
+            "fixed_per_year": "Subscription per year, with taxes",
+            "price": "Price of a kWh, with taxes"
+          },
+          "data_description": {
+            "start": "The day these prices come into force.",
+            "end": "Leave empty while these prices are in force.",
+            "fixed_per_year": "The subscription is spread over every day of the year."
+          },
+          "description": "Enter the prices of your offer with taxes, as they show on the bill. When they change, the contract's pencil adds a new price period."
+        },
+        "period": {
+          "title": "Prices of {name}",
+          "data": {
+            "start": "First day",
+            "end": "Last day",
+            "fixed_per_year": "Subscription per year, with taxes",
+            "price": "Price of a kWh, with taxes"
+          },
+          "data_description": {
+            "start": "The day these prices come into force.",
+            "end": "Leave empty while these prices are in force.",
+            "fixed_per_year": "The subscription is spread over every day of the year."
+          },
+          "description": "Enter the prices of your offer with taxes, as they show on the bill."
+        },
+        "price_entity": {
+          "title": "Price read from a sensor",
+          "data": {
+            "price_entity": "Sensor of the price of a kWh",
+            "fixed_per_year": "Subscription per year, with taxes"
+          },
+          "data_description": {
+            "price_entity": "Its unit must be a price of a kWh, like €/kWh, and it must keep statistics (measurement state class). The hours before its first statistics have no price.",
+            "fixed_per_year": "The subscription is spread over every day of the year."
+          },
+          "description": "The integration counts the gas of each hour at the price this sensor showed then."
         },
         "reconfigure": {
-          "title": "Change price period",
-          "description": "Prices of {contract}.",
-          "data": {
-            "start": "First day",
-            "end": "Last day",
-            "fixed_per_year": "Subscription per year, taxes included"
-          },
-          "data_description": {
-            "start": "Day the prices took effect.",
-            "end": "Leave empty if the prices are still in force.",
-            "fixed_per_year": "Yearly fixed part, spread over every hour of the year."
-          }
+          "title": "{name}",
+          "description": "Its prices are entered by hand, period by period. Choose what to change."
         },
-        "prices": {
-          "title": "Prices per kWh",
-          "description": "Prices of {contract} per kWh, taxes included.",
+        "remove_period": {
+          "title": "Remove a price period",
+          "description": "The removed period no longer counts in the costs of {name}: those days have no price any more, unless another period covers them.",
           "data": {
-            "base": "Base",
-            "hc": "Off-peak",
-            "hp": "Peak",
-            "blue_hc": "Blue day off-peak",
-            "blue_hp": "Blue day peak",
-            "white_hc": "White day off-peak",
-            "white_hp": "White day peak",
-            "red_hc": "Red day off-peak",
-            "red_hp": "Red day peak"
+            "period": "Period"
           }
         }
       },
       "error": {
+        "empty_name": "Enter a name.",
+        "active_to_without_from": "Enter the first day too.",
         "end_before_start": "The last day is before the first day.",
-        "overlapping_price_period": "Another price period of this contract covers part of these days."
+        "overlapping_price_period": "Another price period of this contract covers part of these days.",
+        "price_entity_not_found": "This sensor keeps no statistics: it needs the measurement state class.",
+        "price_entity_not_per_kwh": "This sensor doesn't give a price of a kWh in euros: its unit must be €/kWh or EUR/kWh.",
+        "price_entity_no_mean": "This sensor has no hourly mean: it needs the measurement state class.",
+        "duplicate_name": "Another gas contract already has this name.",
+        "overlapping_active_period": "Another gas contract was in force during part of these days."
       },
-      "abort": {
-        "no_manual_contracts": "Add a contract with prices you set yourself first.",
-        "contract_not_found": "The contract of this price period no longer exists, or now uses regulated prices."
-      }
-    },
-    "gas_price": {
-      "entry_type": "Gas price",
-      "initiate_flow": {
-        "user": "Add a gas price",
-        "reconfigure": "Change the gas price"
-      },
-      "step": {
-        "user": {
-          "title": "New gas price",
-          "description": "The price of a kWh of gas, from one day to another. It turns the gas heating into euros.",
-          "data": {
-            "price": "Price per kWh, taxes included",
-            "start": "First day",
-            "end": "Last day"
-          },
-          "data_description": {
-            "start": "Day the price came into force.",
-            "end": "Leave empty while the price is still in force."
-          }
-        },
-        "reconfigure": {
-          "title": "Change the gas price",
-          "description": "The price of a kWh of gas, from one day to another.",
-          "data": {
-            "price": "Price per kWh, taxes included",
-            "start": "First day",
-            "end": "Last day"
-          },
-          "data_description": {
-            "start": "Day the price came into force.",
-            "end": "Leave empty while the price is still in force."
-          }
-        }
-      },
-      "error": {
-        "end_before_start": "The last day is before the first one.",
-        "overlapping_gas_price": "Another gas price covers some of these days."
+      "create_entry": {
+        "default": "The Heating tab of the [Contracts](/electricity-contracts) page now counts the gas at the price of this contract."
       }
     }
   },
@@ -293,7 +418,8 @@
     "pricing": {
       "options": {
         "official": "Regulated prices: updated on their own at each change",
-        "manual": "My own prices: a market offer, whose prices you enter afterwards"
+        "manual": "My own prices: a market offer, whose prices you enter",
+        "entity": "Price from a sensor: a price of a kWh that changes, read hour by hour"
       }
     },
     "off_peak": {
@@ -314,6 +440,19 @@
       "options": {
         "heating": "The heating",
         "heating_water": "The heating and the hot water"
+      }
+    },
+    "gas_pricing": {
+      "options": {
+        "official": "CRE reference price: updated on its own every month",
+        "manual": "My own prices: you enter the subscription and the price of a kWh",
+        "entity": "Price from a sensor: a price of a kWh read hour by hour"
+      }
+    },
+    "profile": {
+      "options": {
+        "heating": "Heating: gas heats the home (about 11,000 kWh a year)",
+        "cooking_water": "Cooking and hot water: no gas heating (about 1,500 kWh a year)"
       }
     }
   },
@@ -385,7 +524,7 @@
     },
     "missing_price": {
       "title": "{contract} has no price for {day}",
-      "description": "{contract} is priced by hand, and no price period covers {day}: its costs stop on that day, and comparisons with it stop there too.\n\nAdd a price period covering {day} to {contract}. To compare an offer over past days, its first price period can start before the offer existed. Costs resume as soon as the period is saved."
+      "description": "{contract} is priced by hand, and no price period covers {day}: its costs stop on that day, and comparisons with it stop there too.\n\nAdd a price period covering {day} to {contract}: the pencil of {contract}, on the integration's page, opens its menu. To compare an offer over past days, its first price period can start before the offer existed. Costs resume as soon as the period is saved."
     },
     "missing_price_official": {
       "title": "{contract} has no regulated price for {day}",
@@ -394,6 +533,10 @@
     "weather_unavailable": {
       "title": "Open-Meteo weather can't be updated",
       "description": "The outdoor temperature couldn't be downloaded from Open-Meteo since {since} ({error}). {title} keeps the hours it already has, and the costs aren't affected."
+    },
+    "gas_prices_unavailable": {
+      "title": "The gas reference price can't be updated",
+      "description": "The gas reference price couldn't be downloaded from the CRE's website since {since} ({error}). {title} keeps the prices it already has. Gas used on days without a known price is only counted in kWh until the download works again."
     }
   },
   "services": {

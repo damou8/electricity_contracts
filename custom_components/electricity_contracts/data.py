@@ -6,19 +6,24 @@ from datetime import date, time
 from typing import Any
 
 from elec_tariffs import (
+    TRANCHES,
     ContractKind,
     ContractRules,
+    GasPricePeriod,
+    GasProfile,
     PricePeriod,
     TimeRange,
     Tranche,
 )
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
 from .const import (
     CONF_ACTIVE_FROM,
     CONF_ACTIVE_TO,
-    CONF_CONTRACT,
     CONF_END,
     CONF_FIXED_PER_YEAR,
     CONF_HEATING_CONTENT,
@@ -28,9 +33,12 @@ from .const import (
     CONF_KIND,
     CONF_KVA,
     CONF_OFF_PEAK,
+    CONF_PERIODS,
     CONF_PRICE,
+    CONF_PRICE_ENTITY,
     CONF_PRICES,
     CONF_PRICING,
+    CONF_PROFILE,
     CONF_START,
     CONF_STATISTIC_ID,
     CONF_UID,
@@ -40,12 +48,14 @@ from .const import (
     CONTENT_HEATING_WATER,
     ENERGY_ELECTRICITY,
     ENERGY_GAS,
+    FRANCE_TIME_ZONE,
     NO_METER,
+    PRICING_ENTITY,
+    PRICING_MANUAL,
     PRICING_OFFICIAL,
     SECTION_HEATING,
     SUBENTRY_CONTRACT,
-    SUBENTRY_GAS_PRICE,
-    SUBENTRY_PRICE_PERIOD,
+    SUBENTRY_GAS_CONTRACT,
 )
 
 
@@ -87,16 +97,69 @@ def _optional_date(value: Any) -> date | None:
     return date.fromisoformat(value) if value else None
 
 
+def period_from_data(data: Mapping[str, Any]) -> PricePeriod:
+    """Read an electricity price period kept in a contract subentry."""
+    return PricePeriod(
+        start=date.fromisoformat(data[CONF_START]),
+        end=_optional_date(data.get(CONF_END)),
+        fixed_per_year=data[CONF_FIXED_PER_YEAR],
+        prices={
+            Tranche(tranche): price for tranche, price in data[CONF_PRICES].items()
+        },
+    )
+
+
+def gas_period_from_data(data: Mapping[str, Any]) -> GasPricePeriod:
+    """Read a gas price period kept in a gas contract subentry."""
+    return GasPricePeriod(
+        start=date.fromisoformat(data[CONF_START]),
+        end=_optional_date(data.get(CONF_END)),
+        fixed_per_year=data[CONF_FIXED_PER_YEAR],
+        price=data[CONF_PRICE],
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class EntityPrice:
+    """A price of a kWh read from a sensor, hour by hour, and a subscription."""
+
+    entity_id: str
+    fixed_per_year: float
+
+    @classmethod
+    def from_data(cls, data: Mapping[str, Any]) -> EntityPrice | None:
+        """Read the sensor of a contract priced by one; None for another pricing."""
+        if data[CONF_PRICING] != PRICING_ENTITY:
+            return None
+        return cls(
+            entity_id=data[CONF_PRICE_ENTITY],
+            fixed_per_year=data[CONF_FIXED_PER_YEAR],
+        )
+
+    def current(self, hass: HomeAssistant) -> float | None:
+        """Return the price the sensor shows now, None if it shows none."""
+        state = hass.states.get(self.entity_id)
+        if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return None
+        try:
+            return float(state.state)
+        except ValueError:
+            return None
+
+
 @dataclass(frozen=True, kw_only=True)
 class Contract:
-    """A contract to cost the consumption under."""
+    """An electricity contract to cost the consumption under."""
 
     subentry_id: str
     uid: str
     name: str
     rules: ContractRules
-    official: bool
+    pricing: str
     kva: int | None
+    periods: tuple[PricePeriod, ...]
+    """The prices entered by hand, oldest first."""
+    entity: EntityPrice | None
     active_from: date | None
     active_to: date | None
 
@@ -104,6 +167,11 @@ class Contract:
     def kind(self) -> ContractKind:
         """How the contract splits consumption into tranches."""
         return self.rules.kind
+
+    @property
+    def official(self) -> bool:
+        """Tell whether the contract follows the regulated prices."""
+        return self.pricing == PRICING_OFFICIAL
 
     @classmethod
     def from_subentry(cls, subentry: ConfigSubentry) -> Contract:
@@ -117,48 +185,32 @@ class Contract:
                 off_peak=tuple(parse_time_range(text) for text in data[CONF_OFF_PEAK]),
                 weekend_off_peak=data[CONF_WEEKEND_OFF_PEAK],
             )
-        official = data[CONF_PRICING] == PRICING_OFFICIAL
+        pricing = data[CONF_PRICING]
         return cls(
             subentry_id=subentry.subentry_id,
             uid=data[CONF_UID],
             name=subentry.title,
             rules=rules,
-            official=official,
-            kva=data[CONF_KVA] if official else None,
+            pricing=pricing,
+            kva=data[CONF_KVA] if pricing == PRICING_OFFICIAL else None,
+            periods=(
+                tuple(
+                    sorted(
+                        (period_from_data(item) for item in data.get(CONF_PERIODS, [])),
+                        key=lambda period: period.start,
+                    )
+                )
+                if pricing == PRICING_MANUAL
+                else ()
+            ),
+            entity=EntityPrice.from_data(data),
             active_from=_optional_date(data.get(CONF_ACTIVE_FROM)),
             active_to=_optional_date(data.get(CONF_ACTIVE_TO)),
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class ManualPrices:
-    """Prices entered by hand for a contract, from one day to another."""
-
-    subentry_id: str
-    contract_uid: str
-    period: PricePeriod
-
-    @classmethod
-    def from_subentry(cls, subentry: ConfigSubentry) -> ManualPrices:
-        """Read a price period subentry."""
-        data = subentry.data
-        return cls(
-            subentry_id=subentry.subentry_id,
-            contract_uid=data[CONF_CONTRACT],
-            period=PricePeriod(
-                start=date.fromisoformat(data[CONF_START]),
-                end=_optional_date(data.get(CONF_END)),
-                fixed_per_year=data[CONF_FIXED_PER_YEAR],
-                prices={
-                    Tranche(tranche): price
-                    for tranche, price in data[CONF_PRICES].items()
-                },
-            ),
-        )
-
-
 def contracts(entry: ConfigEntry) -> list[Contract]:
-    """Return the contracts of an entry, in the order they were added."""
+    """Return the electricity contracts of an entry, in the order they were added."""
     return [
         Contract.from_subentry(subentry)
         for subentry in entry.subentries.values()
@@ -178,28 +230,33 @@ def in_force(entry_contracts: list[Contract], day: date) -> Contract | None:
     return None
 
 
-def manual_prices(entry: ConfigEntry) -> list[ManualPrices]:
-    """Return the price periods entered by hand, in the order they were added."""
-    return [
-        ManualPrices.from_subentry(subentry)
-        for subentry in entry.subentries.values()
-        if subentry.subentry_type == SUBENTRY_PRICE_PERIOD
-    ]
-
-
 def price_periods(
+    hass: HomeAssistant,
     contract: Contract,
-    manual: list[ManualPrices],
     official: Mapping[tuple[ContractKind, int], list[PricePeriod]],
 ) -> list[PricePeriod]:
-    """Return the price periods of a contract, oldest first."""
+    """Return the price periods of a contract, oldest first.
+
+    A contract priced by a sensor has one period from today, at the price the
+    sensor shows now (none while it shows none): what is shown and projected.
+    Its past hours are costed at the price of each hour instead.
+    """
     if contract.official:
         assert contract.kva is not None
         return official[(contract.kind, contract.kva)]
-    return sorted(
-        (item.period for item in manual if item.contract_uid == contract.uid),
-        key=lambda period: period.start,
-    )
+    if contract.entity is not None:
+        price = contract.entity.current(hass)
+        if price is None:
+            return []
+        return [
+            PricePeriod(
+                start=dt_util.now(FRANCE_TIME_ZONE).date(),
+                end=None,
+                fixed_per_year=contract.entity.fixed_per_year,
+                prices=dict.fromkeys(TRANCHES[contract.kind], price),
+            )
+        ]
+    return list(contract.periods)
 
 
 def periods_overlap(
@@ -231,7 +288,7 @@ class Heating:
     def from_options(
         cls, options: Mapping[str, Any], *, outdoor: str | None
     ) -> Heating:
-        """Read the heating section of the options; every key is optional.
+        """Read the heating section and the indoor thermometers; all are optional.
 
         `outdoor` is the outdoor temperature statistic (see `outdoor_statistic`).
         """
@@ -242,7 +299,7 @@ class Heating:
             with_water=section.get(CONF_HEATING_CONTENT) == CONTENT_HEATING_WATER,
             water_statistic=section.get(CONF_WATER_STATISTIC) or None,
             water_gas=section.get(CONF_WATER_ENERGY, ENERGY_ELECTRICITY) == ENERGY_GAS,
-            indoor=tuple(section.get(CONF_INDOOR_TEMPERATURES) or ()),
+            indoor=tuple(options.get(CONF_INDOOR_TEMPERATURES) or ()),
             outdoor=outdoor,
         )
 
@@ -258,42 +315,71 @@ class Heating:
 
 
 @dataclass(frozen=True, kw_only=True)
-class GasPrice:
-    """The price of a kWh of gas, from one day to another (None: still in force)."""
+class GasContract:
+    """A gas contract: what the gas of the heating and hot water is costed at."""
 
     subentry_id: str
-    start: date
-    end: date | None
-    price: float
+    uid: str
+    name: str
+    pricing: str
+    profile: GasProfile | None
+    """The CRE profile of a contract at the reference price."""
+    periods: tuple[GasPricePeriod, ...]
+    """The prices entered by hand, oldest first."""
+    entity: EntityPrice | None
+    active_from: date | None
+    active_to: date | None
 
     @classmethod
-    def from_subentry(cls, subentry: ConfigSubentry) -> GasPrice:
-        """Read a gas price subentry."""
+    def from_subentry(cls, subentry: ConfigSubentry) -> GasContract:
+        """Read a gas contract subentry."""
         data = subentry.data
+        pricing = data[CONF_PRICING]
         return cls(
             subentry_id=subentry.subentry_id,
-            start=date.fromisoformat(data[CONF_START]),
-            end=_optional_date(data.get(CONF_END)),
-            price=data[CONF_PRICE],
+            uid=data[CONF_UID],
+            name=subentry.title,
+            pricing=pricing,
+            profile=(
+                GasProfile(data[CONF_PROFILE]) if pricing == PRICING_OFFICIAL else None
+            ),
+            periods=(
+                tuple(
+                    sorted(
+                        (
+                            gas_period_from_data(item)
+                            for item in data.get(CONF_PERIODS, [])
+                        ),
+                        key=lambda period: period.start,
+                    )
+                )
+                if pricing == PRICING_MANUAL
+                else ()
+            ),
+            entity=EntityPrice.from_data(data),
+            active_from=_optional_date(data.get(CONF_ACTIVE_FROM)),
+            active_to=_optional_date(data.get(CONF_ACTIVE_TO)),
         )
 
     def covers(self, day: date) -> bool:
-        """Tell whether the price was in force on `day`."""
-        return self.start <= day and (self.end is None or day <= self.end)
+        """Tell whether the contract was in force on `day`.
+
+        Without a first day it was always in force: a home usually has one.
+        """
+        return (self.active_from is None or self.active_from <= day) and (
+            self.active_to is None or day <= self.active_to
+        )
 
 
-def gas_prices(entry: ConfigEntry) -> list[GasPrice]:
-    """Return the gas prices of an entry, oldest first."""
-    return sorted(
-        (
-            GasPrice.from_subentry(subentry)
-            for subentry in entry.subentries.values()
-            if subentry.subentry_type == SUBENTRY_GAS_PRICE
-        ),
-        key=lambda item: item.start,
-    )
+def gas_contracts(entry: ConfigEntry) -> list[GasContract]:
+    """Return the gas contracts of an entry, in the order they were added."""
+    return [
+        GasContract.from_subentry(subentry)
+        for subentry in entry.subentries.values()
+        if subentry.subentry_type == SUBENTRY_GAS_CONTRACT
+    ]
 
 
-def gas_price_on(prices: list[GasPrice], day: date) -> float | None:
-    """Return the price of a kWh of gas on `day`, None if none was entered."""
-    return next((item.price for item in prices if item.covers(day)), None)
+def gas_in_force(entry_contracts: list[GasContract], day: date) -> GasContract | None:
+    """Return the gas contract that was in force on `day`, if any."""
+    return next((item for item in entry_contracts if item.covers(day)), None)

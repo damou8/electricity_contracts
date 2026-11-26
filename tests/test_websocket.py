@@ -39,7 +39,8 @@ from .conftest import (
     color_of,
     contract_subentry,
     make_entry,
-    price_period_subentry,
+    manual_contract,
+    manual_period,
     published_calendar,
 )
 from .test_comparison import compare, setup_entry
@@ -90,6 +91,7 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
                     "name": "Tempo",
                     "kind": "tempo",
                     "official": True,
+                    "pricing": "official",
                     "kva": 6,
                     "off_peak": [],
                     "weekend_off_peak": False,
@@ -104,6 +106,7 @@ async def test_entries(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
                     "name": "Base",
                     "kind": "base",
                     "official": True,
+                    "pricing": "official",
                     "kva": 6,
                     "off_peak": [],
                     "weekend_off_peak": False,
@@ -313,19 +316,10 @@ async def test_bill_of_another_contract(
 async def test_bill_split_where_prices_change(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator
 ) -> None:
-    offer = contract_subentry(
-        "Offer", uid="offer001", kind=ContractKind.BASE, pricing="manual"
+    offer = manual_contract(
+        manual_period("2026-01-01", "2026-03-01"), manual_period("2026-03-02")
     )
-    entry = await setup_entry(
-        hass,
-        make_entry(
-            [
-                offer,
-                price_period_subentry("offer001", "2026-01-01", "2026-03-01"),
-                price_period_subentry("offer001", "2026-03-02"),
-            ]
-        ),
-    )
+    entry = await setup_entry(hass, make_entry([offer]))
     bill = await result(
         hass_ws_client,
         hass,

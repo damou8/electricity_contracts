@@ -35,14 +35,15 @@ from .conftest import (
     busy_recorder,
     contract_subentry,
     make_entry,
-    price_period_subentry,
+    manual_contract,
+    manual_period,
 )
 
 PREFIX = "electricity_contracts:linky_00000000000000"
 FIRST_HOUR = datetime(2026, 3, 1, tzinfo=UTC)
 END = datetime(2026, 3, 3, tzinfo=UTC)  # after the last of the 48 hours
 # Prices of the offer from the second day: the first one has none.
-LATE_PRICES = price_period_subentry("offer001", "2026-03-02")
+LATE_PRICES = manual_contract(manual_period("2026-03-02"))
 
 
 async def setup_entry(hass: HomeAssistant, entry: MockConfigEntry) -> MockConfigEntry:
@@ -247,7 +248,7 @@ async def test_compare_action_errors(
 
 @pytest.mark.usefixtures("statistic", "sources")
 async def test_missing_manual_price_repair(hass: HomeAssistant) -> None:
-    entry = await setup_entry(hass, make_entry([MANUAL_CONTRACT, LATE_PRICES]))
+    entry = await setup_entry(hass, make_entry([LATE_PRICES]))
     issue_id = f"missing_price_{entry.entry_id}_offer001"
     issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
     assert issue is not None
@@ -275,7 +276,7 @@ async def test_no_repair_before_the_first_manual_price(hass: HomeAssistant) -> N
 
 @pytest.mark.usefixtures("statistic", "sources")
 async def test_ignored_repair_stays_ignored(hass: HomeAssistant) -> None:
-    entry = await setup_entry(hass, make_entry([MANUAL_CONTRACT, LATE_PRICES]))
+    entry = await setup_entry(hass, make_entry([LATE_PRICES]))
     issue_id = f"missing_price_{entry.entry_id}_offer001"
     ir.async_ignore_issue(hass, DOMAIN, issue_id, ignore=True)
     await entry.runtime_data.async_refresh()

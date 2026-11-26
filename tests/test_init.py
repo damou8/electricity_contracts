@@ -11,11 +11,14 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from custom_components.electricity_contracts.const import (
+    CONF_HEATING_STATISTICS,
+    CONF_INDOOR_TEMPERATURES,
+    CONF_PERIODS,
     CONF_RTE_CLIENT_ID,
     CONF_RTE_CLIENT_SECRET,
     DOMAIN,
+    SECTION_HEATING,
     SUBENTRY_COMPARISON,
-    SUBENTRY_PRICE_PERIOD,
 )
 
 from .conftest import (
@@ -23,8 +26,11 @@ from .conftest import (
     TEMPO_CONTRACT,
     Sources,
     comparison_subentry,
+    gas_period,
+    legacy_gas_price,
+    legacy_price_period,
     make_entry,
-    price_period_subentry,
+    manual_period,
 )
 
 
@@ -42,9 +48,8 @@ async def test_setup_and_unload(hass: HomeAssistant, sources: Sources) -> None:
 
 @pytest.mark.usefixtures("statistic", "sources")
 async def test_migration_removes_comparisons_and_sensors(hass: HomeAssistant) -> None:
-    entry = make_entry([TEMPO_CONTRACT, comparison_subentry("March")])
+    entry = make_entry([TEMPO_CONTRACT, comparison_subentry("March")], minor_version=1)
     entry.add_to_hass(hass)
-    hass.config_entries.async_update_entry(entry, minor_version=1)
     comparison_id = next(
         subentry.subentry_id
         for subentry in entry.subentries.values()
@@ -77,7 +82,7 @@ async def test_migration_removes_comparisons_and_sensors(hass: HomeAssistant) ->
     )
     assert await hass.config_entries.async_setup(entry.entry_id)
     assert entry.state is ConfigEntryState.LOADED
-    assert entry.minor_version == 2
+    assert entry.minor_version == 3
     assert [item.subentry_type for item in entry.subentries.values()] == ["contract"]
     # Only the sensors of 0.2 are left, on a device of their own.
     assert {
@@ -133,24 +138,94 @@ async def test_official_source_used_with_credentials(
 
 
 @pytest.mark.usefixtures("statistic", "sources")
-async def test_removes_price_periods_of_deleted_contracts(
+async def test_migration_moves_price_periods_into_their_contract(
     hass: HomeAssistant,
 ) -> None:
     entry = make_entry(
         [
+            TEMPO_CONTRACT,
             MANUAL_CONTRACT,
-            price_period_subentry("offer001", "2026-02-01"),
-            price_period_subentry("gone0001", "2026-02-01"),
-        ]
+            legacy_price_period("offer001", "2026-08-01"),
+            legacy_price_period("offer001", "2026-01-01", "2026-07-31"),
+            legacy_price_period("gone0001", "2026-02-01"),
+        ],
+        minor_version=2,
     )
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
-    periods = [
-        subentry.data
-        for subentry in entry.subentries.values()
-        if subentry.subentry_type == SUBENTRY_PRICE_PERIOD
+    assert entry.minor_version == 3
+    assert [item.subentry_type for item in entry.subentries.values()] == [
+        "contract",
+        "contract",
     ]
-    assert [period["contract"] for period in periods] == ["offer001"]
+    offer = next(
+        item for item in entry.subentries.values() if item.data["uid"] == "offer001"
+    )
+    assert offer.data[CONF_PERIODS] == [
+        manual_period("2026-01-01", "2026-07-31"),
+        manual_period("2026-08-01"),
+    ]
+    tempo = next(
+        item for item in entry.subentries.values() if item.data["uid"] == "tempo001"
+    )
+    assert CONF_PERIODS not in tempo.data
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_migration_moves_gas_prices_into_a_gas_contract(
+    hass: HomeAssistant,
+) -> None:
+    hass.config.language = "fr"
+    entry = make_entry(
+        [
+            TEMPO_CONTRACT,
+            legacy_gas_price(0.12, "2026-08-01"),
+            legacy_gas_price(0.1, "2025-08-01", "2026-07-31"),
+        ],
+        options={
+            SECTION_HEATING: {
+                CONF_HEATING_STATISTICS: ["sensor.gas"],
+                CONF_INDOOR_TEMPERATURES: ["sensor.living_room"],
+            },
+            CONF_RTE_CLIENT_ID: "my-id",
+            CONF_RTE_CLIENT_SECRET: "my-secret",
+        },
+        minor_version=2,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    gas = next(
+        item
+        for item in entry.subentries.values()
+        if item.subentry_type == "gas_contract"
+    )
+    assert gas.title == "Gaz · mes prix"
+    assert gas.unique_id == gas.data["uid"]
+    assert gas.data["pricing"] == "manual"
+    assert gas.data[CONF_PERIODS] == [
+        gas_period(0.1, "2025-08-01", "2026-07-31"),
+        gas_period(0.12, "2026-08-01"),
+    ]
+    assert len(entry.subentries) == 2
+    # The indoor thermometers have a page of their own.
+    assert entry.options == {
+        SECTION_HEATING: {CONF_HEATING_STATISTICS: ["sensor.gas"]},
+        CONF_INDOOR_TEMPERATURES: ["sensor.living_room"],
+        CONF_RTE_CLIENT_ID: "my-id",
+        CONF_RTE_CLIENT_SECRET: "my-secret",
+    }
+
+
+@pytest.mark.usefixtures("statistic", "sources")
+async def test_migration_without_heating_left(hass: HomeAssistant) -> None:
+    entry = make_entry(
+        [TEMPO_CONTRACT],
+        options={SECTION_HEATING: {CONF_INDOOR_TEMPERATURES: ["sensor.living_room"]}},
+        minor_version=2,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.options == {CONF_INDOOR_TEMPERATURES: ["sensor.living_room"]}
 
 
 @pytest.mark.usefixtures("statistic")

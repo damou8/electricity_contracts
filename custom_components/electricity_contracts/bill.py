@@ -7,7 +7,14 @@ from elec_tariffs import PricePeriod, Tranche
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.recorder import get_instance
 
-from .comparison import ActualTotals, covers, day_start, narrow_window, read_changes
+from .comparison import (
+    ActualTotals,
+    compared_window,
+    covers,
+    day_start,
+    read_changes,
+)
+from .const import FRANCE_TIME_ZONE
 from .data import Contract
 from .statistics import CostingStatus, StatisticsWriter
 
@@ -91,7 +98,17 @@ async def async_bill(  # noqa: PLR0913 - the contract, its prices, the window, w
     The window is narrowed to the hours the contract and the actual cost have been
     costed for, then split where the prices change.
     """
-    start, end = narrow_window(status, [contract], start, end)
+    start, end = compared_window(status, [contract], start, end)
+    if contract.entity is not None:
+        # A sensor's price changes every hour: one period, at the mean price of
+        # each tranche.
+        periods = [
+            PricePeriod(
+                start=start.astimezone(FRANCE_TIME_ZONE).date(),
+                end=None,
+                fixed_per_year=contract.entity.fixed_per_year,
+            )
+        ]
     ids = writer.contract_statistics(contract.uid, contract.kind)
     windows: list[tuple[PricePeriod, datetime, datetime]] = []
     for period in periods:
@@ -136,7 +153,11 @@ async def async_bill(  # noqa: PLR0913 - the contract, its prices, the window, w
                 BillLine(
                     tranche=tranche,
                     energy=values[ids.tranche_energy[tranche]],
-                    price=period.prices[tranche],
+                    price=period.prices.get(tranche)
+                    or _mean_price(
+                        values[ids.tranche_cost[tranche]],
+                        values[ids.tranche_energy[tranche]],
+                    ),
                     cost=values[ids.tranche_cost[tranche]],
                 )
                 for tranche in ids.tranche_energy
@@ -163,3 +184,7 @@ async def async_bill(  # noqa: PLR0913 - the contract, its prices, the window, w
         periods=bill_periods,
         actual=actual if covers(actual, energy) else None,
     )
+
+
+def _mean_price(cost: float, energy: float) -> float:
+    return round(cost / energy, 5) if energy > 0 else 0.0

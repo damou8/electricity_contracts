@@ -193,6 +193,27 @@ def narrow_window(
     return start, max(end, start)
 
 
+def compared_window(
+    status: CostingStatus,
+    contracts: Sequence[Contract],
+    start: datetime,
+    end: datetime,
+) -> tuple[datetime, datetime]:
+    """Narrow a window to the hours every contract can be compared over.
+
+    Like `narrow_window`, and from the first hour of each contract: a contract
+    priced by a sensor starts at the sensor's first price.
+    """
+    start, end = narrow_window(status, contracts, start, end)
+    firsts = [
+        first
+        for contract in costed(status, contracts)
+        if (first := status.contracts[contract.uid].first_hour) is not None
+    ]
+    start = max([start, *firsts])
+    return start, max(end, start)
+
+
 async def async_compare(  # noqa: PLR0913 - the window, the contracts and where to read
     hass: HomeAssistant,
     *,
@@ -210,7 +231,7 @@ async def async_compare(  # noqa: PLR0913 - the window, the contracts and where 
     costed are left out.
     """
     contracts = costed(status, contracts)
-    start, end = narrow_window(status, contracts, start, end)
+    start, end = compared_window(status, contracts, start, end)
     ids: list[str] = []
     contract_ids = {
         contract.uid: writer.contract_statistics(contract.uid, contract.kind)
