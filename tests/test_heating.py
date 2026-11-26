@@ -715,8 +715,10 @@ async def test_heating_before_the_heaters_is_estimated(
         "start": "2026-03-02",
         "end": "2026-03-15",
         "days": 14,
+        "missing": 0,
         "heating": 2.0 * sum(range(14)),
     }
+    assert answer["heaters_from"] is None
     assert answer["estimated_days"][3] == {
         "date": "2026-03-05",
         "temperature": 15.0,
@@ -728,6 +730,13 @@ async def test_heating_before_the_heaters_is_estimated(
     # heater fits them.
     answer = await heating(hass, hass_ws_client, entry, start="2026-03-10")
     assert answer["before"]["heating"] == pytest.approx(2.0 * sum(range(8, 14)))
+    # Wholly before the heater: estimated like a home without heating
+    # statistics, from the consumption and the weather.
+    answer = await heating(hass, hass_ws_client, entry, end="2026-03-15")
+    assert answer["measured"] is False
+    assert answer["heaters_from"] == "2026-03-16"
+    assert answer["days"] == []
+    assert answer["estimated"]["heating"] == pytest.approx(2.0 * sum(range(14)))
 
 
 @pytest.mark.usefixtures("sources")

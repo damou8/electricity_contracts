@@ -10,7 +10,7 @@ or before the first costed hour) is estimated from the Linky's days and the
 outdoor temperature, so the label covers the whole year.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
 
 import probatio as vol
@@ -18,13 +18,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .comparison import day_start
-from .const import CONF_WEATHER, DOMAIN, FRANCE_TIME_ZONE
+from .const import DOMAIN
 from .coordinator import ElectricityContractsConfigEntry
 from .heating import (
+    async_before_heaters,
+    async_heaters_start,
     async_heating_between,
-    async_linky_heating,
-    async_main_start,
     heating_window,
+    local_day,
 )
 from .insights import line_heating
 
@@ -273,10 +274,6 @@ def dpe_label(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, A
     }
 
 
-def _local_day(moment: datetime) -> date:
-    return moment.astimezone(FRANCE_TIME_ZONE).date()
-
-
 async def async_dpe(
     hass: HomeAssistant, *, entry: ElectricityContractsConfigEntry, end: date
 ) -> dict[str, Any]:
@@ -291,36 +288,28 @@ async def async_dpe(
     start = day_start(_year_before(end) + timedelta(days=1))
     stop = day_start(end + timedelta(days=1))
     first, last = heating_window(entry, start, stop)
-    first = min(await async_main_start(entry, first), max(first, last))
+    end_at = max(first, last)
+    if (heaters := await async_heaters_start(entry)) is not None:
+        first = min(max(first, heaters), end_at)
     settings = await async_load_settings(hass, entry.entry_id)
     answer = await async_heating_between(
-        hass, entry=entry, start=first, end=max(first, last), weather_days=True
+        hass, entry=entry, start=first, end=end_at, weather_days=True
     )
     # Before the window, the Linky's days, when the heating is electric.
-    coordinator = entry.runtime_data
     begin = first
     unestimated = None
-    if coordinator.statistic_id and not answer["gas"]:
-        linky = max(start, day_start(coordinator.data.sources.first_day))
-        if linky < first and (
-            before := await async_linky_heating(hass, entry, linky, first)
-        ):
+    if entry.runtime_data.statistic_id and not answer["gas"]:
+        before, unestimated = await async_before_heaters(hass, entry, start, first)
+        if before is not None:
             answer["before"] = before
             begin = day_start(date.fromisoformat(before["start"]))
-        if linky < begin:
-            unestimated = {
-                "start": _local_day(linky).isoformat(),
-                "end": (_local_day(begin) - timedelta(days=1)).isoformat(),
-                "open_meteo": bool(entry.options.get(CONF_WEATHER)),
-            }
-    end_at = max(first, last)
-    days = (_local_day(end_at) - _local_day(begin)).days if end_at > begin else 0
+    days = (local_day(end_at) - local_day(begin)).days if end_at > begin else 0
     before = answer.get("before")
     return {
         "settings": settings,
         "defaults": DEFAULTS,
-        "start": _local_day(begin).isoformat(),
-        "end": (_local_day(end_at) - timedelta(days=1)).isoformat() if days else None,
+        "start": local_day(begin).isoformat(),
+        "end": (local_day(end_at) - timedelta(days=1)).isoformat() if days else None,
         "days": days,
         "estimated": (
             {

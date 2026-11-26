@@ -36,6 +36,10 @@ const STRINGS = {
     heatingNoWeather: "From {start} to {end}, there's no outdoor temperature to estimate the heating from the Linky.",
     heatingEstimated: "Estimated",
     measuredOnly: "measured days only",
+    estimatedFromLinky: "estimated from the Linky",
+    ofTheElectricityMeasured: "of the electricity consumption, measured days only",
+    heatingMissing: "{count} days without an outdoor temperature or a Linky reading aren't counted.",
+    heatingBeforeAll: "Your heating statistics start on {date}. Before, the heating is estimated from how much the whole consumption rises on cold days.",
     ofWhichEstimated: "of which {energy} estimated",
     heatingByDayGasInfo: "What the heating used each day, at the gas price of that day. Below, the average outdoor temperature of each day.",
     whereHeatingGoes: "Where the heating goes",
@@ -364,6 +368,10 @@ const STRINGS = {
     heatingNoWeather: "Du {start} au {end}, il manque la température extérieure pour estimer le chauffage à partir du Linky.",
     heatingEstimated: "Estimé",
     measuredOnly: "jours mesurés seulement",
+    estimatedFromLinky: "estimés à partir du Linky",
+    ofTheElectricityMeasured: "de la consommation d'électricité, jours mesurés seulement",
+    heatingMissing: "{count} jours sans température extérieure ou sans relevé du Linky ne sont pas comptés.",
+    heatingBeforeAll: "Vos statistiques de chauffage commencent le {date}. Avant, le chauffage est estimé d'après ce que toute la consommation augmente les jours froids.",
     ofWhichEstimated: "dont {energy} estimés",
     heatingByDayGasInfo: "Ce que le chauffage a consommé chaque jour, au prix du gaz de ce jour. Dessous, la température extérieure moyenne de chaque jour.",
     whereHeatingGoes: "Où va le chauffage",
@@ -2171,7 +2179,8 @@ class ElectricityContractsPanel extends HTMLElement {
         // The heating tab: measured, and before its statistics the Linky's estimate.
         const before = this._heating && this._heating.before;
         const measured = this._use("heating");
-        const end = this._request && this._request.end;
+        const days = this._heating.days;
+        const end = days.length ? days[days.length - 1].date : null;
         if (!before || !measured || !end) return measured;
         const span = (start, stop) => this._t("fromTo", { start: this._dayLabel(start), end: this._dayLabel(stop) });
         return [
@@ -4493,7 +4502,9 @@ class ElectricityContractsPanel extends HTMLElement {
       return [this._renderHeatingKpis(heating), h("div", { class: "duo" }, this._renderHeatingWeather(heating), this._renderSimulator(heating)), this._renderDpe()];
     }
     if (!heating.days.length) {
-      return [h("section", { class: "card message" }, this._t("heatingNoData"))];
+      // Only before the heating statistics: what the Linky's days estimate.
+      if (!heating.before) return [h("section", { class: "card message" }, this._t("heatingNoData"))];
+      return [this._renderHeatingKpis(heating), this._renderHeatingDays(heating), this._renderDpe()];
     }
     const duo = (...cards) => {
       const present = cards.filter(Boolean);
@@ -4825,18 +4836,19 @@ class ElectricityContractsPanel extends HTMLElement {
           ? this._t(heating.gas ? "atGasPrice" : "atContractPrices")
           : this._t(heating.gas ? "noGasPrice" : "partlyPriced");
     const energy = totals.heating + (before ? before.heating : 0);
-    const allDays = days + (before ? before.days : 0);
+    // Without a measured day, nothing is costed: only the estimated kWh show.
+    const measured = !before || heating.days.length > 0;
     return h(
       "section",
       { class: "card kpis" },
-      tile(this._t("heatingCost"), cost !== null ? this._money(cost, 0) : "—", costSub),
+      measured ? tile(this._t("heatingCost"), cost !== null ? this._money(cost, 0) : "—", costSub) : null,
       tile(
         this._t("consumption"),
         this._kwh(energy),
-        before ? this._t("ofWhichEstimated", { energy: this._kwh(before.heating) }) : allDays ? this._t("perDayEnergy", { energy: this._kwh(energy / allDays) }) : null,
+        !measured ? this._t("estimatedFromLinky") : before ? this._t("ofWhichEstimated", { energy: this._kwh(before.heating) }) : days ? this._t("perDayEnergy", { energy: this._kwh(energy / days) }) : null,
       ),
-      totals.share !== null ? tile(this._t("heatingShareLabel"), this._share(totals.share), this._t(heating.gas ? "ofHomeEnergy" : "ofTheElectricity")) : null,
-      heating.water_split
+      totals.share !== null ? tile(this._t("heatingShareLabel"), this._share(totals.share), this._t(heating.gas ? "ofHomeEnergy" : before ? "ofTheElectricityMeasured" : "ofTheElectricity")) : null,
+      heating.water_split && measured
         ? tile(this._t("hotWater"), totals.water_cost !== null ? this._money(totals.water_cost, 0) : this._kwh(totals.water), totals.water_cost !== null ? this._kwh(totals.water) : null)
         : null,
       perDegree
@@ -4852,30 +4864,36 @@ class ElectricityContractsPanel extends HTMLElement {
   // The days of the heating, or its months over a long period.
   _heatingBuckets(heating) {
     // Before the heating statistics, the days estimated from the Linky, in kWh.
-    const estimated = (heating.estimated_days || []).map((day) => ({ ...day, estimated: day.heating, heating: 0, heating_cost: null, water: 0, water_cost: null }));
+    const estimated = (heating.estimated_days || []).map((day) => ({ ...day, isEstimate: true, estimated: day.heating, heating: 0, heating_cost: null, water: 0, water_cost: null }));
     const all = [...estimated, ...heating.days.map((day) => ({ ...day, estimated: 0 }))].sort((first, second) => first.date.localeCompare(second.date));
     const monthly = all.length > HEATING_MAX_DAYS;
     if (!monthly) return { monthly, buckets: all.map((day) => ({ ...day, start: day.date })) };
     const months = new Map();
     for (const day of all) {
       const start = `${day.date.slice(0, 7)}-01`;
-      const bucket = months.get(start) || { start, heating: 0, heating_cost: 0, water: 0, water_cost: 0, estimated: 0, temperatures: [] };
+      const bucket = months.get(start) || { start, heating: 0, heating_cost: 0, water: 0, water_cost: 0, estimated: 0, measured: 0, temperatures: [] };
       bucket.heating += day.heating;
       bucket.estimated += day.estimated;
       bucket.water += day.water;
-      bucket.heating_cost = bucket.heating_cost === null || day.heating_cost === null ? null : bucket.heating_cost + day.heating_cost;
-      bucket.water_cost = bucket.water_cost === null || day.water_cost === null ? null : bucket.water_cost + day.water_cost;
+      // The estimated days have no cost: a month keeps the cost of its measured days.
+      if (!day.isEstimate) {
+        bucket.measured += 1;
+        bucket.heating_cost = bucket.heating_cost === null || day.heating_cost === null ? null : bucket.heating_cost + day.heating_cost;
+        bucket.water_cost = bucket.water_cost === null || day.water_cost === null ? null : bucket.water_cost + day.water_cost;
+      }
       if (day.temperature !== null) bucket.temperatures.push(day.temperature);
       months.set(start, bucket);
     }
     const buckets = [...months.values()].map((bucket) => ({
       ...bucket,
+      ...(bucket.measured ? {} : { heating_cost: null, water_cost: null }),
       temperature: bucket.temperatures.length ? bucket.temperatures.reduce((sum, value) => sum + value, 0) / bucket.temperatures.length : null,
     }));
     return { monthly, buckets };
   }
 
   _heatingMeasureShown(heating) {
+    if (!heating.days.length) return "energy";
     return heating.totals.heating_cost !== null || heating.days.some((day) => day.heating_cost !== null) ? this._heatingMeasure : "energy";
   }
 
@@ -4914,12 +4932,20 @@ class ElectricityContractsPanel extends HTMLElement {
     });
   }
 
+  // How an estimated heating is found: without heating statistics, or before them.
+  _estimatedNote(heating) {
+    return heating.heaters_from ? this._t("heatingBeforeAll", { date: this._dayLabel(heating.heaters_from, { day: "numeric", month: "long", year: "numeric" }) }) : this._t("estimatedHeatingInfo");
+  }
+
   // The heating before its statistics: estimated from the Linky, or not for want
   // of an outdoor temperature.
   _heatingBeforeNote(heating) {
     const span = (part) => ({ start: this._dayLabel(part.start), end: this._dayLabel(part.end) });
     const notes = [];
-    if (heating.before) notes.push(this._t("heatingBeforeInfo", span(heating.before)));
+    if (heating.before) {
+      notes.push(this._t("heatingBeforeInfo", span(heating.before)));
+      if (heating.before.missing) notes.push(this._t("heatingMissing", { count: heating.before.missing }));
+    }
     if (heating.unestimated) {
       notes.push(this._t("heatingNoWeather", span(heating.unestimated)));
       if (!heating.unestimated.open_meteo) notes.push(this._t("dpeOpenMeteo"));
@@ -4950,8 +4976,9 @@ class ElectricityContractsPanel extends HTMLElement {
     const measure = this._heatingMeasureShown(heating);
     const { monthly, buckets } = this._heatingBuckets(heating);
     const cost = measure === "cost";
-    const layers = [{ key: "heating", color: "var(--ec-s2)", name: this._t("heating") }];
-    if (heating.water_split) layers.push({ key: "water", color: "var(--ec-s3)", name: this._t("hotWater") });
+    // The measured layers, when a day is measured.
+    const layers = heating.days.length ? [{ key: "heating", color: "var(--ec-s2)", name: this._t("heating") }] : [];
+    if (heating.water_split && heating.days.length) layers.push({ key: "water", color: "var(--ec-s3)", name: this._t("hotWater") });
     // In kWh only: the estimated heating has no price.
     if (heating.estimated_days && heating.estimated_days.length && !cost) {
       layers.push({ key: "estimated", color: "var(--ec-s2)", name: this._t("heatingEstimated"), hatch: ["var(--ec-wash)", "var(--ec-s2)"] });
@@ -5167,7 +5194,7 @@ class ElectricityContractsPanel extends HTMLElement {
             : this._t("weatherInfo"),
           perDegree ? this._t(weather.base_fitted ? "baseFitted" : "baseDefault", { base }) : null,
           perDegree ? this._curveNote(weather) : null,
-          heating.measured ? this._waterNote(heating) : this._t("estimatedHeatingInfo"),
+          heating.measured ? this._waterNote(heating) : this._estimatedNote(heating),
         ],
         uses: this._uses("outdoor", "heating", heating.measured ? null : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
         hint: this._heatingHints(heating, "statistics", "water"),
@@ -5261,7 +5288,7 @@ class ElectricityContractsPanel extends HTMLElement {
             ? this._t("simInfoPrices", { source: this._t(heating.measured ? "simSourceHeating" : "simSourceHome"), share: this._share(sim.off_peak_share) })
             : null,
           Number.isFinite(low) && Number.isFinite(highest) ? this._t("simInfoRange", { low: this._degrees(low), high: this._degrees(highest) }) : null,
-          heating.measured ? null : this._t("estimatedHeatingInfo"),
+          heating.measured ? null : this._estimatedNote(heating),
         ],
         uses: this._uses("outdoor", "indoor", "heating", heating.measured ? null : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
         hint: this._heatingHints(heating, "statistics"),
