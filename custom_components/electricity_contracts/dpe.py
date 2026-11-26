@@ -10,24 +10,23 @@ or before the first costed hour) is estimated from the Linky's days and the
 outdoor temperature, so the label covers the whole year.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import probatio as vol
-from homeassistant.components.recorder.statistics import statistics_during_period
-from homeassistant.const import UnitOfEnergy, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.storage import Store
-from homeassistant.util import dt as dt_util
 
 from .comparison import day_start
 from .const import CONF_WEATHER, DOMAIN, FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
-from .data import Heating, source_statistic
-from .heating import async_heating_between, heating_window
-from .insights import line_heating, weather_fit
-from .weather import outdoor_ids, outdoor_rows, outdoor_statistic
+from .heating import (
+    async_heating_between,
+    async_linky_heating,
+    async_main_start,
+    heating_window,
+)
+from .insights import line_heating
 
 STORE_VERSION = 1
 
@@ -278,105 +277,6 @@ def _local_day(moment: datetime) -> date:
     return moment.astimezone(FRANCE_TIME_ZONE).date()
 
 
-def _day_of(timestamp: float) -> date:
-    """Return the day a daily row of the recorder stands for, in its time zone."""
-    return dt_util.as_local(datetime.fromtimestamp(timestamp, UTC)).date()
-
-
-async def _async_linky_heating(
-    hass: HomeAssistant,
-    entry: ElectricityContractsConfigEntry,
-    start: datetime,
-    end: datetime,
-) -> dict[str, Any] | None:
-    """Estimate the electric heating from `start` to `end` from the Linky's days.
-
-    Each day's consumption is fitted on its heating degree days, like the weather
-    fit: the heating of each day comes from its degree days. Only the days with an
-    outdoor temperature count, so the estimate starts at the first of them.
-    Without a line, None: those days are left out rather than counted without
-    heating.
-    """
-    source_id = source_statistic(entry)
-    assert source_id is not None
-    heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
-
-    def read() -> tuple[dict[date, float], dict[date, float], dict[date, float]]:
-        energy = {
-            _day_of(row["start"]): row.get("change") or 0.0
-            for row in statistics_during_period(
-                hass,
-                start,
-                end,
-                {source_id},
-                "day",
-                {"energy": UnitOfEnergy.KILO_WATT_HOUR},
-                {"change"},
-            ).get(source_id, [])
-        }
-        temperatures = statistics_during_period(
-            hass,
-            start,
-            end,
-            {*outdoor_ids(entry), *heating.indoor},
-            "day",
-            {"temperature": UnitOfTemperature.CELSIUS},
-            {"mean"},
-        )
-        indoor: dict[date, list[float]] = {}
-        for statistic_id in heating.indoor:
-            for row in temperatures.get(statistic_id, []):
-                if (mean := row.get("mean")) is not None:
-                    indoor.setdefault(_day_of(row["start"]), []).append(mean)
-        return (
-            energy,
-            {
-                _day_of(row["start"]): mean
-                for row in outdoor_rows(entry, temperatures)
-                if (mean := row.get("mean")) is not None
-            },
-            {day: sum(values) / len(values) for day, values in indoor.items()},
-        )
-
-    energy, outdoor, indoor = await get_instance(hass).async_add_executor_job(read)
-    # A daily read also returns the day that starts at `end`.
-    first_day, end_day = _local_day(start), _local_day(end)
-    energy = {day: kwh for day, kwh in energy.items() if first_day <= day < end_day}
-    weather = weather_fit(
-        {day: {"energy": kwh} for day, kwh in energy.items()}, outdoor
-    )
-    if not _fitted(weather):
-        return None
-    counted = {day: outdoor[day] for day in sorted(energy) if day in outdoor}
-    heat = sum(
-        line_heating(weather, weather["base"] - value) for value in counted.values()
-    )
-    return {
-        "start": min(counted).isoformat(),
-        "end": (_local_day(end) - timedelta(days=1)).isoformat(),
-        "days": len(counted),
-        "heating": heat,
-        "weather": weather,
-        "weather_days": [
-            {"temperature": value, "indoor": indoor.get(day)}
-            for day, value in counted.items()
-        ],
-    }
-
-
-async def _async_main_start(
-    entry: ElectricityContractsConfigEntry, first: datetime
-) -> datetime:
-    """Return where the heating tab's answer starts.
-
-    Its window, or the heating statistics' first day when they start later.
-    """
-    if not Heating.from_options(entry.options, outdoor=None).measured:
-        return first
-    day = await entry.runtime_data.async_heating_first_day()
-    return max(first, day_start(day)) if day else first
-
-
 async def async_dpe(
     hass: HomeAssistant, *, entry: ElectricityContractsConfigEntry, end: date
 ) -> dict[str, Any]:
@@ -391,7 +291,7 @@ async def async_dpe(
     start = day_start(_year_before(end) + timedelta(days=1))
     stop = day_start(end + timedelta(days=1))
     first, last = heating_window(entry, start, stop)
-    first = min(await _async_main_start(entry, first), max(first, last))
+    first = min(await async_main_start(entry, first), max(first, last))
     settings = await async_load_settings(hass, entry.entry_id)
     answer = await async_heating_between(
         hass, entry=entry, start=first, end=max(first, last), weather_days=True
@@ -403,7 +303,7 @@ async def async_dpe(
     if coordinator.statistic_id and not answer["gas"]:
         linky = max(start, day_start(coordinator.data.sources.first_day))
         if linky < first and (
-            before := await _async_linky_heating(hass, entry, linky, first)
+            before := await async_linky_heating(hass, entry, linky, first)
         ):
             answer["before"] = before
             begin = day_start(date.fromisoformat(before["start"]))

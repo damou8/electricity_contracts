@@ -33,6 +33,11 @@ const STRINGS = {
     heatingByDay: "Heating by day",
     heatingByMonth: "Heating by month",
     heatingByDayInfo: "What the heating used each day, each hour at the price of its tranche. Below, the average outdoor temperature of each day.",
+    heatingBeforeInfo: "Before your heating statistics, from {start} to {end}, the heating is estimated from the Linky and the outdoor temperature, in kWh only. It's hatched.",
+    heatingNoWeather: "From {start} to {end}, there's no outdoor temperature to estimate the heating from the Linky.",
+    heatingEstimated: "Estimated",
+    measuredOnly: "measured days only",
+    ofWhichEstimated: "of which {energy} estimated",
     heatingByDayGasInfo: "What the heating used each day, at the gas price of that day. Below, the average outdoor temperature of each day.",
     whereHeatingGoes: "Where the heating goes",
     byHeater: "By heater",
@@ -354,6 +359,11 @@ const STRINGS = {
     heatingByDay: "Chauffage par jour",
     heatingByMonth: "Chauffage par mois",
     heatingByDayInfo: "Ce que le chauffage a consommé chaque jour, chaque heure au prix de sa tranche. Dessous, la température extérieure moyenne de chaque jour.",
+    heatingBeforeInfo: "Avant vos statistiques de chauffage, du {start} au {end}, le chauffage est estimé à partir du Linky et de la température extérieure, en kWh seulement. Il est hachuré.",
+    heatingNoWeather: "Du {start} au {end}, il manque la température extérieure pour estimer le chauffage à partir du Linky.",
+    heatingEstimated: "Estimé",
+    measuredOnly: "jours mesurés seulement",
+    ofWhichEstimated: "dont {energy} estimés",
     heatingByDayGasInfo: "Ce que le chauffage a consommé chaque jour, au prix du gaz de ce jour. Dessous, la température extérieure moyenne de chaque jour.",
     whereHeatingGoes: "Où va le chauffage",
     byHeater: "Par radiateur",
@@ -1071,6 +1081,7 @@ main {
 .spent-line { font-size: 14px; }
 .spent-line strong { font-weight: 500; font-variant-numeric: tabular-nums; }
 .swatch.hatched { background: repeating-linear-gradient(135deg, var(--ec-money) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--ec-money); }
+.swatch.hatched-heating { background: repeating-linear-gradient(135deg, var(--ec-s2) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--ec-s2); }
 .meters { margin-top: 12px; }
 a.toggle { display: inline-block; margin-top: 8px; text-decoration: none; }
 .scroll { overflow-x: auto; }
@@ -1247,7 +1258,7 @@ tfoot td { font-weight: 600; border-bottom: none; }
 `;
 
 // The order of the lines of "Your data", the same on every card.
-const USE_ORDER = ["consumption", "consumptionDays", "heating", "dpeHeating", "water", "dpeWater", "auxiliaries", "surface", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
+const USE_ORDER = ["consumption", "consumptionDays", "heating", "heatingMixed", "dpeHeating", "water", "dpeWater", "auxiliaries", "surface", "chosen", "contract", "contractToday", "otherContract", "colors", "colorsToday", "gasPrice", "outdoor", "indoor", "history"];
 
 const ICONS = {
   meter: "M7,2V13H10V22L17,10H13L17,2H7Z",
@@ -2152,6 +2163,18 @@ class ElectricityContractsPanel extends HTMLElement {
         return inputs.water
           ? row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [named(inputs.water), ...steps([inputs.water])])
           : row(ICONS.boiler, "var(--ec-s3)", "useHotWater", [this._t("notTracked"), this._t("estimatedTag")], "estimated");
+      case "heatingMixed": {
+        // The heating tab: measured, and before its statistics the Linky's estimate.
+        const before = this._heating && this._heating.before;
+        const measured = this._use("heating");
+        const end = this._request && this._request.end;
+        if (!before || !measured || !end) return measured;
+        const span = (start, stop) => this._t("fromTo", { start: this._dayLabel(start), end: this._dayLabel(stop) });
+        return [
+          { ...row(ICONS.radiator, "var(--ec-s2)", "useHeating", ["Linky", this._t("estimatedTag")], "estimated"), period: span(before.start, before.end) },
+          { ...measured, period: span(addDays(before.end, 1), end) },
+        ];
+      }
       case "dpeHeating": {
         // Measured heating, and before its statistics the Linky's estimate.
         const estimated = this._dpe && this._dpe.estimated;
@@ -2864,7 +2887,7 @@ class ElectricityContractsPanel extends HTMLElement {
     // The series a partial month hatches: the actual cost, or the consumption
     // without the heating detail, each in its own color.
     const number = (this._patterns = (this._patterns || 0) + 1);
-    const hatches = { [ACTUAL]: ["var(--ec-money-soft)", "var(--ec-money)"], whole: ["var(--ec-wash)", "var(--ec-other)"] };
+    const hatches = { [ACTUAL]: ["var(--ec-money-soft)", "var(--ec-money)"], whole: ["var(--ec-wash)", "var(--ec-other)"], ...Object.fromEntries(series.filter((item) => item.hatch).map((item) => [item.id, item.hatch])) };
     const hatch = (id) => `ec-hatch-${number}-${id}`;
     root.insertBefore(
       s(
@@ -2890,7 +2913,7 @@ class ElectricityContractsPanel extends HTMLElement {
     const base = y(0);
     const fill = (item, index) => {
       const color = item.color || this._color(item.id);
-      return partial.has(index) && item.id in hatches ? { fill: `url(#${hatch(item.id)})`, stroke: color, "stroke-width": "1.5px" } : { fill: color };
+      return (item.hatch || partial.has(index)) && item.id in hatches ? { fill: `url(#${hatch(item.id)})`, stroke: color, "stroke-width": "1.5px" } : { fill: color };
     };
     items.forEach((bucket, index) => {
       const left = x(index) - used / 2;
@@ -4789,16 +4812,25 @@ class ElectricityContractsPanel extends HTMLElement {
     const tile = (label, value, sub) => h("div", { class: "kpi" }, h("div", { class: "label" }, label), h("div", { class: "value" }, value), sub ? h("div", { class: "sub" }, sub) : null);
     const perDegree = this._perDegree(heating);
     const cost = totals.heating_cost;
+    const before = heating.before;
     const costSub = estimated
       ? this._t("fromTheWeather")
-      : cost !== null
-        ? this._t(heating.gas ? "atGasPrice" : "atContractPrices")
-        : this._t(heating.gas ? "noGasPrice" : "partlyPriced");
+      : before && cost !== null
+        ? this._t("measuredOnly")
+        : cost !== null
+          ? this._t(heating.gas ? "atGasPrice" : "atContractPrices")
+          : this._t(heating.gas ? "noGasPrice" : "partlyPriced");
+    const energy = totals.heating + (before ? before.heating : 0);
+    const allDays = days + (before ? before.days : 0);
     return h(
       "section",
       { class: "card kpis" },
       tile(this._t("heatingCost"), cost !== null ? this._money(cost, 0) : "—", costSub),
-      tile(this._t("consumption"), this._kwh(totals.heating), days ? this._t("perDayEnergy", { energy: this._kwh(totals.heating / days) }) : null),
+      tile(
+        this._t("consumption"),
+        this._kwh(energy),
+        before ? this._t("ofWhichEstimated", { energy: this._kwh(before.heating) }) : allDays ? this._t("perDayEnergy", { energy: this._kwh(energy / allDays) }) : null,
+      ),
       totals.share !== null ? tile(this._t("heatingShareLabel"), this._share(totals.share), this._t(heating.gas ? "ofHomeEnergy" : "ofTheElectricity")) : null,
       heating.water_split
         ? tile(this._t("hotWater"), totals.water_cost !== null ? this._money(totals.water_cost, 0) : this._kwh(totals.water), totals.water_cost !== null ? this._kwh(totals.water) : null)
@@ -4815,13 +4847,17 @@ class ElectricityContractsPanel extends HTMLElement {
 
   // The days of the heating, or its months over a long period.
   _heatingBuckets(heating) {
-    const monthly = heating.days.length > HEATING_MAX_DAYS;
-    if (!monthly) return { monthly, buckets: heating.days.map((day) => ({ ...day, start: day.date })) };
+    // Before the heating statistics, the days estimated from the Linky, in kWh.
+    const estimated = (heating.estimated_days || []).map((day) => ({ ...day, estimated: day.heating, heating: 0, heating_cost: null, water: 0, water_cost: null }));
+    const all = [...estimated, ...heating.days.map((day) => ({ ...day, estimated: 0 }))].sort((first, second) => first.date.localeCompare(second.date));
+    const monthly = all.length > HEATING_MAX_DAYS;
+    if (!monthly) return { monthly, buckets: all.map((day) => ({ ...day, start: day.date })) };
     const months = new Map();
-    for (const day of heating.days) {
+    for (const day of all) {
       const start = `${day.date.slice(0, 7)}-01`;
-      const bucket = months.get(start) || { start, heating: 0, heating_cost: 0, water: 0, water_cost: 0, temperatures: [] };
+      const bucket = months.get(start) || { start, heating: 0, heating_cost: 0, water: 0, water_cost: 0, estimated: 0, temperatures: [] };
       bucket.heating += day.heating;
+      bucket.estimated += day.estimated;
       bucket.water += day.water;
       bucket.heating_cost = bucket.heating_cost === null || day.heating_cost === null ? null : bucket.heating_cost + day.heating_cost;
       bucket.water_cost = bucket.water_cost === null || day.water_cost === null ? null : bucket.water_cost + day.water_cost;
@@ -4867,11 +4903,24 @@ class ElectricityContractsPanel extends HTMLElement {
       : null;
     const { monthly } = this._heatingBuckets(heating);
     return this._card(this._t(monthly ? "heatingByMonth" : "heatingByDay"), this._heatingDaysChart, {
-      info: [this._t(heating.gas ? "heatingByDayGasInfo" : "heatingByDayInfo"), this._waterNote(heating)],
-      uses: this._uses("heating", "water", heating.gas ? "gasPrice" : "contract", "outdoor"),
+      info: [this._t(heating.gas ? "heatingByDayGasInfo" : "heatingByDayInfo"), this._waterNote(heating), this._heatingBeforeNote(heating)],
+      uses: this._uses("heatingMixed", "water", heating.gas ? "gasPrice" : "contract", "outdoor"),
       hint: this._heatingHints(heating, "water", "gasPrice", "outdoor"),
       tools: measures,
     });
+  }
+
+  // The heating before its statistics: estimated from the Linky, or not for want
+  // of an outdoor temperature.
+  _heatingBeforeNote(heating) {
+    const span = (part) => ({ start: this._dayLabel(part.start), end: this._dayLabel(part.end) });
+    const notes = [];
+    if (heating.before) notes.push(this._t("heatingBeforeInfo", span(heating.before)));
+    if (heating.unestimated) {
+      notes.push(this._t("heatingNoWeather", span(heating.unestimated)));
+      if (!heating.unestimated.open_meteo) notes.push(this._t("dpeOpenMeteo"));
+    }
+    return notes.length ? notes.join(" ") : null;
   }
 
   // What more data would bring to a heating card.
@@ -4899,8 +4948,12 @@ class ElectricityContractsPanel extends HTMLElement {
     const cost = measure === "cost";
     const layers = [{ key: "heating", color: "var(--ec-s2)", name: this._t("heating") }];
     if (heating.water_split) layers.push({ key: "water", color: "var(--ec-s3)", name: this._t("hotWater") });
+    // In kWh only: the estimated heating has no price.
+    if (heating.estimated_days && heating.estimated_days.length && !cost) {
+      layers.push({ key: "estimated", color: "var(--ec-s2)", name: this._t("heatingEstimated"), hatch: ["var(--ec-wash)", "var(--ec-s2)"] });
+    }
     // A day without a price stays empty, and reads as such in the tooltip.
-    const series = layers.map((layer) => ({ id: layer.key, color: layer.color, name: layer.name, values: buckets.map((bucket) => bucket[cost ? `${layer.key}_cost` : layer.key]) }));
+    const series = layers.map((layer) => ({ id: layer.key, color: layer.color, name: layer.name, hatch: layer.hatch, values: buckets.map((bucket) => bucket[cost ? `${layer.key}_cost` : layer.key] ?? null) }));
     const temperatures = buckets.map((bucket) => bucket.temperature ?? null);
     const known = temperatures.some((value) => value !== null);
     const frame = this._drawColumns(container, series, {
@@ -4915,7 +4968,7 @@ class ElectricityContractsPanel extends HTMLElement {
     if (known) container.append(this._temperatureStrip(frame, temperatures, frame.temperatureColor));
     container.append(
       this._keys(
-        ...layers.map((layer) => [h("span", { class: "swatch", style: { background: layer.color } }), layer.name]),
+        ...layers.map((layer) => [h("span", { class: layer.hatch ? "swatch hatched-heating" : "swatch", style: layer.hatch ? {} : { background: layer.color } }), layer.name]),
         known ? [h("span", { class: "line-key", style: { background: frame.temperatureColor } }), this._t("temperature")] : null,
       ),
     );
