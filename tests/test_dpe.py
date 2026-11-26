@@ -176,7 +176,7 @@ def test_no_heating_no_label() -> None:
     assert dpe_label(answer(measured=False, totals=None), HOME)["classes"] is None
 
 
-WEATHER = {"base": 18.0, "slope": 2.0}
+WEATHER = {"base": 18.0, "slope": 2.0, "linear": 2.0, "square": 0.0, "reach": 20.0}
 
 
 def test_moved_to_the_dpe_setpoint_from_thermometers() -> None:
