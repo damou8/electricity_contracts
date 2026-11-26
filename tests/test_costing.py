@@ -52,3 +52,15 @@ def test_missing_hours_are_not_estimated() -> None:
     start = datetime(2026, 10, 25, tzinfo=UTC)
     rows = [(start, 0.4), (start + 2 * HOUR, 0.8)]
     assert kept(rows) == rows
+
+
+def test_daily_rows_around_a_missing_day_are_not_costed() -> None:
+    # The Linky gave nothing for 3 April 2025: neither the day before nor the
+    # last day is an hour at midnight.
+    rows = daily(date(2025, 4, 1), 2) + daily(date(2025, 4, 4), 2)
+    assert kept(rows) == []
+
+
+def test_last_daily_row_after_a_missing_day_is_not_costed() -> None:
+    rows = daily(date(2025, 4, 1), 2) + daily(date(2025, 4, 4), 1)
+    assert kept(rows) == []
