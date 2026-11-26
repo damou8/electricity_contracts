@@ -155,14 +155,15 @@ async def async_setup_entry(
     # Before the first refresh, which takes minutes when a contract was added:
     # the page tells it is preparing the figures meanwhile.
     await async_register_panel(hass)
+    # Contracts and options change through subentry and options flows;
+    # reloading applies them. Listened to before the first refresh: a contract
+    # added meanwhile reloads the entry once its setup is done.
+    entry.async_on_unload(entry.add_update_listener(_async_reload))
     coordinator = ElectricityContractsCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     # A coordinator only refreshes on schedule while something listens to it.
     entry.async_on_unload(coordinator.async_add_listener(_async_no_op))
-    # Contracts and options change through subentry and options
-    # flows; reloading applies them.
-    entry.async_on_unload(entry.add_update_listener(_async_reload))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

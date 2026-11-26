@@ -1,9 +1,11 @@
 """Tests of setting up, reloading and removing a consumption source."""
 
+from datetime import date
 from types import MappingProxyType
 from typing import Any
 
 import pytest
+from elec_tariffs import TempoColor
 from homeassistant.config_entries import ConfigEntryState, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -31,6 +33,7 @@ from .conftest import (
     legacy_price_period,
     make_entry,
     manual_period,
+    published_calendar,
 )
 
 
@@ -246,6 +249,31 @@ async def test_changes_reload_the_entry(hass: HomeAssistant, sources: Sources) -
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     sources.trv.async_price_periods.assert_awaited_once()
+
+
+@pytest.mark.usefixtures("statistic")
+async def test_options_changed_during_the_first_refresh(
+    hass: HomeAssistant, sources: Sources
+) -> None:
+    entry = make_entry([TEMPO_CONTRACT])
+    entry.add_to_hass(hass)
+    calendar = published_calendar(date(2026, 11, 7))
+
+    async def add_credentials(start: date, end: date) -> dict[date, TempoColor]:
+        # Saved from the options while the first refresh still runs.
+        if CONF_RTE_CLIENT_ID not in entry.options:
+            hass.config_entries.async_update_entry(
+                entry,
+                options={CONF_RTE_CLIENT_ID: "id", CONF_RTE_CLIENT_SECRET: "secret"},
+            )
+        return calendar(start, end)
+
+    sources.public.async_calendar.side_effect = add_credentials
+    # The reload starts as soon as the setup is done.
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.runtime_data.has_credentials
 
 
 @pytest.mark.usefixtures("statistic")
