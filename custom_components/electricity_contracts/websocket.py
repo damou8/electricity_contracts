@@ -353,6 +353,7 @@ async def ws_compare(
                         round(bucket.actual, 2) if bucket.actual is not None else None
                     ),
                     "daily": bucket.daily,
+                    "daily_energy": round(bucket.daily_energy, 3),
                 }
                 for bucket in series
             ],

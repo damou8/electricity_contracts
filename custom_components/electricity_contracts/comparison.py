@@ -303,8 +303,13 @@ class Bucket:
     actual: float | None
     """Total cost of the contracts in force, None unless one was in force at every
     hour, or when a day has no cost."""
-    daily: bool = False
-    """Some days are only known in total: they have kWh but no cost."""
+    daily_energy: float = 0.0
+    """kWh of the days only known in total: counted in `energy`, without a cost."""
+
+    @property
+    def daily(self) -> bool:
+        """Tell whether some days are only known in total."""
+        return self.daily_energy > 0
 
 
 def _bucket(day: date, group_by: GroupBy) -> date:
@@ -368,9 +373,9 @@ async def async_series(
 ) -> list[Bucket]:
     """Split a comparison into days or months, French time, with none missing.
 
-    `days` are the days only known in total (`linky_days`): their kWh are added,
-    and the buckets that hold one have no cost. The series runs from the first
-    of them when it comes before the comparison.
+    `days` are the days only known in total (`linky_days`): their kWh are added
+    without a cost, so a bucket that only holds such days has none. The series
+    runs from the first of them when it comes before the comparison.
     """
     days = days or {}
     contracts = [item.contract for item in comparison.contracts]
@@ -409,10 +414,14 @@ async def async_series(
         sums.setdefault(
             _bucket(first + timedelta(days=offset), group_by), dict.fromkeys(ids, 0.0)
         )
+    # The buckets that hold costed hours.
+    with_hours: set[date] = set()
     for statistic_id, rows in hourly.items():
         for hour, change in rows:
             day = dt_util.utc_from_timestamp(hour).astimezone(FRANCE_TIME_ZONE).date()
-            sums[_bucket(day, group_by)][statistic_id] += change
+            bucket = _bucket(day, group_by)
+            sums[bucket][statistic_id] += change
+            with_hours.add(bucket)
     daily: dict[date, float] = {}
     for day, energy in days.items():
         bucket = _bucket(day, group_by)
@@ -421,14 +430,15 @@ async def async_series(
     buckets: list[Bucket] = []
     for bucket_start, values in sums.items():
         energy = values[energy_id] if energy_id else 0.0
-        if bucket_start in daily:
+        daily_energy = daily.get(bucket_start, 0.0)
+        if bucket_start not in with_hours and daily_energy:
             buckets.append(
                 Bucket(
                     start=bucket_start,
-                    energy=energy + daily[bucket_start],
+                    energy=daily_energy,
                     contracts={},
                     actual=None,
-                    daily=True,
+                    daily_energy=daily_energy,
                 )
             )
             continue
@@ -441,16 +451,18 @@ async def async_series(
             if actual_ids is not None
             else None
         )
+        # A month can hold both: the cost is the one of its hours.
         buckets.append(
             Bucket(
                 start=bucket_start,
-                energy=energy,
+                energy=energy + daily_energy,
                 contracts={uid: values[total] for uid, total in totals.items()},
                 actual=(
                     actual.total
                     if actual is not None and covers(actual, energy)
                     else None
                 ),
+                daily_energy=daily_energy,
             )
         )
     return buckets

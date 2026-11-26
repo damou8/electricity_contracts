@@ -1400,6 +1400,11 @@ function pad(value) {
   return String(value).padStart(2, "0");
 }
 
+// A bucket that only holds days known in total: kWh without any cost.
+function costless(bucket) {
+  return bucket.daily && !Object.keys(bucket.contracts).length;
+}
+
 function lastDayOf(isoEnd) {
   // The end of a window is the first hour left out, in French time.
   const day = isoEnd.slice(0, 10);
@@ -1770,9 +1775,9 @@ class ElectricityContractsPanel extends HTMLElement {
       if (count !== this._loadCount) return;
       if (data && data.series) {
         // The time chart also shows the days only known in total; the other
-        // charts compare costs.
+        // charts compare costs, so they keep the buckets with costed hours.
         data.energySeries = data.series;
-        data.series = data.series.filter((bucket) => !bucket.daily);
+        data.series = data.series.filter((bucket) => !costless(bucket));
       }
       this._request = window;
       this._data = data;
@@ -2447,7 +2452,11 @@ class ElectricityContractsPanel extends HTMLElement {
         return { value: (bucket) => bucket.energy, format: (value) => this._kwh(value), axis: (value, digits) => `${this._number(value, digits)} kWh` };
       case "price":
         return {
-          value: (bucket) => (bucket.actual !== null && bucket.energy > 0 ? bucket.actual / bucket.energy : null),
+          // The kWh only known in total have no cost: they stay out of the price.
+          value: (bucket) => {
+            const energy = bucket.energy - (bucket.daily_energy || 0);
+            return bucket.actual !== null && energy > 0 ? bucket.actual / energy : null;
+          },
           format: (value) => this._average(value),
           axis: (value, digits) => this._money(value, Math.max(digits, 2)),
         };
@@ -2456,11 +2465,17 @@ class ElectricityContractsPanel extends HTMLElement {
     }
   }
 
-  // The months the data covers only in part, at both ends of the period.
+  // The months the data covers only in part, at both ends of the period. A cost
+  // or a price also leaves out the days only known in total.
   _partialBuckets() {
     const partial = new Set();
     const series = this._timeBuckets().items;
     if (this._data.group_by !== "month" || !series.length) return partial;
+    if (this._measureNow() !== "energy") {
+      series.forEach((bucket, index) => {
+        if (bucket.daily && !costless(bucket)) partial.add(index);
+      });
+    }
     const range = this._energyRange();
     if (range.start.slice(8, 10) !== "01") partial.add(0);
     const [year, month, day] = lastDayOf(range.end).split("-").map(Number);
@@ -2724,7 +2739,7 @@ class ElectricityContractsPanel extends HTMLElement {
     const actual = { id: ACTUAL, name: this._t({ energy: "consumption", price: "averagePrice" }[this._measureNow()] || "actual") };
     const buckets = this._timeBuckets();
     // A day only known in total has no cost: that is not a missing contract.
-    const missing = buckets.items.some((bucket) => bucket.actual === null && !bucket.daily);
+    const missing = buckets.items.some((bucket) => bucket.actual === null && !costless(bucket));
     const temperatures = this._bucketTemperatures();
     const measure = this._measureOf();
     const partial = this._partialBuckets();
