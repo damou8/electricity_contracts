@@ -39,7 +39,6 @@ const STRINGS = {
     estimatedFromLinky: "estimated from the Linky",
     ofTheElectricityMeasured: "of the electricity consumption, measured days only",
     heatingMissing: "{count} days without an outdoor temperature or a Linky reading aren't counted.",
-    heatingBeforeAll: "Your heating statistics start on {date}. Before, the heating is estimated from how much the whole consumption rises on cold days.",
     ofWhichEstimated: "of which {energy} estimated",
     heatingByDayGasInfo: "What the heating used each day, at the price of the gas contract in force that day, with its share of the subscription. Below, the average outdoor temperature of each day.",
     whereHeatingGoes: "Where the heating goes",
@@ -375,7 +374,6 @@ const STRINGS = {
     estimatedFromLinky: "estimés à partir du Linky",
     ofTheElectricityMeasured: "de la consommation d'électricité, jours mesurés seulement",
     heatingMissing: "{count} jours sans température extérieure ou sans relevé du Linky ne sont pas comptés.",
-    heatingBeforeAll: "Vos statistiques de chauffage commencent le {date}. Avant, le chauffage est estimé d'après ce que toute la consommation augmente les jours froids.",
     ofWhichEstimated: "dont {energy} estimés",
     heatingByDayGasInfo: "Ce que le chauffage a consommé chaque jour, au prix du contrat de gaz en vigueur ce jour-là, avec sa part de l'abonnement. Dessous, la température extérieure moyenne de chaque jour.",
     whereHeatingGoes: "Où va le chauffage",
@@ -4954,9 +4952,9 @@ class ElectricityContractsPanel extends HTMLElement {
     });
   }
 
-  // How an estimated heating is found: without heating statistics, or before them.
+  // How the heating is estimated without heating statistics.
   _estimatedNote(heating) {
-    return heating.heaters_from ? this._t("heatingBeforeAll", { date: this._dayLabel(heating.heaters_from, { day: "numeric", month: "long", year: "numeric" }) }) : this._t("estimatedHeatingInfo");
+    return this._t("estimatedHeatingInfo");
   }
 
   // The heating before its statistics: estimated from the Linky, or not for want
