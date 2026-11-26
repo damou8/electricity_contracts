@@ -284,6 +284,28 @@ async def test_estimated_from_the_source(
     assert answer["simulator"]["off_peak_share"] == pytest.approx(1 / 3, abs=1e-3)
 
 
+@pytest.mark.usefixtures("sources")
+async def test_simulator_starts_from_the_heated_days(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, cold_days: list[float]
+) -> None:
+    del cold_days
+    # 25 °C inside on 2 March, at 18 °C outside: a day without heating.
+    await add_indoor(hass, [25.0] * 24 + [19.0] * 24 * (DAYS - 1))
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [TEMPO_CONTRACT],
+            options={
+                CONF_TEMPERATURE: TEMPERATURE_ID,
+                CONF_INDOOR_TEMPERATURES: [INDOOR],
+            },
+        ),
+    )
+    answer = await heating(hass, hass_ws_client, entry)
+    assert answer["weather"]["base"] == pytest.approx(18.0)
+    assert answer["simulator"]["indoor"] == 19.0
+
+
 @pytest.mark.usefixtures("statistic", "sources")
 async def test_estimate_needs_a_fit(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator

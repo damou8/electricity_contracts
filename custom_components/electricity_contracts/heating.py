@@ -650,6 +650,24 @@ class _Answer:
         )
         return answer
 
+    def _heated_indoor(self, weather: dict[str, Any] | None) -> float | None:
+        """Return the indoor mean of the days that heated, else of every day.
+
+        A day heated when it was colder outside than the fit's base. The
+        simulator starts from this mean: summer days, warm inside without any
+        heating, would raise it.
+        """
+        if weather is not None:
+            heated = [
+                indoor
+                for day, indoor in self.indoor.items()
+                if (outdoor := self.outdoor.get(day)) is not None
+                and outdoor < weather["base"]
+            ]
+            if heated:
+                return sum(heated) / len(heated)
+        return self.indoor_mean
+
     def _answer(
         self,
         *,
@@ -681,7 +699,7 @@ class _Answer:
             "weather": weather,
             "average_price": _round(average, 4),
             "simulator": {
-                "indoor": _round(self.indoor_mean, 1),
+                "indoor": _round(self._heated_indoor(weather), 1),
                 "outdoor": _round(sum(outdoor) / len(outdoor), 1) if outdoor else None,
                 "off_peak_share": _round(off_peak, 4),
                 "kind": contract[0].kind.value if contract else None,

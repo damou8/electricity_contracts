@@ -70,7 +70,7 @@ La roue dentée **Configurer** ouvre un menu de quatre pages. Chacune s'enregist
 
 ### Température intérieure
 
-**Thermomètres intérieurs** (facultatif) : une ou plusieurs températures, moyennées. Le simulateur de réglage de l'onglet Chauffage part de cette température ; sans elle, il est désactivé.
+**Thermomètres intérieurs** (facultatif) : une ou plusieurs températures, moyennées. Le simulateur de réglage de l'onglet Chauffage part de leur moyenne les jours où le logement a été chauffé. Sans thermomètre, il est désactivé.
 
 ### Chauffage et eau chaude
 
@@ -146,7 +146,7 @@ The reference price is downloaded once a day from the CRE's website, with the mo
 **Options**: the **Configure** cog opens a menu of four pages. Each one is saved on its own and keeps what the others set.
 
 - **Outdoor temperature**: an **outdoor thermometer** (optional), a temperature sensor that keeps statistics. It relates the consumption to the weather, adds the temperature to the trend chart and brings the Heating tab. **Use Open-Meteo weather** (optional, off by default): the temperature comes from [Open-Meteo](https://open-meteo.com/), free and without an account, hour by hour from the first day of consumption. The home's location (Settings > System > General), rounded to 0.1° (about 10 km), is sent to Open-Meteo. The temperature is recorded as a statistic of the entry ("Outdoor temperature (Open-Meteo)"), and the last days are asked again at each update, since Open-Meteo corrects them a few days later. With an outdoor sensor, Open-Meteo only gives the days before the sensor's first day. This helps with the daily Linky history. The tabs read both sources. Unticking the option clears the statistic. Data under CC BY 4.0.
-- **Indoor temperature**: **indoor thermometers** (optional), one or several temperatures, averaged. The setting simulator of the Heating tab starts from this temperature; without it, the simulator is off.
+- **Indoor temperature**: **indoor thermometers** (optional), one or several temperatures, averaged. The setting simulator of the Heating tab starts from their average on the days the home was heated. Without a thermometer, the simulator is off.
 - **Heating and hot water**: with nothing but the outdoor temperature, the Heating tab estimates the heating from the source's consumption and the weather. To measure it:
   - **Heating consumption statistics**: one or several energy totals in kWh (one per heater, or the gas meter), summed. Statistics read once a day are accepted: those days are counted without a typical day.
   - **Energy of the heating**: electricity, already part of the source and costed at the prices of the electricity contract in force, hour by hour; or gas, costed at the gas contract in force.
