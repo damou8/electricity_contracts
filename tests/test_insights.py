@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from custom_components.electricity_contracts.insights import weather_fit
+from custom_components.electricity_contracts.insights import line_heating, weather_fit
 
 FIRST = date(2026, 1, 1)
 
@@ -61,3 +61,65 @@ def test_too_few_days_for_a_line() -> None:
     temperatures = [float(index) for index in range(13)]
     weather = fit(temperatures, [20.0 - t for t in temperatures])
     assert (weather["base"], weather["slope"], weather["days"]) == (18.0, None, 13)
+
+
+def heated(
+    base: float, temperatures: list[float], linear: float, square: float
+) -> list[float]:
+    """5 kWh a day, and the heating of the degrees under `base` on a curve."""
+    return [
+        5.0 + linear * max(0.0, base - t) + square * max(0.0, base - t) ** 2
+        for t in temperatures
+    ]
+
+
+@pytest.mark.parametrize(
+    ("linear", "square"),
+    [
+        # Less a degree in the cold: heaters at full power.
+        (3.0, -0.05),
+        # More a degree in the cold: a heat pump losing its efficiency.
+        (1.0, 0.05),
+    ],
+)
+def test_the_heating_can_curve(linear: float, square: float) -> None:
+    temperatures = [-5.0 + index for index in range(30)]
+    weather = fit(temperatures, heated(15.0, temperatures, linear, square))
+    assert weather["base"] == 15.0
+    assert (weather["linear"], weather["square"]) == (
+        pytest.approx(linear),
+        pytest.approx(square),
+    )
+    assert weather["reach"] == 20.0
+    # On average over the days, per degree under the base.
+    degrees = [max(0.0, 15.0 - t) for t in temperatures]
+    heating = sum(linear * x + square * x**2 for x in degrees)
+    assert weather["slope"] == pytest.approx(heating / sum(degrees), abs=1e-3)
+
+
+def test_the_heating_keeps_rising_with_the_cold() -> None:
+    # The curve would use less on the coldest days than on milder ones: at 20
+    # degrees under the base, 3 - 2 * 0.1 * 20 is under 0.
+    temperatures = [-5.0 + index for index in range(30)]
+    weather = fit(temperatures, heated(15.0, temperatures, 3.0, -0.1))
+    # Whatever base fits best, its heating keeps rising up to the coldest day.
+    assert weather["linear"] >= 0
+    assert weather["linear"] + 2 * weather["square"] * weather["reach"] > 0
+
+
+def test_few_heating_days_make_a_line() -> None:
+    # 13 days under every base, the rest over all of them.
+    temperatures = [2.0 + index for index in range(13)] + [
+        20.0 + index for index in range(17)
+    ]
+    weather = fit(temperatures, heated(15.0, temperatures, 1.0, 0.1))
+    assert weather["square"] == 0.0
+
+
+def test_past_the_coldest_day_the_curve_goes_on_straight() -> None:
+    weather = {"linear": 2.0, "square": 0.1, "reach": 10.0}
+    assert line_heating(weather, -1.0) == 0.0
+    assert line_heating(weather, 5.0) == pytest.approx(12.5)
+    assert line_heating(weather, 10.0) == pytest.approx(30.0)
+    # 4 kWh a degree at the coldest day seen, on 2 more degrees.
+    assert line_heating(weather, 12.0) == pytest.approx(38.0)

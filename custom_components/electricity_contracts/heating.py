@@ -41,7 +41,7 @@ from .data import (
     price_periods,
     source_statistic,
 )
-from .insights import DEGREE_DAY_BASE, daily_means, weather_fit
+from .insights import DEGREE_DAY_BASE, daily_means, line_heating, weather_fit
 from .weather import outdoor_fill, outdoor_ids, outdoor_rows, outdoor_statistic
 
 # kWh below which a day is taken as costed in full.
@@ -349,8 +349,8 @@ def _estimated(
     weather: dict[str, Any], outdoor: dict[date, float], house: dict[date, _Day]
 ) -> dict[str, Any]:
     """Estimate the heating in the source's consumption from its fit."""
-    energy = weather["slope"] * sum(
-        max(0.0, weather["base"] - temperature)
+    energy = sum(
+        line_heating(weather, weather["base"] - temperature)
         for temperature in counted_days(outdoor, house).values()
     )
     house_energy = sum(item.energy for item in house.values())

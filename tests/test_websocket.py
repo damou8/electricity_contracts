@@ -615,6 +615,10 @@ async def test_insights_weather(
         "mean_temperature": 10.5,
         "slope": pytest.approx(2.0),
         "intercept": pytest.approx(6.0),
+        # A straight line: no curve.
+        "linear": pytest.approx(2.0),
+        "square": pytest.approx(0.0, abs=1e-6),
+        "reach": 15.0,
         "heating_share": pytest.approx(2 * degree_days / total, abs=1e-4),
     }
     # The quietest hour of the first night.
@@ -647,6 +651,9 @@ async def test_insights_weather_needs_days(
         "mean_temperature": None,
         "slope": None,
         "intercept": None,
+        "linear": None,
+        "square": None,
+        "reach": None,
         "heating_share": None,
     }
 

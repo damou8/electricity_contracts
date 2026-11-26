@@ -271,6 +271,7 @@ const STRINGS = {
     withHeating: "Above {base}, you use about {energy} a day. Below, the heating uses {slope} more a day per degree colder.",
     weatherInfo: "Each dot is a day with its outdoor temperature and what you consumed.",
     baseFitted: "{base} is where your heating starts: it's found from your days, between 10 and 20 °C.",
+    heatingCurve: "A degree colder costs {mild} in mild weather and {cold} on your coldest days: the heating follows a curve.",
     perDegreeBelow: "per degree below {base}",
     ofTheConsumption: "{share} of the consumption",
     aroundTheClock: "around the clock",
@@ -591,6 +592,7 @@ const STRINGS = {
     withHeating: "Au-dessus de {base}, vous consommez environ {energy} par jour. En dessous, le chauffage consomme {slope} de plus par jour et par degré de moins.",
     weatherInfo: "Chaque point est une journée avec sa température extérieure et ce que vous avez consommé.",
     baseFitted: "{base} est la température sous laquelle votre chauffage démarre : elle est tirée de vos journées, entre 10 et 20 °C.",
+    heatingCurve: "Un degré de moins coûte {mild} quand il fait doux et {cold} vos jours les plus froids : le chauffage suit une courbe.",
     perDegreeBelow: "par degré sous {base}",
     ofTheConsumption: "{share} de la consommation",
     aroundTheClock: "en continu",
@@ -1312,6 +1314,15 @@ function setAttributes(node, attributes) {
       node.setAttribute(key, value === true ? "" : String(value));
     }
   }
+}
+
+// The heating of a day `degrees` under the base of a weather fit: on its curve
+// up to the coldest day seen, then straight on at its slope there.
+function lineHeating(weather, degrees) {
+  if (degrees <= 0) return 0;
+  const { linear, square, reach } = weather;
+  if (degrees <= reach) return linear * degrees + square * degrees * degrees;
+  return linear * reach + square * reach * reach + (linear + 2 * square * reach) * (degrees - reach);
 }
 
 function h(tag, attributes = {}, ...children) {
@@ -3763,6 +3774,7 @@ class ElectricityContractsPanel extends HTMLElement {
           this._t("weatherInfo"),
           heating ? this._t("withHeating", { base, energy: this._kwh(Math.max(0, weather.intercept)), slope: this._kwh(weather.slope) }) : null,
           heating ? this._t("baseFitted", { base }) : null,
+          heating ? this._curveNote(weather) : null,
         ],
         uses: this._uses("consumption", "outdoor"),
       },
@@ -3814,8 +3826,10 @@ class ElectricityContractsPanel extends HTMLElement {
     }
     root.append(dots);
     if (weather.slope !== null && weather.slope > 0) {
-      const model = (value) => Math.max(0, weather.intercept + weather.slope * Math.max(0, weather.base - value));
-      const knots = [low, ...(weather.base > low && weather.base < high ? [weather.base] : []), high];
+      const model = (value) => Math.max(0, weather.intercept + lineHeating(weather, weather.base - value));
+      // Straight above the base, a curve below it: 48 steps draw it smoothly.
+      const steps = Array.from({ length: 49 }, (_, index) => low + ((high - low) * index) / 48);
+      const knots = [...steps, ...(weather.base > low && weather.base < high ? [weather.base] : [])].sort((a, b) => a - b);
       root.append(
         s("polyline", {
           points: knots.map((value) => `${x(value)},${y(model(value))}`).join(" "),
@@ -5095,12 +5109,22 @@ class ElectricityContractsPanel extends HTMLElement {
             ? this._t("heatingWeatherInfo", { base, slope: this._kwh(perDegree.energy), cost: perDegree.cost !== null ? this._money(perDegree.cost) : "—" })
             : this._t("weatherInfo"),
           perDegree ? this._t("baseFitted", { base }) : null,
+          perDegree ? this._curveNote(weather) : null,
           heating.measured ? this._waterNote(heating) : this._t("estimatedHeatingInfo"),
         ],
         uses: this._uses("outdoor", "heating", heating.measured ? null : "consumption", "water", heating.gas ? "gasPrice" : "contract"),
         hint: this._heatingHints(heating, "statistics", "water"),
       },
     );
+  }
+
+  // What a degree costs at the mildest and at the coldest heating days, when the
+  // curve makes them differ by a tenth or more.
+  _curveNote(weather) {
+    const mild = weather.linear + 2 * weather.square;
+    const cold = weather.linear + 2 * weather.square * weather.reach;
+    if (!(weather.reach > 1) || Math.abs(cold - mild) < 0.1 * Math.max(mild, cold)) return null;
+    return this._t("heatingCurve", { mild: this._kwh(mild), cold: this._kwh(cold) });
   }
 
   // The kWh of heating a day at an outdoor and an indoor temperature, from the
@@ -5111,7 +5135,7 @@ class ElectricityContractsPanel extends HTMLElement {
     // inside it; without heating statistics it is the rest of the home.
     const water = heating.water_split && !heating.water_measured ? heating.water_per_day : 0;
     const flat = heating.measured ? weather.intercept - water : 0;
-    return Math.max(0, flat + weather.slope * Math.max(0, weather.base + (indoor - heating.simulator.indoor) - outdoor));
+    return Math.max(0, flat + lineHeating(weather, weather.base + (indoor - heating.simulator.indoor) - outdoor));
   }
 
   _renderSimulator(heating) {

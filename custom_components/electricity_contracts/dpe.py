@@ -26,7 +26,7 @@ from .const import CONF_WEATHER, DOMAIN, FRANCE_TIME_ZONE
 from .coordinator import ElectricityContractsConfigEntry
 from .data import Heating, source_statistic
 from .heating import async_heating_between, heating_window
-from .insights import weather_fit
+from .insights import line_heating, weather_fit
 from .weather import outdoor_ids, outdoor_rows, outdoor_statistic
 
 STORE_VERSION = 1
@@ -125,10 +125,11 @@ def _fitted(weather: dict[str, Any] | None) -> bool:
 def _conventional(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, Any]:
     """Say how much more heating the DPE's setpoint takes than the home's.
 
-    The weather line gives what a degree colder costs a day: moving the home's
-    mean indoor temperature to the DPE's moves its base by as much, on each day
-    of the year. The home's temperature is what its thermometers measured on
-    the heating days, else its setpoint setting. Without a line, nothing moves.
+    The weather fit gives the heating of a day from its degrees under the base:
+    moving the home's mean indoor temperature to the DPE's moves its base by as
+    much, on each day of the year. The home's temperature is what its
+    thermometers measured on the heating days, else its setpoint setting.
+    Without a fit, nothing moves.
     The days estimated before the window move with their own line.
     """
     parts: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
@@ -156,13 +157,10 @@ def _conventional(answer: dict[str, Any], settings: dict[str, float]) -> dict[st
         source = "setting"
     shift = _mean_temperature(DPE_SETPOINT, DPE_SETBACK) - indoor
     extra = sum(
-        weather["slope"]
-        * sum(
-            max(0.0, weather["base"] + shift - day["temperature"])
-            - max(0.0, weather["base"] - day["temperature"])
-            for day in days
-        )
+        line_heating(weather, weather["base"] + shift - day["temperature"])
+        - line_heating(weather, weather["base"] - day["temperature"])
         for weather, days in counted
+        for day in days
     )
     return {
         "applied": True,
@@ -294,7 +292,7 @@ async def _async_linky_heating(
     """Estimate the electric heating from `start` to `end` from the Linky's days.
 
     Each day's consumption is fitted on its heating degree days, like the weather
-    line: the slope times the degree days is the heating. Only the days with an
+    fit: the heating of each day comes from its degree days. Only the days with an
     outdoor temperature count, so the estimate starts at the first of them.
     Without a line, None: those days are left out rather than counted without
     heating.
@@ -350,8 +348,8 @@ async def _async_linky_heating(
     if not _fitted(weather):
         return None
     counted = {day: outdoor[day] for day in sorted(energy) if day in outdoor}
-    heat = weather["slope"] * sum(
-        max(0.0, weather["base"] - value) for value in counted.values()
+    heat = sum(
+        line_heating(weather, weather["base"] - value) for value in counted.values()
     )
     return {
         "start": min(counted).isoformat(),
