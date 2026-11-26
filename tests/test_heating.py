@@ -686,3 +686,101 @@ async def test_off_peak_share_of_hphc(
     assert answer["simulator"]["off_peak_share"] == pytest.approx(1 / 3, abs=1e-3)
     assert answer["simulator"]["kind"] == "hphc"
     assert set(answer["tranches"]) == {"hc", "hp"}
+
+
+@pytest.mark.usefixtures("sources")
+async def test_heating_before_the_heaters_is_estimated(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, cold_days: list[float]
+) -> None:
+    await hass.config.async_update(time_zone="Europe/Paris")
+    # The heater only from 16 March, the 15th of the 16 cold days.
+    await add_energy(hass, HEATER_A, hourly([2.0 * 14, 2.0 * 15]), days_later=14)
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [TEMPO_CONTRACT],
+            options={
+                CONF_TEMPERATURE: TEMPERATURE_ID,
+                SECTION_HEATING: {CONF_HEATING_STATISTICS: [HEATER_A]},
+            },
+        ),
+    )
+    answer = await heating(hass, hass_ws_client, entry)
+    # Measured from the heater's first day.
+    assert [day["date"] for day in answer["days"]] == ["2026-03-16", "2026-03-17"]
+    assert answer["totals"]["heating"] == pytest.approx(2.0 * (14 + 15))
+    # The 14 days before it from the Linky: 2 kWh a degree day, n degree days on
+    # day n, in kWh only.
+    assert answer["before"] == {
+        "start": "2026-03-02",
+        "end": "2026-03-15",
+        "days": 14,
+        "missing": 0,
+        "heating": 2.0 * sum(range(14)),
+    }
+    assert answer["heaters_from"] is None
+    assert answer["estimated_days"][3] == {
+        "date": "2026-03-05",
+        "temperature": 15.0,
+        "heating": pytest.approx(6.0),
+    }
+    assert len(answer["estimated_days"]) == 14
+    assert answer["unestimated"] is None
+    # From 10 March, 6 days estimated: too few to fit, the year before the
+    # heater fits them.
+    answer = await heating(hass, hass_ws_client, entry, start="2026-03-10")
+    assert answer["before"]["heating"] == pytest.approx(2.0 * sum(range(8, 14)))
+    # Wholly before the heater: estimated like a home without heating
+    # statistics, from the consumption and the weather.
+    answer = await heating(hass, hass_ws_client, entry, end="2026-03-15")
+    assert answer["measured"] is False
+    assert answer["heaters_from"] == "2026-03-16"
+    assert answer["days"] == []
+    assert answer["estimated"]["heating"] == pytest.approx(2.0 * sum(range(14)))
+
+
+@pytest.mark.usefixtures("sources")
+async def test_heating_before_the_heaters_needs_a_temperature(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    await hass.config.async_update(time_zone="Europe/Paris")
+    house = [6.0 + 2 * day for day in range(DAYS)]
+    await add_statistic(
+        hass,
+        hours=24 * DAYS,
+        first=MIDNIGHT,
+        values=[kwh * 1000 for kwh in hourly(house)],
+    )
+    # The outdoor sensor and the heater from 16 March only.
+    await add_temperature(hass, [4.0] * 48, first=MIDNIGHT + 24 * 14)
+    await add_energy(hass, HEATER_A, hourly([28.0, 30.0]), days_later=14)
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [TEMPO_CONTRACT],
+            options={
+                CONF_TEMPERATURE: TEMPERATURE_ID,
+                SECTION_HEATING: {CONF_HEATING_STATISTICS: [HEATER_A]},
+            },
+        ),
+    )
+    answer = await heating(hass, hass_ws_client, entry)
+    assert (answer["before"], answer["estimated_days"]) == (None, [])
+    assert answer["unestimated"] == {
+        "start": "2026-03-02",
+        "end": "2026-03-15",
+        "open_meteo": False,
+    }
+
+
+@pytest.mark.usefixtures("sources")
+async def test_gas_heating_isnt_estimated_before_its_meter(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, gas_home: list[float]
+) -> None:
+    entry = await setup_entry(hass, make_entry([TEMPO_CONTRACT], options=GAS_OPTIONS))
+    answer = await heating(hass, hass_ws_client, entry)
+    assert (answer["before"], answer["estimated_days"], answer["unestimated"]) == (
+        None,
+        [],
+        None,
+    )

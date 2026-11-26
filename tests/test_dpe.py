@@ -46,6 +46,7 @@ from .test_heating import (
     add_energy,
     cold_days,  # noqa: F401 - a fixture
     gas_home,  # noqa: F401 - a fixture
+    heating,
     hourly,
 )
 from .test_websocket import command, result
@@ -690,6 +691,44 @@ async def test_heaters_starting_later_leave_the_linky_days_before(
     rows = uses(label)
     assert rows["heating"]["source"] == "mixed"
     assert rows["heating"]["energy"] == pytest.approx(2.0 * sum(range(16)), abs=0.1)
+
+
+@pytest.mark.usefixtures("sources")
+async def test_heaters_older_than_the_hours_arent_estimated(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    await hass.config.async_update(time_zone="Europe/Paris")
+    # The Linky by day from 13 February, by hour from 1 March; the heater from
+    # 13 February: it measured the Linky's days the Heating tab can't cost.
+    await add_linky(
+        hass,
+        [(10 + 2 * (18 - index)) * 1000.0 for index in range(16)],
+        datetime(2026, 3, 1, tzinfo=FRANCE_TIME_ZONE),
+        [500.0] * 48,
+    )
+    await add_temperature(
+        hass,
+        [float(index) for index in range(16) for _ in range(24)],
+        first=_hours_from_first(
+            datetime.combine(FEBRUARY[0], time(), FRANCE_TIME_ZONE)
+        ),
+    )
+    await add_energy(hass, HEATER_A, hourly([4.0] * 18), days_later=-17)
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [TEMPO_CONTRACT],
+            statistic_id=LINKY_DAYS,
+            options={
+                CONF_TEMPERATURE: TEMPERATURE_ID,
+                SECTION_HEATING: {CONF_HEATING_STATISTICS: [HEATER_A]},
+            },
+        ),
+    )
+    answer = await heating(hass, hass_ws_client, entry, "2026-02-13", "2026-03-02")
+    assert [day["date"] for day in answer["days"]] == ["2026-03-01", "2026-03-02"]
+    assert (answer["before"], answer["estimated_days"]) == (None, [])
+    assert answer["unestimated"] is None
 
 
 @pytest.mark.usefixtures("sources")
