@@ -62,6 +62,7 @@ from .data import (
     source_statistic,
 )
 from .statistics import (
+    ClearFailedError,
     CostingStatus,
     RecorderNotStartedError,
     SeriesStatus,
@@ -426,6 +427,10 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             raise UpdateFailed(
                 translation_domain=DOMAIN, translation_key="recorder_starting"
             ) from err
+        except ClearFailedError as err:
+            raise UpdateFailed(
+                translation_domain=DOMAIN, translation_key="recorder_busy"
+            ) from err
         await self._async_wait_for_recorder()
         self._update_price_issues(costing, contracts(self.config_entry))
         return ElectricityContractsData(
@@ -537,8 +542,9 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         assert self._first_day is not None
         try:
             await self.weather.async_update(self._first_day, now)
-        except RecorderNotStartedError:
-            # Cleared at the next update, once Home Assistant has started.
+        except RecorderNotStartedError, ClearFailedError:
+            # Cleared at the next update, once Home Assistant has started or
+            # the recorder can.
             return False
         except WeatherError as err:
             return self._record_failure(SOURCE_WEATHER, err, now)
