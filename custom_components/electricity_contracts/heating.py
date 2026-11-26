@@ -1,7 +1,7 @@
 """What heating used and cost over a window, and what a setting would cost."""
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from statistics import median
 from typing import Any
@@ -730,10 +730,9 @@ async def async_heating(
     The window is narrowed by `heating_window` first, and to the heating
     statistics when they start later. Electric heating before them, back to the
     Linky's first day, is estimated from its days and the weather: in kWh, in
-    `estimated_days` and `before`, apart from the measured `days`.
-    `unestimated` gives the days before that have no outdoor temperature. A
-    window wholly before the heating statistics is estimated like a home
-    without them, and `heaters_from` gives their first day.
+    `estimated_days` and `before`, apart from the measured `days`. A window
+    wholly before them has no measured day. `unestimated` gives the days before
+    that have no outdoor temperature.
     """
     first, last = heating_window(entry, start, end)
     stop = max(first, last)
@@ -743,35 +742,15 @@ async def async_heating(
         coordinator.statistic_id is not None
         and not Heating.from_options(entry.options, outdoor=None).gas
     )
-    if heaters is not None and electric and heaters >= stop > first:
-        answer = await async_heating_between(
-            hass, entry=entry, start=first, end=stop, estimate=True
-        )
-        answer.update(
-            {
-                "estimated_days": [],
-                "before": None,
-                "unestimated": None,
-                "heaters_from": local_day(heaters).isoformat(),
-            }
-        )
-        return answer
     main = min(max(first, heaters), stop) if heaters is not None else first
     answer = await async_heating_between(hass, entry=entry, start=main, end=stop)
-    answer.update(
-        {
-            "estimated_days": [],
-            "before": None,
-            "unestimated": None,
-            "heaters_from": None,
-        }
-    )
+    answer.update({"estimated_days": [], "before": None, "unestimated": None})
     if heaters is None or not electric:
         return answer
     # Only before the heating statistics: the days they measured stay theirs,
     # even those the window was narrowed from.
     before, answer["unestimated"] = await async_before_heaters(
-        hass, entry, start, min(heaters, main)
+        hass, entry, start, min(heaters, main), heaters=heaters
     )
     if before is not None:
         answer["estimated_days"] = before["estimated_days"]
@@ -796,20 +775,25 @@ async def async_before_heaters(
     entry: ElectricityContractsConfigEntry,
     start: datetime,
     end: datetime,
+    *,
+    heaters: datetime | None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Estimate the electric heating from `start` to `end` from the Linky's days.
 
-    From the Linky's first day at the earliest, fitted on up to a year before
-    `end`. Returns the estimate, with the `missing` days it couldn't count
-    (no outdoor temperature or no Linky day), and the days before its first one
-    that have no outdoor temperature (`unestimated`), each None when empty.
+    From the Linky's first day at the earliest. The fit runs over up to a year
+    before the first day of the heating statistics (`heaters`), else before
+    `end`: a day gets the same estimate whatever the window. Returns the
+    estimate, with the `missing` days it couldn't count (no outdoor temperature
+    or no Linky day), and the days before its first one that have no outdoor
+    temperature (`unestimated`), each None when empty.
     """
     linky = day_start(entry.runtime_data.data.sources.first_day)
     begin = max(start, linky)
     if begin >= end:
         return None, None
+    fit_end = heaters or end
     before = await async_linky_heating(
-        hass, entry, begin, end, fit_start=max(linky, end - _YEAR)
+        hass, entry, begin, end, fit=(max(linky, fit_end - _YEAR), fit_end)
     )
     estimated_from = end
     if before is not None:
@@ -839,20 +823,22 @@ async def async_linky_heating(
     start: datetime,
     end: datetime,
     *,
-    fit_start: datetime | None = None,
+    fit: tuple[datetime, datetime] | None = None,
 ) -> dict[str, Any] | None:
     """Estimate the electric heating from `start` to `end` from the Linky's days.
 
     Each day's consumption is fitted on its heating degree days, like the weather
-    fit, from `fit_start` (else `start`) to `end`: the heating of each day comes
-    from its degree days. Only the days with an outdoor temperature count, so the
-    estimate starts at the first of them. Without a fit, None: those days are
-    left out rather than counted without heating.
+    fit, over `fit` (first and first left out; else from `start` to `end`): the
+    heating of each day comes from its degree days. Only the days with an
+    outdoor temperature count, so the estimate starts at the first of them.
+    Without a fit, None: those days are left out rather than counted without
+    heating.
     """
     source_id = source_statistic(entry)
     assert source_id is not None
     heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
-    since = min(start, fit_start) if fit_start else start
+    fit_start, fit_end = fit or (start, end)
+    since, until = min(start, fit_start), max(end, fit_end)
 
     def read() -> tuple[dict[date, float], dict[date, float], dict[date, float]]:
         energy = {
@@ -860,7 +846,7 @@ async def async_linky_heating(
             for row in statistics_during_period(
                 hass,
                 since,
-                end,
+                until,
                 {source_id},
                 "day",
                 {"energy": UnitOfEnergy.KILO_WATT_HOUR},
@@ -870,7 +856,7 @@ async def async_linky_heating(
         temperatures = statistics_during_period(
             hass,
             since,
-            end,
+            until,
             {*outdoor_ids(entry), *heating.indoor},
             "day",
             {"temperature": UnitOfTemperature.CELSIUS},
@@ -892,13 +878,14 @@ async def async_linky_heating(
         )
 
     energy, outdoor, indoor = await get_instance(hass).async_add_executor_job(read)
-    # A daily read also returns the day that starts at `end`.
-    fit_day, first_day, end_day = local_day(since), local_day(start), local_day(end)
+    # A daily read also returns the day that starts at its end.
+    first_day, end_day = local_day(start), local_day(end)
+    fit_first, fit_last = local_day(fit_start), local_day(fit_end)
     weather = weather_fit(
         {
             day: {"energy": kwh}
             for day, kwh in energy.items()
-            if fit_day <= day < end_day
+            if fit_first <= day < fit_last
         },
         outdoor,
     )
@@ -936,24 +923,21 @@ async def async_linky_heating(
     }
 
 
-async def async_heating_between(  # noqa: PLR0913 - the window and how to read it
+async def async_heating_between(
     hass: HomeAssistant,
     *,
     entry: ElectricityContractsConfigEntry,
     start: datetime,
     end: datetime,
     weather_days: bool = False,
-    estimate: bool = False,
 ) -> dict[str, Any]:
     """Describe what heating used and cost over a window `heating_window` narrowed.
 
-    Without heating statistics, or with `estimate`, the heating is estimated
-    from the source's consumption and the outdoor temperature. `weather_days`
-    adds, to an estimate, the outdoor and indoor means of the days it counts.
+    Without heating statistics, the heating is estimated from the source's
+    consumption and the outdoor temperature. `weather_days` adds, to an
+    estimate, the outdoor and indoor means of the days it counts.
     """
     heating = Heating.from_options(entry.options, outdoor=outdoor_statistic(entry))
-    if estimate:
-        heating = replace(heating, statistics=())
     coordinator = entry.runtime_data
     status = coordinator.data.costing
     actual = coordinator.costing.actual_statistics() if status.actual else None

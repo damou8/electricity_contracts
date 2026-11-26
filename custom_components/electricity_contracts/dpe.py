@@ -310,7 +310,8 @@ async def async_dpe(
     stop = day_start(end + timedelta(days=1))
     first, last = heating_window(entry, start, stop)
     end_at = max(first, last)
-    if (heaters := await async_heaters_start(entry)) is not None:
+    heaters = await async_heaters_start(entry)
+    if heaters is not None:
         first = min(max(first, heaters), end_at)
     settings = await async_load_settings(hass, entry.entry_id)
     answer = await async_heating_between(
@@ -320,7 +321,9 @@ async def async_dpe(
     begin = first
     unestimated = None
     if entry.runtime_data.statistic_id and not answer["gas"]:
-        before, unestimated = await async_before_heaters(hass, entry, start, first)
+        before, unestimated = await async_before_heaters(
+            hass, entry, start, first, heaters=heaters
+        )
         if before is not None:
             answer["before"] = before
             begin = day_start(date.fromisoformat(before["start"]))

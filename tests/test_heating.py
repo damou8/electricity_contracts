@@ -703,7 +703,6 @@ async def test_heating_before_the_heaters_is_estimated(
         "missing": 0,
         "heating": 2.0 * sum(range(14)),
     }
-    assert answer["heaters_from"] is None
     assert answer["estimated_days"][3] == {
         "date": "2026-03-05",
         "temperature": 15.0,
@@ -715,13 +714,52 @@ async def test_heating_before_the_heaters_is_estimated(
     # heater fits them.
     answer = await heating(hass, hass_ws_client, entry, start="2026-03-10")
     assert answer["before"]["heating"] == pytest.approx(2.0 * sum(range(8, 14)))
-    # Wholly before the heater: estimated like a home without heating
-    # statistics, from the consumption and the weather.
+    # Wholly before the heater: the same estimate, from the Linky.
     answer = await heating(hass, hass_ws_client, entry, end="2026-03-15")
-    assert answer["measured"] is False
-    assert answer["heaters_from"] == "2026-03-16"
     assert answer["days"] == []
-    assert answer["estimated"]["heating"] == pytest.approx(2.0 * sum(range(14)))
+    assert answer["before"]["heating"] == pytest.approx(2.0 * sum(range(14)))
+
+
+@pytest.mark.usefixtures("sources")
+async def test_days_before_the_heaters_whatever_the_period(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    await hass.config.async_update(time_zone="Europe/Paris")
+    # Day n is 18 - n °C. The home uses 6 + 2n kWh, more on 12 and 14 March.
+    house = [6.0 + 2 * day + (6.0 if day in {10, 12} else 0.0) for day in range(DAYS)]
+    await add_statistic(
+        hass,
+        hours=24 * DAYS,
+        first=MIDNIGHT,
+        values=[kwh * 1000 for kwh in hourly(house)],
+    )
+    await add_temperature(
+        hass, [18.0 - day for day in range(DAYS) for _ in range(24)], first=MIDNIGHT
+    )
+    await add_energy(hass, HEATER_A, hourly([28.0, 30.0]), days_later=14)
+    entry = await setup_entry(
+        hass,
+        make_entry(
+            [TEMPO_CONTRACT],
+            options={
+                CONF_TEMPERATURE: TEMPERATURE_ID,
+                SECTION_HEATING: {CONF_HEATING_STATISTICS: [HEATER_A]},
+            },
+        ),
+    )
+    whole = await heating(hass, hass_ws_client, entry)
+    # Wholly before the heater: the same Linky estimate, in kWh only.
+    early = await heating(hass, hass_ws_client, entry, end="2026-03-09")
+    assert early["measured"] is True
+    assert early["days"] == []
+    assert early["before"]["start"] == "2026-03-02"
+    assert early["before"]["end"] == "2026-03-09"
+    assert early["estimated_days"] == whole["estimated_days"][:8]
+    # Ending before the heater, from a later start: the same days again.
+    later = await heating(
+        hass, hass_ws_client, entry, start="2026-03-05", end="2026-03-12"
+    )
+    assert later["estimated_days"] == whole["estimated_days"][3:11]
 
 
 @pytest.mark.usefixtures("sources")
