@@ -77,7 +77,7 @@ La roue dentée **Configurer** ouvre un menu de quatre pages. Chacune s'enregist
 Sans rien de plus que la température extérieure, l'onglet Chauffage estime le chauffage à partir de la consommation de la source et de la météo. Pour le mesurer, renseignez :
 - **Statistiques de consommation du chauffage** : un ou plusieurs totaux d'énergie en kWh (un par radiateur, ou le compteur de gaz), additionnés. Des statistiques relevées une fois par jour sont acceptées : ces jours-là sont comptés sans journée type.
 - **Énergie du chauffage** : électricité, déjà comptée dans la source et valorisée aux prix du contrat d'électricité en vigueur, heure par heure ; ou gaz, valorisé au contrat de gaz en vigueur.
-- **Ce que mesurent ces statistiques** : le chauffage, ou le chauffage et l'eau chaude. Dans ce cas, l'eau chaude de chaque jour est estimée à ce que ces statistiques consomment un jour sans chauffage : la médiane des jours à 18 °C ou plus dehors sur les 12 derniers mois, s'il y en a au moins 7.
+- **Ce que mesurent ces statistiques** : le chauffage, ou le chauffage et l'eau chaude. Dans ce cas, l'eau chaude de chaque jour est estimée à ce que ces statistiques consomment un jour sans chauffage : la médiane des jours à 18 °C ou plus dehors sur les 12 derniers mois, s'il y en a au moins 7. Un jour à 18 °C ou plus dehors, tout ce qu'elles consomment compte comme de l'eau chaude.
 - **Eau chaude** (facultatif) : sa propre statistique, si elle est suivie à part, et son énergie. L'eau chaude est alors mesurée ; si elle est aussi dans les statistiques du chauffage, elle en est retirée, et elle doit avoir la même énergie qu'elles.
 
 ### Secours Tempo : API officielle de RTE
@@ -150,7 +150,7 @@ The reference price is downloaded once a day from the CRE's website, with the mo
 - **Heating and hot water**: with nothing but the outdoor temperature, the Heating tab estimates the heating from the source's consumption and the weather. To measure it:
   - **Heating consumption statistics**: one or several energy totals in kWh (one per heater, or the gas meter), summed. Statistics read once a day are accepted: those days are counted without a typical day.
   - **Energy of the heating**: electricity, already part of the source and costed at the prices of the electricity contract in force, hour by hour; or gas, costed at the gas contract in force.
-  - **What these statistics measure**: the heating, or the heating and the hot water. Then each day's hot water is estimated as what these statistics use on a day without heating: the median of the days at 18 °C or more outside over the last 12 months, when there are at least 7.
+  - **What these statistics measure**: the heating, or the heating and the hot water. Then each day's hot water is estimated as what these statistics use on a day without heating: the median of the days at 18 °C or more outside over the last 12 months, when there are at least 7. On a day at 18 °C or more outside, everything they use counts as hot water.
   - **Hot water** (optional): its own statistic, if it is measured on its own, and its energy. The hot water is then measured; if the heating statistics hold it too, it is taken out of them, and it must use the same energy.
 - **Tempo backup: RTE's official API**: Tempo colors come from RTE's public calendar, which needs no account. If it stops working, the integration can use RTE's official API instead. Enter on this page the client ID and secret of an application created for free:
   1. Create an account on [data.rte-france.com](https://data.rte-france.com).

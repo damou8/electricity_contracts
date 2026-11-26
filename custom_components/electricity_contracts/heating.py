@@ -320,15 +320,24 @@ def _house(
 
 
 def _water_of_day(
-    day: date, item: _Day, water: _Usage | None, water_per_day: float | None
+    day: date,
+    item: _Day,
+    water: _Usage | None,
+    water_per_day: float | None,
+    *,
+    warm: bool,
 ) -> tuple[float, float | None]:
-    """Return the hot water of a day, measured or estimated, and its cost."""
+    """Return the hot water of a day, measured or estimated, and its cost.
+
+    Estimated, it is `water_per_day` at most, and all of a `warm` day: such a
+    day doesn't heat.
+    """
     if water is not None:
         measured = water.days.get(day)
         return (measured.energy, measured.priced) if measured else (0.0, 0.0)
     if water_per_day is None:
         return 0.0, 0.0
-    energy = min(item.energy, water_per_day)
+    energy = item.energy if warm else min(item.energy, water_per_day)
     if item.priced is None or not item.energy:
         return energy, None
     return energy, item.priced * energy / item.energy
@@ -340,16 +349,24 @@ def _split(  # noqa: PLR0913 - the usage, its water and what each day is shown w
     water: _Usage | None,
     subtract: bool,
     water_per_day: float | None,
+    warm_from: float,
     temperatures: tuple[dict[date, float], dict[date, float]],
     house: dict[date, _Day],
     calendar: dict[date, TempoColor],
 ) -> _Split:
-    """Take the hot water out of the heating, day by day, when it is inside."""
+    """Take the hot water out of the heating, day by day, when it is inside.
+
+    A day is warm, without heating, from `warm_from` outside.
+    """
     outdoor, indoor = temperatures
     split = _Split()
     for day in sorted(usage.days):
         item = usage.days[day]
-        water_energy, water_cost = _water_of_day(day, item, water, water_per_day)
+        temperature = outdoor.get(day)
+        warm = temperature is not None and temperature >= warm_from
+        water_energy, water_cost = _water_of_day(
+            day, item, water, water_per_day, warm=warm
+        )
         heat_energy = item.energy - (water_energy if subtract else 0.0)
         heat_cost: float | None = None
         if item.priced is not None and not (subtract and water_cost is None):
@@ -557,6 +574,7 @@ class _Answer:
             water=water,
             subtract=inside or water_per_day is not None,
             water_per_day=water_per_day,
+            warm_from=warm_from,
             temperatures=(self.outdoor, self.indoor),
             house=self.house,
             calendar=self.calendar,
