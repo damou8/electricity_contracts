@@ -10,6 +10,7 @@ or before the first costed hour) is estimated from the Linky's days and the
 outdoor temperature, so the label covers the whole year.
 """
 
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -43,11 +44,12 @@ DPE_SETPOINT = 19.0
 DPE_SETBACK = 3.0
 _NIGHT_SHARE = 8 / 24
 
-# The living area in m², the primary energy of a kWh of electricity (1.9 from
-# 1 January 2026), the shares in % of the three uses, and the home's own
-# setpoint and night setback in °C, used without indoor thermometers.
-DEFAULTS: dict[str, float] = {
-    SURFACE: 100.0,
+# The living area in m² (none until the user gives it: the label depends on
+# it), the primary energy of a kWh of electricity (1.9 from 1 January 2026),
+# the shares in % of the three uses, and the home's own setpoint and night
+# setback in °C, used without indoor thermometers.
+DEFAULTS: dict[str, float | None] = {
+    SURFACE: None,
     COEFFICIENT: 1.9,
     AUXILIARIES: 5.0,
     WATER: 15.0,
@@ -73,7 +75,9 @@ CLIMATE_BOUNDS = (6, 11, 30, 50, 70, 100)
 _LETTERS = "ABCDEFG"
 
 
-def settings_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, float]]:
+def settings_store(
+    hass: HomeAssistant, entry_id: str
+) -> Store[dict[str, float | None]]:
     """Return the store of an entry's label settings.
 
     Kept out of the options: changing them doesn't reload the entry.
@@ -81,17 +85,22 @@ def settings_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, float]
     return Store(hass, STORE_VERSION, f"{DOMAIN}.{entry_id}.dpe")
 
 
-async def async_load_settings(hass: HomeAssistant, entry_id: str) -> dict[str, float]:
+async def async_load_settings(
+    hass: HomeAssistant, entry_id: str
+) -> dict[str, float | None]:
     """Return an entry's settings, the defaults for those never saved."""
     saved = await settings_store(hass, entry_id).async_load() or {}
-    return {key: float(saved.get(key, value)) for key, value in DEFAULTS.items()}
+    return {
+        key: float(found) if (found := saved.get(key, value)) is not None else None
+        for key, value in DEFAULTS.items()
+    }
 
 
 async def async_save_settings(
     hass: HomeAssistant, entry_id: str, settings: dict[str, float]
-) -> dict[str, float]:
+) -> dict[str, float | None]:
     """Save an entry's settings and return them."""
-    saved = {key: float(settings[key]) for key in DEFAULTS}
+    saved: dict[str, float | None] = {key: float(settings[key]) for key in DEFAULTS}
     await settings_store(hass, entry_id).async_save(saved)
     return saved
 
@@ -234,17 +243,23 @@ def _uses(
     ]
 
 
-def dpe_label(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, Any]:
+def dpe_label(
+    answer: dict[str, Any], settings: Mapping[str, float | None]
+) -> dict[str, Any]:
     """Return the label of a heating answer: its classes and what each use counts.
 
-    `classes` is None when there is no heating to count. `conventional` tells
-    how the heating was moved to the DPE's setpoint.
+    `classes` is None when there is no heating to count, or no living area to
+    divide it by: the uses are then still given. `conventional` tells how the
+    heating was moved to the DPE's setpoint.
     """
-    conventional = _conventional(answer, settings)
+    surface = settings[SURFACE]
+    # Only the living area can be missing.
+    numbers = {key: value for key, value in settings.items() if value is not None}
+    conventional = _conventional(answer, numbers)
     rows = []
-    for item in _uses(answer, settings, conventional["extra"]):
+    for item in _uses(answer, numbers, conventional["extra"]):
         energy = item["energy"]
-        primary = energy * (1.0 if item["gas"] else settings[COEFFICIENT])
+        primary = energy * (1.0 if item["gas"] else numbers[COEFFICIENT])
         co2 = energy * (_CO2_GAS if item["gas"] else _CO2_ELECTRICITY[item["use"]])
         rows.append(
             {
@@ -255,9 +270,8 @@ def dpe_label(answer: dict[str, Any], settings: dict[str, float]) -> dict[str, A
             }
         )
     conventional["extra"] = round(conventional["extra"], 1)
-    if not rows:
-        return {"classes": None, "uses": [], "conventional": conventional}
-    surface = settings[SURFACE]
+    if not rows or surface is None:
+        return {"classes": None, "uses": rows, "conventional": conventional}
     energy = round(sum(row["primary"] for row in rows) / surface)
     climate = round(sum(row["co2"] for row in rows) / surface, 1)
     energy_class = _class(energy, ENERGY_BOUNDS)
