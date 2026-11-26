@@ -4,7 +4,14 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 import pytest
-from elec_tariffs import TempoAuthError, TempoColor, TempoFormatError
+from elec_tariffs import (
+    ContractKind,
+    PricePeriod,
+    TempoAuthError,
+    TempoColor,
+    TempoFormatError,
+    TrvError,
+)
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
@@ -277,6 +284,28 @@ async def test_prices_down_for_two_days(
     await coordinator(entry).async_refresh()
     assert issue(hass, "prices_unavailable", entry) is None
     assert coordinator(entry).last_errors == {}
+
+
+async def test_prices_of_one_contract_down_for_two_days(
+    hass: HomeAssistant, sources: Sources, freezer: FrozenDateTimeFactory
+) -> None:
+    entry = await setup_entry(hass, make_entry([TEMPO_CONTRACT, BASE_CONTRACT]))
+    error = TrvError("no base price")
+
+    async def base_down(kind: ContractKind, kva: int) -> list[PricePeriod]:
+        if kind is ContractKind.BASE:
+            raise error
+        return await Sources._prices(kind, kva)
+
+    sources.trv.async_price_periods.side_effect = base_down
+    # The Tempo prices come back every day: that doesn't make the Base ones work.
+    for _ in range(3):
+        freezer.tick(timedelta(hours=24))
+        await coordinator(entry).async_refresh()
+    found = issue(hass, "prices_unavailable", entry)
+    assert found is not None
+    assert found.translation_placeholders is not None
+    assert found.translation_placeholders["error"] == "no base price"
 
 
 async def test_tempo_down_for_two_days(

@@ -494,6 +494,7 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         self, needed: list[PricesKey], now: datetime
     ) -> bool:
         changed = False
+        failure: TrvError | None = None
         max_age = timedelta(hours=PRICES_MAX_AGE_HOURS)
         for kind, kva in needed:
             key = _prices_key(kind, kva)
@@ -503,16 +504,19 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             try:
                 periods = await self.trv.async_price_periods(kind, kva)
             except TrvError as err:
-                changed |= self._record_failure(SOURCE_PRICES, err, now)
+                failure = err
                 continue
             self._cache.prices[key] = periods
             self._cache.prices_fetched[key] = now
-            self._record_success(SOURCE_PRICES)
             changed = True
-        return changed
+        return (
+            self._record_outcome(SOURCE_PRICES, now, failure=failure, fetched=changed)
+            or changed
+        )
 
     async def _async_refresh_gas(self, needed: list[GasProfile], now: datetime) -> bool:
         changed = False
+        failure: PrvgError | None = None
         max_age = timedelta(hours=PRICES_MAX_AGE_HOURS)
         for profile in needed:
             fetched = self._cache.gas_fetched.get(profile)
@@ -521,13 +525,15 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             try:
                 periods = await self.prvg.async_price_periods(profile)
             except PrvgError as err:
-                changed |= self._record_failure(SOURCE_GAS, err, now)
+                failure = err
                 continue
             self._cache.gas_prices[profile] = periods
             self._cache.gas_fetched[profile] = now
-            self._record_success(SOURCE_GAS)
             changed = True
-        return changed
+        return (
+            self._record_outcome(SOURCE_GAS, now, failure=failure, fetched=changed)
+            or changed
+        )
 
     async def _async_refresh_weather(self, now: datetime) -> bool:
         """Write the Open-Meteo temperature; return whether the cache changed.
@@ -614,6 +620,23 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
             return False
         self._cache.failing_since[source] = now
         return True
+
+    def _record_outcome(
+        self,
+        source: str,
+        now: datetime,
+        *,
+        failure: Exception | None,
+        fetched: bool,
+    ) -> bool:
+        """Record how a source fetched several keys; return whether the cache changed.
+
+        One key failing is enough for the source to keep failing: the keys that
+        come back don't clear it.
+        """
+        if failure is not None:
+            return self._record_failure(source, failure, now)
+        return self._record_success(source) if fetched else False
 
     def _record_success(self, source: str) -> bool:
         if self.last_errors.pop(source, None) is not None:
