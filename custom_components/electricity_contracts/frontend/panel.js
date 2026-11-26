@@ -28,7 +28,6 @@ const STRINGS = {
     ofTheElectricity: "of the electricity consumption",
     ofHomeEnergy: "of the home's energy",
     perDegreeColder: "Per degree colder",
-    perDay: "a day",
     heatingTile: "{share} {of} · {energy}",
     heatingByDay: "Heating by day",
     heatingByMonth: "Heating by month",
@@ -50,7 +49,7 @@ const STRINGS = {
     heatingProfileInfo: "What the heating uses at each hour of the day, on average over the {days} days with hourly values.",
     heatingWeatherInfo: "Each dot is a day with its outdoor temperature and what the heating used. Below {base}, it uses on average {slope} more a day per degree colder, {cost} at the average price of your heating.",
     estimatedHeatingInfo: "Without heating statistics, the heating is estimated from the whole consumption: how much it rises on cold days.",
-    waterEstimatedInfo: "Your heating statistics include the hot water: it is estimated, each day, as what they use on a day without heating ({energy}, the median of the days at 18 °C or more outside over the last 12 months).",
+    waterEstimatedInfo: "Your heating statistics include the hot water. It is estimated each day as what they use on a day without heating, {energy}. That is the median of the days at {base} or more outside over the last 12 months.",
     waterMeasuredInfo: "The hot water is your water heater's statistic.",
     simulator: "Simulate a setting",
     simOutdoor: "Outdoor temperature",
@@ -275,8 +274,9 @@ const STRINGS = {
     whiteLeft: "White left",
     withHeating: "Above {base}, you use about {energy} a day. Below, the heating uses on average {slope} more a day per degree colder.",
     weatherInfo: "Each dot is a day with its outdoor temperature and what you consumed.",
-    baseFitted: "{base} is where your heating starts: it's found from your days, between 10 and 20 °C.",
-    heatingCurve: "A degree colder costs {mild} in mild weather and {cold} on your coldest days: the heating follows a curve.",
+    baseFitted: "Your heating starts below {base}. This temperature is found from your days, between 10 and 20 °C.",
+    baseDefault: "Your days don't show the temperature where your heating starts. It is counted below {base}.",
+    heatingCurve: "The heating follows a curve. A degree colder costs {mild} where it starts and {cold} on your coldest days.",
     perDegreeBelow: "on average per degree below {base}",
     ofTheConsumption: "{share} of the consumption",
     aroundTheClock: "around the clock",
@@ -356,7 +356,6 @@ const STRINGS = {
     ofTheElectricity: "de la consommation d'électricité",
     ofHomeEnergy: "de l'énergie de la maison",
     perDegreeColder: "Par degré de moins",
-    perDay: "par jour",
     heatingTile: "{share} {of} · {energy}",
     heatingByDay: "Chauffage par jour",
     heatingByMonth: "Chauffage par mois",
@@ -378,7 +377,7 @@ const STRINGS = {
     heatingProfileInfo: "Ce que le chauffage consomme à chaque heure de la journée, en moyenne sur les {days} jours connus heure par heure.",
     heatingWeatherInfo: "Chaque point est une journée avec sa température extérieure et ce que le chauffage a consommé. Sous {base}, il consomme en moyenne {slope} de plus par jour et par degré de moins, soit {cost} au prix moyen de votre chauffage.",
     estimatedHeatingInfo: "Sans statistique de chauffage, le chauffage est estimé à partir de toute la consommation : ce qu'elle augmente les jours froids.",
-    waterEstimatedInfo: "Vos statistiques de chauffage incluent l'eau chaude : elle est estimée chaque jour à ce qu'elles consomment un jour sans chauffage ({energy}, la médiane des jours à 18 °C ou plus dehors sur les 12 derniers mois).",
+    waterEstimatedInfo: "Vos statistiques de chauffage incluent l'eau chaude. Elle est estimée chaque jour à ce qu'elles consomment un jour sans chauffage, soit {energy}. C'est la médiane des jours à {base} ou plus dehors sur les 12 derniers mois.",
     waterMeasuredInfo: "L'eau chaude est la statistique de votre ballon.",
     simulator: "Simuler un réglage",
     simOutdoor: "Température extérieure",
@@ -603,8 +602,9 @@ const STRINGS = {
     whiteLeft: "Blancs restants",
     withHeating: "Au-dessus de {base}, vous consommez environ {energy} par jour. En dessous, le chauffage consomme en moyenne {slope} de plus par jour et par degré de moins.",
     weatherInfo: "Chaque point est une journée avec sa température extérieure et ce que vous avez consommé.",
-    baseFitted: "{base} est la température sous laquelle votre chauffage démarre : elle est tirée de vos journées, entre 10 et 20 °C.",
-    heatingCurve: "Un degré de moins coûte {mild} quand il fait doux et {cold} vos jours les plus froids : le chauffage suit une courbe.",
+    baseFitted: "Votre chauffage démarre sous {base}. Cette température est tirée de vos journées, entre 10 et 20 °C.",
+    baseDefault: "Vos journées ne montrent pas à quelle température votre chauffage démarre. Il est compté sous {base}.",
+    heatingCurve: "Le chauffage suit une courbe. Un degré de moins coûte {mild} quand il démarre et {cold} vos jours les plus froids.",
     perDegreeBelow: "en moyenne par degré sous {base}",
     ofTheConsumption: "{share} de la consommation",
     aroundTheClock: "en continu",
@@ -3800,7 +3800,7 @@ class ElectricityContractsPanel extends HTMLElement {
         info: [
           this._t("weatherInfo"),
           heating ? this._t("withHeating", { base, energy: this._kwh(Math.max(0, weather.intercept)), slope: this._kwh(weather.slope) }) : null,
-          heating ? this._t("baseFitted", { base }) : null,
+          heating ? this._t(weather.base_fitted ? "baseFitted" : "baseDefault", { base }) : null,
           heating ? this._curveNote(weather) : null,
         ],
         uses: this._uses("consumption", "outdoor"),
@@ -4943,7 +4943,7 @@ class ElectricityContractsPanel extends HTMLElement {
   _waterNote(heating) {
     if (!heating.water_split) return null;
     if (heating.water_measured) return this._t("waterMeasuredInfo");
-    return this._t("waterEstimatedInfo", { energy: this._kwh(heating.water_per_day) });
+    return this._t("waterEstimatedInfo", { energy: this._kwh(heating.water_per_day), base: `${this._number(heating.water_warm_from)} °C` });
   }
 
   _drawHeatingDays(container, heating) {
@@ -5165,7 +5165,7 @@ class ElectricityContractsPanel extends HTMLElement {
           perDegree && heating.measured
             ? this._t("heatingWeatherInfo", { base, slope: this._kwh(perDegree.energy), cost: perDegree.cost !== null ? this._money(perDegree.cost) : "—" })
             : this._t("weatherInfo"),
-          perDegree ? this._t("baseFitted", { base }) : null,
+          perDegree ? this._t(weather.base_fitted ? "baseFitted" : "baseDefault", { base }) : null,
           perDegree ? this._curveNote(weather) : null,
           heating.measured ? this._waterNote(heating) : this._t("estimatedHeatingInfo"),
         ],
@@ -5175,12 +5175,12 @@ class ElectricityContractsPanel extends HTMLElement {
     );
   }
 
-  // What a degree costs at the mildest and at the coldest heating days, when the
-  // curve makes them differ by a tenth or more.
+  // What a degree costs where the heating starts and on the coldest day seen
+  // (the curve's slope there), when the curve makes them differ by a tenth or more.
   _curveNote(weather) {
-    const mild = weather.linear + 2 * weather.square;
+    const mild = weather.linear;
     const cold = weather.linear + 2 * weather.square * weather.reach;
-    if (!(weather.reach > 1) || Math.abs(cold - mild) < 0.1 * Math.max(mild, cold)) return null;
+    if (!(weather.reach > 0) || Math.abs(cold - mild) < 0.1 * Math.max(mild, cold)) return null;
     return this._t("heatingCurve", { mild: this._kwh(mild), cold: this._kwh(cold) });
   }
 
