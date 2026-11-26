@@ -73,8 +73,12 @@ def uses(label: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {row["use"]: row for row in label["uses"]}
 
 
+# The settings of a home of 100 m², the defaults for the rest.
+HOME = {**DEFAULTS, "surface": 100.0}
+
+
 def test_electric_heating_and_measured_water() -> None:
-    label = dpe_label(answer(), DEFAULTS)
+    label = dpe_label(answer(), HOME)
     # The auxiliaries are 5 % of the three uses: 8 700 kWh are the other 95 %.
     rows = uses(label)
     assert rows["auxiliaries"]["energy"] == pytest.approx(457.9, abs=0.1)
@@ -84,6 +88,20 @@ def test_electric_heating_and_measured_water() -> None:
     # 6 800 x 0.079 + 1 900 x 0.065 + 458 x 0.064, over 100 m².
     assert label["climate"] == 6.9
     assert label["classes"] == {"energy": "C", "climate": "B", "label": "C"}
+    assert label["missing"] is None
+
+
+def test_no_living_area_no_class() -> None:
+    # The uses are still counted: the card asks for the area beside them.
+    label = dpe_label(answer(), {**HOME, "surface": None})
+    assert label["classes"] is None
+    assert label["missing"] == "surface"
+    assert uses(label) == uses(dpe_label(answer(), HOME))
+    # Without heating either, nothing is missing that the area would give.
+    empty = dpe_label(
+        answer(totals={"heating": 0.0, "water": 300.0}), {**HOME, "surface": None}
+    )
+    assert (empty["classes"], empty["missing"]) == (None, None)
 
 
 def test_gas_heating_with_a_hot_water_share() -> None:
@@ -95,7 +113,7 @@ def test_gas_heating_with_a_hot_water_share() -> None:
             water_split=False,
             totals={"heating": 11000.0, "water": 0.0},
         ),
-        DEFAULTS,
+        HOME,
     )
     rows = uses(label)
     total = 11000 / 0.8
@@ -113,7 +131,7 @@ def test_the_climate_can_set_the_class() -> None:
     # Gas heating with its hot water measured: C in energy, D in climate.
     label = dpe_label(
         answer(gas=True, water_gas=True, totals={"heating": 11000.0, "water": 2100.0}),
-        DEFAULTS,
+        HOME,
     )
     assert label["energy"] == 144
     assert label["climate"] == 30.2
@@ -128,7 +146,7 @@ def test_hot_water_inside_the_heating_untold() -> None:
             water_measured=False,
             totals={"heating": 9500.0, "water": 0.0},
         ),
-        DEFAULTS,
+        HOME,
     )
     rows = uses(label)
     total = 9500 / 0.95
@@ -146,7 +164,7 @@ def test_estimated_heating() -> None:
             totals=None,
             estimated={"heating": 4000.0},
         ),
-        {**DEFAULTS, "surface": 50.0, "coefficient": 2.3},
+        {**HOME, "surface": 50.0, "coefficient": 2.3},
     )
     rows = uses(label)
     assert rows["heating"]["source"] == "estimated"
@@ -154,9 +172,9 @@ def test_estimated_heating() -> None:
 
 
 def test_no_heating_no_label() -> None:
-    label = dpe_label(answer(totals={"heating": 0.0, "water": 300.0}), DEFAULTS)
-    assert (label["classes"], label["uses"]) == (None, [])
-    assert dpe_label(answer(measured=False, totals=None), DEFAULTS)["classes"] is None
+    label = dpe_label(answer(totals={"heating": 0.0, "water": 300.0}), HOME)
+    assert (label["classes"], label["missing"], label["uses"]) == (None, None, [])
+    assert dpe_label(answer(measured=False, totals=None), HOME)["classes"] is None
 
 
 WEATHER = {"base": 18.0, "slope": 2.0, "linear": 2.0, "square": 0.0, "reach": 20.0}
@@ -174,7 +192,7 @@ def test_moved_to_the_dpe_setpoint_from_thermometers() -> None:
                 {"temperature": None, "indoor": 20.0},
             ],
         ),
-        DEFAULTS,
+        HOME,
     )
     assert label["conventional"] == {
         "applied": True,
@@ -198,7 +216,7 @@ def test_moved_to_the_dpe_setpoint_from_the_settings() -> None:
             weather=WEATHER,
             weather_days=[{"temperature": 10.0, "indoor": None}],
         ),
-        {**DEFAULTS, "setpoint": 21.0, "setback": 0.0},
+        {**HOME, "setpoint": 21.0, "setback": 0.0},
     )
     assert label["conventional"]["source"] == "setting"
     assert label["conventional"]["extra"] == -6.0
@@ -208,14 +226,14 @@ def test_moved_to_the_dpe_setpoint_from_the_settings() -> None:
 def test_a_colder_home_gets_more_heating() -> None:
     label = dpe_label(
         answer(weather=WEATHER, days=[{"temperature": 5.0, "indoor": None}]),
-        {**DEFAULTS, "setpoint": 17.0, "setback": 0.0},
+        {**HOME, "setpoint": 17.0, "setback": 0.0},
     )
     assert label["conventional"]["extra"] == 2.0
 
 
 def test_no_weather_line_nothing_moves() -> None:
     label = dpe_label(
-        answer(weather={"base": 18.0, "slope": None}), {**DEFAULTS, "setpoint": 22.0}
+        answer(weather={"base": 18.0, "slope": None}), {**HOME, "setpoint": 22.0}
     )
     assert label["conventional"] == {"applied": False, "extra": 0.0}
     assert uses(label)["heating"]["energy"] == 6800.0
@@ -286,6 +304,18 @@ async def test_label_of_a_gas_home(
         "co2": round(5.0 * DAYS * 0.227, 1),
     }
     assert rows["heating"]["energy"] == pytest.approx(sum(gas_home) - 5.0 * DAYS)
+    # No living area by default: no class until it's given.
+    assert label["classes"] is None
+    assert label["missing"] == "surface"
+    assert "energy" not in label
+    await result(
+        hass_ws_client,
+        hass,
+        type=f"{DOMAIN}/dpe/save",
+        entry_id=entry.entry_id,
+        **HOME,
+    )
+    label = await dpe(hass, hass_ws_client, entry.entry_id, "2026-03-17")
     assert label["classes"]["label"] == "A"
     # The setpoint of the DPE by default: nothing moves.
     assert label["conventional"] == {
@@ -436,7 +466,7 @@ def test_heating_estimated_before_the_measured_one() -> None:
         "weather": None,
         "weather_days": [],
     }
-    rows = uses(dpe_label(answer(days=[{}] * 10, before=before), DEFAULTS))
+    rows = uses(dpe_label(answer(days=[{}] * 10, before=before), HOME))
     assert rows["heating"]["energy"] == 7800.0
     assert rows["heating"]["source"] == "mixed"
     # The water of the 5 days before, at the mean of the 10 measured ones.
@@ -619,7 +649,7 @@ def test_hot_water_inside_the_heating_before_it_is_measured() -> None:
     rows = uses(
         dpe_label(
             answer(water_split=False, totals={"heating": 6800.0}, before=before),
-            DEFAULTS,
+            HOME,
         )
     )
     # 15 % of the three uses is water: carved out of the measured heating, on top

@@ -101,6 +101,8 @@ const STRINGS = {
     dpeNoData: "Not enough heating data over the last 12 months to compute a label.",
     dpeSettings: "Settings",
     dpeSurface: "Living area (Carrez law)",
+    dpeSurfaceNeeded: "Enter your home's living area to estimate its label.",
+    dpeSurfaceNeededAdmin: "An administrator must enter the home's living area to estimate its label.",
     dpeCoefficient: "Electricity coefficient",
     dpeAuxiliaries: "Auxiliaries share",
     dpeWaterShare: "Hot water share",
@@ -433,6 +435,8 @@ const STRINGS = {
     dpeNoData: "Pas assez de données de chauffage sur les 12 derniers mois pour calculer une étiquette.",
     dpeSettings: "Réglages",
     dpeSurface: "Surface habitable (loi Carrez)",
+    dpeSurfaceNeeded: "Indiquez la surface habitable de votre logement pour estimer son étiquette.",
+    dpeSurfaceNeededAdmin: "Un administrateur doit indiquer la surface habitable du logement pour estimer son étiquette.",
     dpeCoefficient: "Coefficient de l'électricité",
     dpeAuxiliaries: "Part des auxiliaires",
     dpeWaterShare: "Part de l'eau chaude",
@@ -4540,6 +4544,11 @@ class ElectricityContractsPanel extends HTMLElement {
     // The label of the previous period stays while the next one loads.
     const dpe = this._dpeEntry === entry.entry_id ? this._dpe : null;
     if (!dpe) return this._loadingCard();
+    // Without a living area, the label waits for it: the settings come first.
+    if (dpe.missing === "surface") {
+      const admin = Boolean(this._hass.user && this._hass.user.is_admin);
+      return this._card(title, [h("p", { class: "message" }, this._t(admin ? "dpeSurfaceNeeded" : "dpeSurfaceNeededAdmin")), this._dpeSettings(dpe)]);
+    }
     if (!dpe.classes) return h("section", { class: "card message" }, this._t("dpeNoData"));
     const long = { day: "numeric", month: "long", year: "numeric" };
     const partial = dpe.days < DPE_YEAR_DAYS ? this._dpePartial(dpe, long) : null;
@@ -4680,8 +4689,10 @@ class ElectricityContractsPanel extends HTMLElement {
     const status = h("span", { class: "dpe-status", role: "status" });
     const save = h("button", { type: "submit", class: "toggle primary" }, this._t("dpeSave"));
     let form = null;
+    // An empty field is no value: the living area has none until it's given.
+    const number = (value) => (value === null || value === undefined || value === "" ? null : Number(value));
     const refresh = () => {
-      const changed = Object.keys(dpe.settings).some((key) => Number(draft[key]) !== dpe.settings[key]);
+      const changed = Object.keys(dpe.settings).some((key) => number(draft[key]) !== dpe.settings[key]);
       save.disabled = !changed || !form.checkValidity();
       // What the last save said, until the next keystroke.
       status.textContent = this._dpeStatus || (changed ? this._t("dpeUnsaved") : "");
@@ -4701,7 +4712,7 @@ class ElectricityContractsPanel extends HTMLElement {
             max,
             step: "any",
             required: true,
-            value: draft[key],
+            value: draft[key] ?? "",
             disabled: !admin,
             oninput: (event) => {
               draft[key] = event.target.value;
@@ -4746,8 +4757,9 @@ class ElectricityContractsPanel extends HTMLElement {
                 type: "button",
                 class: "toggle",
                 onclick: () => {
-                  Object.assign(draft, dpe.defaults);
-                  for (const input of form.querySelectorAll("input")) input.value = draft[input.name];
+                  // The living area has no default: the one typed stays.
+                  Object.assign(draft, { ...dpe.defaults, surface: dpe.defaults.surface ?? draft.surface });
+                  for (const input of form.querySelectorAll("input")) input.value = draft[input.name] ?? "";
                   this._dpeStatus = null;
                   refresh();
                 },
