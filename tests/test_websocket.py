@@ -610,6 +610,7 @@ async def test_insights_weather(
     total = sum(6 + 2 * day for day in range(days))
     assert insights["weather"] == {
         "base": 18.0,
+        "base_fitted": True,
         "days": days,
         "degree_days": degree_days,
         "mean_temperature": 10.5,
@@ -646,6 +647,7 @@ async def test_insights_weather_needs_days(
     # No temperature recorded, and too few days to fit anything.
     assert insights["weather"] == {
         "base": 18.0,
+        "base_fitted": False,
         "days": 0,
         "degree_days": 0,
         "mean_temperature": None,

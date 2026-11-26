@@ -23,6 +23,7 @@ def test_the_base_is_where_the_heating_starts() -> None:
     temperatures = [2.0 + index for index in range(23)]
     weather = fit(temperatures, [5.0 + 2.0 * max(0.0, 12.5 - t) for t in temperatures])
     assert weather["base"] == 12.5
+    assert weather["base_fitted"] is True
     assert weather["slope"] == pytest.approx(2.0)
     assert weather["intercept"] == pytest.approx(5.0)
     assert weather["degree_days"] == pytest.approx(sum(range(11)) + 5.5)
@@ -33,6 +34,7 @@ def test_cold_days_alone_keep_18_degrees() -> None:
     temperatures = [float(index % 8) for index in range(20)]
     weather = fit(temperatures, [4.0 + 3.0 * (18.0 - t) for t in temperatures])
     assert weather["base"] == 18.0
+    assert weather["base_fitted"] is False
     assert weather["slope"] == pytest.approx(3.0)
     assert weather["intercept"] == pytest.approx(4.0)
 
@@ -123,3 +125,30 @@ def test_past_the_coldest_day_the_curve_goes_on_straight() -> None:
     assert line_heating(weather, 10.0) == pytest.approx(30.0)
     # 4 kWh a degree at the coldest day seen, on 2 more degrees.
     assert line_heating(weather, 12.0) == pytest.approx(38.0)
+
+
+def test_a_noisy_line_stays_straight() -> None:
+    # 2 kWh a degree under 15 °C, with day-to-day noise: the curve doesn't pay
+    # for its extra coefficient, and the base isn't pulled away by it.
+    temperatures = [(index * 7.3) % 22 for index in range(60)]
+    noise = [((index * 37) % 11 - 5) / 2.5 for index in range(60)]
+    energy = [
+        5.0 + 2.0 * max(0.0, 15.0 - t) + n
+        for t, n in zip(temperatures, noise, strict=True)
+    ]
+    weather = fit(temperatures, energy)
+    assert weather["square"] == 0.0
+    assert weather["base"] == pytest.approx(15.0, abs=1.0)
+    assert weather["slope"] == pytest.approx(2.0, abs=0.2)
+
+
+def test_a_curve_over_a_long_cold_range() -> None:
+    # Days down to 30 degrees under the base, a year of them: the squares are
+    # scaled before the solve, so the curve is found as it is.
+    temperatures = [-12.0 + (index % 40) * 0.8 for index in range(365)]
+    weather = fit(temperatures, heated(18.0, temperatures, 2.0, 0.02))
+    assert weather["base"] == 18.0
+    assert (weather["linear"], weather["square"]) == (
+        pytest.approx(2.0),
+        pytest.approx(0.02),
+    )

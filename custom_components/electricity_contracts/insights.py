@@ -1,5 +1,6 @@
 """What the consumption in force looked like over a window: days, hours, Tempo."""
 
+import math
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -49,6 +50,8 @@ DEGREE_DAY_BASE = 18.0
 _BASES = tuple(base / 2 for base in range(20, 41))
 _MIN_FIT_DAYS = 14
 _SINGULAR = 1e-9
+# Below this mean square (kWh²), fits are exact: rounding must not rank them.
+_FLOOR = 1e-12
 
 
 def _local(timestamp: float) -> datetime:
@@ -291,9 +294,10 @@ def weather_fit(
     one and it keeps rising, else on a straight line. Past the coldest day seen
     (`reach`), it goes on straight. `slope` is what a degree colder costs on
     average over these days. The base is the one, every half degree from 10 to
-    20 °C, that fits the days best: a fixed 18 °C counted the rest of the home's
-    consumption that grows in winter as heating; measured homes start heating
-    around 16 °C. `line_heating` gives the heating of a day from the fit.
+    20 °C, that fits the days best: a fixed 18 °C counted the
+    rest of the home's consumption that grows in winter as heating; measured
+    homes start heating around 16 °C. `line_heating` gives the heating of a day
+    from the fit.
     """
     pairs = [
         (temperature[day], values["energy"])
@@ -301,7 +305,11 @@ def weather_fit(
         if day in temperature
     ]
     energy = sum(value for _, value in pairs)
-    base, fitted = _best_base(pairs)
+    base, fitted, found = (
+        _best_base(pairs)
+        if len(pairs) >= _MIN_FIT_DAYS
+        else (DEGREE_DAY_BASE, None, False)
+    )
     degree_days = sum(max(0.0, base - outdoor) for outdoor, _ in pairs)
     curve: dict[str, float] = {}
     slope = intercept = share = None
@@ -316,6 +324,7 @@ def weather_fit(
             share = min(1.0, heating / energy)
     return {
         "base": base,
+        "base_fitted": found,
         "days": len(pairs),
         "degree_days": round(degree_days, 1),
         "mean_temperature": (
@@ -351,12 +360,16 @@ def line_heating(weather: dict[str, Any], degrees: float) -> float:
 
 
 def _solve(matrix: list[list[float]], vector: list[float]) -> list[float] | None:
-    """Solve a small linear system by elimination; None when it's singular."""
+    """Solve a small linear system by elimination; None when it's singular.
+
+    A pivot is too small against the largest value of its column at the start.
+    """
     size = len(vector)
     rows = [[*row, value] for row, value in zip(matrix, vector, strict=True)]
+    scales = [max(abs(row[column]) for row in matrix) or 1.0 for column in range(size)]
     for column in range(size):
         pivot = max(range(column, size), key=lambda row: abs(rows[row][column]))
-        if abs(rows[pivot][column]) < _SINGULAR:
+        if abs(rows[pivot][column]) < _SINGULAR * scales[column]:
             return None
         rows[column], rows[pivot] = rows[pivot], rows[column]
         for row in range(size):
@@ -371,71 +384,94 @@ def _solve(matrix: list[list[float]], vector: list[float]) -> list[float] | None
 def _least_squares(
     points: list[tuple[float, float]], terms: int
 ) -> tuple[list[float], float] | None:
-    """Fit y = a + b x (+ c x²): the coefficients and the sum of squares."""
+    """Fit y = a + b x (+ c x²): the coefficients and the sum of squares.
+
+    x is scaled to 0..1 for the solve, so the squares stay close in size.
+    """
+    scale = max((abs(x) for x, _ in points), default=0.0) or 1.0
+    scaled = [(x / scale, y) for x, y in points]
     powers = range(terms + 1)
-    matrix = [[sum(x ** (i + j) for x, _ in points) for j in powers] for i in powers]
-    vector = [sum(y * x**i for x, y in points) for i in powers]
-    coefficients = _solve(matrix, vector)
-    if coefficients is None:
+    matrix = [[sum(u ** (i + j) for u, _ in scaled) for j in powers] for i in powers]
+    vector = [sum(y * u**i for u, y in scaled) for i in powers]
+    solved = _solve(matrix, vector)
+    if solved is None:
         return None
+    coefficients = [c / scale**i for i, c in enumerate(solved)]
     squares = sum(
-        (y - sum(c * x**i for i, c in enumerate(coefficients))) ** 2 for x, y in points
+        (y - sum(c * u**i for i, c in enumerate(solved))) ** 2 for u, y in scaled
     )
     return coefficients, squares
 
 
+def _degrees(
+    pairs: list[tuple[float, float]], base: float
+) -> list[tuple[float, float]]:
+    return [(max(0.0, base - outdoor), value) for outdoor, value in pairs]
+
+
 def _fit(
     pairs: list[tuple[float, float]], base: float
-) -> tuple[tuple[float, float, float, float], float] | None:
+) -> tuple[tuple[float, float, float, float], float, int] | None:
     """Fit the energy on the degree days under `base`.
 
-    Returns (intercept, linear, square, reach) and the sum of squares, or None
-    when the heating doesn't rise with the cold. The curve is kept when there
-    are enough heating days and it keeps rising up to the coldest of them.
+    Returns (intercept, linear, square, reach), the sum of squares and the
+    number of coefficients, None when no line fits (no day under the base). The
+    curve is kept when the line rises, there are enough heating days, the curve
+    keeps rising up to the coldest of them, and it fits clearly better than the
+    line, its extra coefficient paid for.
     """
-    points = [(max(0.0, base - outdoor), value) for outdoor, value in pairs]
+    points = _degrees(pairs, base)
     reach = max(x for x, _ in points)
     line = _least_squares(points, 1)
-    if line is None or line[0][1] <= 0:
+    if line is None:
         return None
-    best = (line[0][0], line[0][1], 0.0, reach), line[1]
-    if sum(1 for x, _ in points if x > 0) >= _MIN_FIT_DAYS:
+    (intercept, linear), squares = line
+    best = (intercept, linear, 0.0, reach), squares, 2
+    if linear > 0 and sum(1 for x, _ in points if x > 0) >= _MIN_FIT_DAYS:
         curve = _least_squares(points, 2)
         if curve is not None:
             (intercept, linear, square), squares = curve
-            if linear >= 0 and linear + 2 * square * reach > 0:
-                best = (intercept, linear, square, reach), squares
+            if (
+                linear >= 0
+                and linear + 2 * square * reach > 0
+                and _score(squares, len(points), 3) < _score(best[1], len(points), 2)
+            ):
+                best = (intercept, linear, square, reach), squares, 3
     return best
+
+
+def _score(squares: float, count: int, terms: int) -> float:
+    """Bayesian information criterion: the curve's extra coefficient has a cost."""
+    return count * math.log(max(squares / count, _FLOOR)) + terms * math.log(count)
 
 
 def _best_base(
     pairs: list[tuple[float, float]],
-) -> tuple[float, tuple[float, float, float, float] | None]:
-    """Return the base that fits the days best, and its fit.
+) -> tuple[float, tuple[float, float, float, float] | None, bool]:
+    """Return the base where the heating starts, its fit, and whether days told it.
 
-    18 °C stays unless another base fits clearly better: when every day is under
-    (or over) all the bases, they all fit alike. Without heating that rises with
-    the cold at any base, the straight line at 18 °C is returned as it is.
+    Each base is scored with its own fit, and a curve's extra coefficient is
+    paid for, so a base doesn't win only because a curve became possible there.
+    Without days between 10 and 20 °C, every base fits alike and 18 °C stays.
+    It also stays when no base gives heating that rises with the cold (its
+    line is returned as it is), or when no other base fits clearly better.
     """
-    if len(pairs) < _MIN_FIT_DAYS:
-        return DEGREE_DAY_BASE, None
+    low, high = _BASES[0], _BASES[-1]
+    default = _fit(pairs, DEGREE_DAY_BASE)
+    if not any(low < outdoor < high for outdoor, _ in pairs):
+        return DEGREE_DAY_BASE, default[0] if default else None, False
     best: tuple[float, tuple[float, float, float, float], float] | None = None
-    if default := _fit(pairs, DEGREE_DAY_BASE):
-        best = DEGREE_DAY_BASE, *default
-    for base in _BASES:
-        if (fitted := _fit(pairs, base)) is None:
+    for base in (DEGREE_DAY_BASE, *_BASES):
+        fitted = default if base == DEGREE_DAY_BASE else _fit(pairs, base)
+        if fitted is None or fitted[0][1] <= 0:
             continue
+        score = _score(fitted[1], len(pairs), fitted[2])
         # Clearly better only: bases that fit alike, up to rounding, keep 18 °C.
-        if best is None or fitted[1] < best[2] * (1 - 1e-6) - 1e-9:
-            best = base, *fitted
-    if best is not None:
-        return best[0], best[1]
-    points = [(max(0.0, DEGREE_DAY_BASE - outdoor), y) for outdoor, y in pairs]
-    line = _least_squares(points, 1)
-    if line is None:
-        return DEGREE_DAY_BASE, None
-    reach = max(x for x, _ in points)
-    return DEGREE_DAY_BASE, (line[0][0], line[0][1], 0.0, reach)
+        if best is None or score < best[2] - 1e-6:
+            best = base, fitted[0], score
+    if best is None:
+        return DEGREE_DAY_BASE, default[0] if default else None, False
+    return best[0], best[1], True
 
 
 def _tempo(
