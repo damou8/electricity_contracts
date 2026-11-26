@@ -801,14 +801,28 @@ async def test_linky_days_have_energy_without_cost(
     ]
     assert by_day["series"][0]["contracts"] == {}
 
-    # A month that holds such a day has no cost.
+    # A month that holds such a day keeps the cost of its hours.
     by_month = await result(
         hass_ws_client, hass, **request, start="2026-01-01", end="2026-12-31"
     )
-    assert [
-        (bucket["start"], bucket["energy"], bucket["actual"], bucket["daily"])
-        for bucket in by_month["series"]
-    ] == [("2026-02-01", 24.0, None, True), ("2026-03-01", 36.0, None, True)]
+    february, march = by_month["series"]
+    assert february == {
+        "start": "2026-02-01",
+        "energy": 24.0,
+        "contracts": {},
+        "actual": None,
+        "daily": True,
+        "daily_energy": 24.0,
+    }
+    hours_cost = (
+        by_day["series"][3]["contracts"]["tempo001"]
+        + by_day["series"][4]["contracts"]["tempo001"]
+    )
+    assert march["energy"] == 36.0
+    assert march["daily_energy"] == 12.0
+    assert march["daily"] is True
+    assert march["contracts"]["tempo001"] == pytest.approx(hours_cost, abs=0.01)
+    assert march["actual"] == march["contracts"]["tempo001"]
 
     # Before the first hour, only the days.
     before = await result(
