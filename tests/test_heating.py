@@ -1,6 +1,6 @@
 """Tests of the Heating tab's command."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -34,6 +34,7 @@ from custom_components.electricity_contracts.const import (
     ENERGY_GAS,
     SECTION_HEATING,
 )
+from custom_components.electricity_contracts.heating import _Day, _estimated
 
 from .conftest import (
     FIRST_HOUR,
@@ -769,3 +770,16 @@ async def test_gas_heating_isnt_estimated_before_its_meter(
         [],
         None,
     )
+
+
+def test_estimate_shares_only_the_days_with_a_temperature() -> None:
+    weather = {"base": 18.0, "linear": 2.0, "square": 0.0, "reach": 30.0}
+    house = {
+        date(2026, 1, 1): _Day(energy=30.0, cost=6.0),
+        date(2026, 1, 2): _Day(energy=10.0, cost=1.0),
+    }
+    # Only 1 January has an outdoor temperature: 10 degrees under the base.
+    estimated = _estimated(weather, {date(2026, 1, 1): 8.0}, house)
+    assert estimated["heating"] == pytest.approx(20.0)
+    assert estimated["share"] == pytest.approx(20 / 30, abs=1e-4)
+    assert estimated["heating_cost"] == pytest.approx(4.0)
