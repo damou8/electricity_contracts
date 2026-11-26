@@ -289,9 +289,8 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
         self.weather = WeatherWriter(hass, config_entry, OpenMeteoClient(session))
 
     async def _async_setup(self) -> None:
-        """Load the cache and find the first day of consumption."""
+        """Load the cache and what was written."""
         self._cache = _Cache.from_store(await self._store.async_load())
-        self._first_day = await self._async_first_day()
         await self.costing.async_load()
         await self.weather.async_load()
 
@@ -345,7 +344,9 @@ class ElectricityContractsCoordinator(DataUpdateCoordinator[ElectricityContracts
 
     async def _async_update_data(self) -> ElectricityContractsData:
         """Fetch what is missing, then cost the hours not costed yet."""
-        assert self._first_day is not None
+        # Read at every update: the Linky app can import older history later,
+        # and its Tempo seasons are then needed too.
+        self._first_day = await self._async_first_day()
         now = dt_util.utcnow()
         entry_contracts = contracts(self.config_entry)
         needed_prices = sorted(

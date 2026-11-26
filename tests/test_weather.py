@@ -122,8 +122,8 @@ async def test_older_data_asks_the_days_before(
 ) -> None:
     entry = await setup_entry(hass, weather_entry())
     coordinator = entry.runtime_data
-    # Older consumption imported, found again at the next setup.
-    coordinator._first_day = date(2026, 1, 1)
+    # Older consumption imported: from 1 January 2026, 1:00 in Paris.
+    await add_statistic(hass, hours=1, first=-59 * 24)
     await coordinator.async_refresh()
     assert asked(sources)[-1] == (*COORDINATES, date(2025, 12, 31), date(2026, 11, 7))
     await coordinator.async_refresh()
