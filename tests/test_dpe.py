@@ -294,16 +294,18 @@ async def test_label_of_a_gas_home(
     assert label["days"] == DAYS
     assert label["settings"] == label["defaults"] == DEFAULTS
     rows = uses(label)
-    # The hot water estimated on the warm days, 5 kWh a day.
+    # The hot water estimated on the warm days, 5 kWh a day, and all of the
+    # warm days themselves: 3 of them use 4 kWh more.
+    water = 5.0 * DAYS + 3 * 4.0
     assert rows["water"] == {
         "use": "water",
-        "energy": 5.0 * DAYS,
+        "energy": water,
         "gas": True,
         "source": "estimated",
-        "primary": 5.0 * DAYS,
-        "co2": round(5.0 * DAYS * 0.227, 1),
+        "primary": water,
+        "co2": round(water * 0.227, 1),
     }
-    assert rows["heating"]["energy"] == pytest.approx(sum(gas_home) - 5.0 * DAYS)
+    assert rows["heating"]["energy"] == pytest.approx(sum(gas_home) - water)
     # No living area by default: no class until it's given.
     assert label["classes"] is None
     assert label["missing"] == "surface"
@@ -343,7 +345,7 @@ async def test_label_of_a_gas_home(
     assert conventional["extra"] < 0
     rows = uses(label)
     assert rows["heating"]["energy"] == pytest.approx(
-        sum(gas_home) - 5.0 * DAYS + conventional["extra"], abs=0.1
+        sum(gas_home) - water + conventional["extra"], abs=0.1
     )
     assert rows["auxiliaries"]["energy"] == pytest.approx(
         (rows["heating"]["energy"] + rows["water"]["energy"]) / 0.96 * 0.04, abs=0.1

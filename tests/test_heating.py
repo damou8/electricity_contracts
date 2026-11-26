@@ -345,11 +345,13 @@ async def test_gas_with_hot_water(
     assert answer["water_per_day"] == 5.0
     assert answer["water_warm_from"] == max(18.0, answer["weather"]["base"])
     totals = answer["totals"]
-    # Each day gives up to 5 kWh of hot water: all days use more.
-    assert totals["water"] == pytest.approx(5.0 * DAYS)
-    assert totals["heating"] == pytest.approx(sum(gas_home) - 5.0 * DAYS)
+    # A cold day gives 5 kWh of hot water. A warm day doesn't heat: all of it is
+    # hot water, the 3 showers too.
+    assert totals["water"] == pytest.approx(5.0 * DAYS + 3 * 4.0)
+    assert totals["heating"] == pytest.approx(4.0 * sum(range(1, 9)))
+    assert [day["heating"] for day in answer["days"][:8]] == [0.0] * 8
     assert totals["heating_cost"] == pytest.approx(0.1 * totals["heating"], abs=0.01)
-    assert totals["water_cost"] == pytest.approx(0.5 * DAYS, abs=0.01)
+    assert totals["water_cost"] == pytest.approx(0.1 * totals["water"], abs=0.01)
     assert totals["house"] == pytest.approx(6.0 * DAYS)
     assert totals["share"] == pytest.approx(
         totals["heating"] / (sum(gas_home) + 6.0 * DAYS), abs=1e-4

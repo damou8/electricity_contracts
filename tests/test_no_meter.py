@@ -264,7 +264,8 @@ async def test_the_heating_window_ends_with_its_statistics(
     # read on the year before the last hour of gas.
     answer = await heating(hass, hass_ws_client, entry, "2026-03-01", "2027-12-31")
     assert answer["water_per_day"] == 5.0
-    assert answer["totals"]["water"] == pytest.approx(5.0 * DAYS)
+    # 5 kWh a day, and all of the warm days: 3 of them use 4 kWh more.
+    assert answer["totals"]["water"] == pytest.approx(5.0 * DAYS + 3 * 4.0)
 
 
 @pytest.mark.usefixtures("sources")
