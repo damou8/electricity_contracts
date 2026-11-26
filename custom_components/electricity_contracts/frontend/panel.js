@@ -4226,7 +4226,9 @@ class ElectricityContractsPanel extends HTMLElement {
   _renderCompare() {
     if (!this._costed()) return [this._noCosts()];
     const contracts = [...this._data.contracts].sort((first, second) => first.total_cost - second.total_cost);
-    const actual = this._data.actual;
+    // The contracts are compared with what was paid only when a contract was in
+    // force at every hour: the others cost nothing in the actual cost.
+    const actual = this._data.saving === null ? null : this._data.actual;
     const inForce = this._contractsInForce();
     const mine = inForce.length === 1 ? inForce[0].id : null;
     // Only contracts waiting for their prices: nothing to compare yet.
@@ -4239,7 +4241,7 @@ class ElectricityContractsPanel extends HTMLElement {
     return [
       this._renderRanking(contracts, actual, mine),
       this._renderBill(),
-      actual && this._billContract !== mine ? this._renderGap() : null,
+      this._data.actual && this._billContract !== mine ? this._renderGap() : null,
     ];
   }
 
@@ -4252,9 +4254,10 @@ class ElectricityContractsPanel extends HTMLElement {
     const best = contracts[0];
     if (!best) return null;
     if (!actual) return this._lead(best.name, contracts.length > 1 ? this._t("isCheapest") : null);
-    if (actual.total_cost - best.total_cost >= 0.5) {
-      const saving = actual.total_cost - best.total_cost;
-      return this._lead(best.name, this._t("wouldSave", { amount: this._money(saving, 0), change: this._percent(-saving / actual.total_cost) }));
+    const saving = this._data.saving;
+    if (saving >= 0.5) {
+      // Against the best contract the integration found.
+      return this._lead(this._data.best, this._t("wouldSave", { amount: this._money(saving, 0), change: this._percent(-saving / actual.total_cost) }));
     }
     const name = mine && this._data.contracts.find((contract) => contract.id === mine).name;
     const next = contracts.find((contract) => contract.id !== mine && contract.total_cost - actual.total_cost >= 0.5);
