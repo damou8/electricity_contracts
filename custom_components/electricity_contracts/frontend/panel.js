@@ -270,6 +270,7 @@ const STRINGS = {
     whiteLeft: "White left",
     withHeating: "Above {base}, you use about {energy} a day. Below, the heating uses {slope} more a day per degree colder.",
     weatherInfo: "Each dot is a day with its outdoor temperature and what you consumed.",
+    baseFitted: "{base} is where your heating starts: it's found from your days, between 10 and 20 °C.",
     perDegreeBelow: "per degree below {base}",
     ofTheConsumption: "{share} of the consumption",
     aroundTheClock: "around the clock",
@@ -589,6 +590,7 @@ const STRINGS = {
     whiteLeft: "Blancs restants",
     withHeating: "Au-dessus de {base}, vous consommez environ {energy} par jour. En dessous, le chauffage consomme {slope} de plus par jour et par degré de moins.",
     weatherInfo: "Chaque point est une journée avec sa température extérieure et ce que vous avez consommé.",
+    baseFitted: "{base} est la température sous laquelle votre chauffage démarre : elle est tirée de vos journées, entre 10 et 20 °C.",
     perDegreeBelow: "par degré sous {base}",
     ofTheConsumption: "{share} de la consommation",
     aroundTheClock: "en continu",
@@ -3760,6 +3762,7 @@ class ElectricityContractsPanel extends HTMLElement {
         info: [
           this._t("weatherInfo"),
           heating ? this._t("withHeating", { base, energy: this._kwh(Math.max(0, weather.intercept)), slope: this._kwh(weather.slope) }) : null,
+          heating ? this._t("baseFitted", { base }) : null,
         ],
         uses: this._uses("consumption", "outdoor"),
       },
@@ -5091,6 +5094,7 @@ class ElectricityContractsPanel extends HTMLElement {
           perDegree && heating.measured
             ? this._t("heatingWeatherInfo", { base, slope: this._kwh(perDegree.energy), cost: perDegree.cost !== null ? this._money(perDegree.cost) : "—" })
             : this._t("weatherInfo"),
+          perDegree ? this._t("baseFitted", { base }) : null,
           heating.measured ? this._waterNote(heating) : this._t("estimatedHeatingInfo"),
         ],
         uses: this._uses("outdoor", "heating", heating.measured ? null : "consumption", "water", heating.gas ? "gasPrice" : "contract"),

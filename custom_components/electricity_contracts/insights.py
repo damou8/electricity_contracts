@@ -42,8 +42,11 @@ _BASELOAD_HOURS = (3, 4)
 _QUIET_NIGHTS = 0.1
 _YEAR = timedelta(days=365)
 _YEAR_HOURS = 8760
-# Heating degree days count the degrees below 18 °C of each day's mean.
+# Heating degree days count the degrees below a base, from each day's mean. The
+# base is where the heating starts: fitted on the days, from 10 to 20 °C, and
+# 18 °C when the days can't tell (all cold, or all warm).
 DEGREE_DAY_BASE = 18.0
+_BASES = tuple(base / 2 for base in range(20, 41))
 _MIN_FIT_DAYS = 14
 
 
@@ -283,42 +286,81 @@ def weather_fit(
 
     Each day's consumption is fitted as a straight line of its heating degree days:
     the slope is what a degree colder costs, the intercept what a day consumes
-    without heating.
+    without heating. The base of the degree days is the one, every half degree
+    from 10 to 20 °C, whose line fits the days best with heating that rises with
+    the cold. A fixed base of 18 °C counted the rest of the home's consumption
+    that grows in winter as heating; measured homes start heating around 16 °C.
     """
-    points = [
-        (max(0.0, DEGREE_DAY_BASE - temperature[day]), values["energy"])
+    pairs = [
+        (temperature[day], values["energy"])
         for day, values in days.items()
         if day in temperature
     ]
-    degree_days = sum(point[0] for point in points)
-    energy = sum(point[1] for point in points)
+    energy = sum(value for _, value in pairs)
+    base, line = _best_base(pairs)
+    degree_days = sum(max(0.0, base - outdoor) for outdoor, _ in pairs)
     slope = intercept = share = None
-    if len(points) >= _MIN_FIT_DAYS:
-        mean_x = degree_days / len(points)
-        mean_y = energy / len(points)
-        variance = sum((x - mean_x) ** 2 for x, _ in points)
-        if variance > 0:
-            slope = sum((x - mean_x) * (y - mean_y) for x, y in points) / variance
-            intercept = mean_y - slope * mean_x
-            if slope > 0 and energy > 0:
-                share = min(1.0, slope * degree_days / energy)
+    if line is not None:
+        slope, intercept = line
+        if slope > 0 and energy > 0:
+            share = min(1.0, slope * degree_days / energy)
     return {
-        "base": DEGREE_DAY_BASE,
-        "days": len(points),
+        "base": base,
+        "days": len(pairs),
         "degree_days": round(degree_days, 1),
         "mean_temperature": (
             round(
                 sum(temperature[day] for day in days if day in temperature)
-                / len(points),
+                / len(pairs),
                 1,
             )
-            if points
+            if pairs
             else None
         ),
         "slope": round(slope, 3) if slope is not None else None,
         "intercept": round(intercept, 2) if intercept is not None else None,
         "heating_share": round(share, 4) if share is not None else None,
     }
+
+
+def _line(
+    pairs: list[tuple[float, float]], base: float
+) -> tuple[float, float, float] | None:
+    """Fit the energy on the degree days under `base`: slope, intercept, squares."""
+    points = [(max(0.0, base - outdoor), value) for outdoor, value in pairs]
+    mean_x = sum(x for x, _ in points) / len(points)
+    mean_y = sum(y for _, y in points) / len(points)
+    variance = sum((x - mean_x) ** 2 for x, _ in points)
+    if variance <= 0:
+        return None
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in points) / variance
+    intercept = mean_y - slope * mean_x
+    squares = sum((y - intercept - slope * x) ** 2 for x, y in points)
+    return slope, intercept, squares
+
+
+def _best_base(
+    pairs: list[tuple[float, float]],
+) -> tuple[float, tuple[float, float] | None]:
+    """Return the base that fits the days best, and its slope and intercept.
+
+    18 °C stays unless another base fits clearly better: when every day is under
+    (or over) all the bases, they all fit alike.
+    """
+    if len(pairs) < _MIN_FIT_DAYS:
+        return DEGREE_DAY_BASE, None
+    default = _line(pairs, DEGREE_DAY_BASE)
+    best = DEGREE_DAY_BASE, default
+    for base in _BASES:
+        line = _line(pairs, base)
+        if line is None or line[0] <= 0:
+            continue
+        kept = best[1]
+        # Clearly better only: bases that fit alike, up to rounding, keep 18 °C.
+        if kept is None or kept[0] <= 0 or line[2] < kept[2] * (1 - 1e-6) - 1e-9:
+            best = base, line
+    base, line = best
+    return base, (line[0], line[1]) if line is not None else None
 
 
 def _tempo(
