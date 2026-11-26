@@ -532,6 +532,24 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
         language = self.hass.config.language.split("-")[0]
         return NO_METER_TITLES.get(language, NO_METER_TITLES["en"])
 
+    async def _async_title_is_ours(self, entry: ConfigEntry) -> bool:
+        """Tell whether an entry's title is the one the integration gave it.
+
+        That is the name of its statistic, or the title of an entry without a
+        meter. A title that holds the statistic's meter number counts too.
+        """
+        title = entry.title
+        statistic_id = entry.data.get(CONF_STATISTIC_ID)
+        if not statistic_id:
+            return title in NO_METER_TITLES.values()
+        if statistic_id.split(":", 1)[-1] in title:
+            return True
+        metadata = await get_instance(self.hass).async_add_executor_job(
+            lambda: get_metadata(self.hass, statistic_ids={statistic_id})
+        )
+        name = metadata[statistic_id][1]["name"] if statistic_id in metadata else None
+        return title == (name or statistic_id)
+
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -545,15 +563,24 @@ class ElectricityContractsConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
             try:
-                if statistic_id:
+                title = (
                     await async_validate_statistic(self.hass, statistic_id)
+                    if statistic_id
+                    else self._no_meter_title()
+                )
             except InvalidStatisticError as err:
                 errors[CONF_STATISTIC_ID] = err.reason
             else:
+                # A title the integration gave follows the source: the former
+                # one named the meter, with its PRM. One of your own stays.
+                moved = unique_id != entry.unique_id
+                if not moved or not await self._async_title_is_ours(entry):
+                    title = entry.title
                 # The update listener reloads the entry.
                 return self.async_update_and_abort(
                     entry,
                     unique_id=unique_id,
+                    title=title,
                     data={CONF_STATISTIC_ID: statistic_id} if statistic_id else {},
                 )
         return self.async_show_form(

@@ -240,6 +240,8 @@ async def test_reconfigure_to_another_statistic(hass: HomeAssistant) -> None:
     assert result["reason"] == "reconfigure_successful"
     assert entry.unique_id == OTHER_STATISTIC_ID
     assert entry.data == {CONF_STATISTIC_ID: OTHER_STATISTIC_ID}
+    # The title named the former meter.
+    assert entry.title == "Linky 11111111111111"
 
 
 @pytest.mark.usefixtures("statistic")
@@ -251,6 +253,7 @@ async def test_reconfigure_without_meter_and_back(hass: HomeAssistant) -> None:
     assert result["reason"] == "reconfigure_successful"
     assert entry.unique_id == NO_METER
     assert entry.data == {}
+    assert entry.title == "No meter"
 
     result = await entry.start_reconfigure_flow(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -259,6 +262,21 @@ async def test_reconfigure_without_meter_and_back(hass: HomeAssistant) -> None:
     assert result["reason"] == "reconfigure_successful"
     assert entry.unique_id == STATISTIC_ID
     assert entry.data == {CONF_STATISTIC_ID: STATISTIC_ID}
+    assert entry.title == "Linky 00000000000000"
+
+
+@pytest.mark.usefixtures("statistic")
+async def test_reconfigure_keeps_a_title_of_your_own(hass: HomeAssistant) -> None:
+    await add_statistic(hass, OTHER_STATISTIC_ID)
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, title="Home")
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_STATISTIC_ID: OTHER_STATISTIC_ID}
+    )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.title == "Home"
 
 
 @pytest.mark.usefixtures("statistic")
