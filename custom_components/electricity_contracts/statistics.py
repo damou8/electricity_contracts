@@ -69,7 +69,7 @@ from .prices import first_statistic_hour, hourly_prices
 _LOGGER = logging.getLogger(__name__)
 
 # Bump to rewrite every statistic after a change in how costs are computed.
-COSTING_VERSION = 3
+COSTING_VERSION = 4
 STATE_VERSION = 1
 ACTUAL = "actual"
 _HOUR = timedelta(hours=1)

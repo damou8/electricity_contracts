@@ -44,19 +44,19 @@ def _is_midnight(start: datetime) -> bool:
 def _daily_rows(rows: Sequence[tuple[datetime, float]]) -> list[bool]:
     """Tell which rows hold a whole day, as Linky meters without a load curve do.
 
-    Such a row starts at local midnight and the next one at the next midnight. The
-    last row is a daily one if it follows another daily one.
+    Such a row starts at local midnight and the next one at a later midnight: the
+    next midnight, or one after it when the Linky gave nothing for a day. The last
+    row is a daily one if it follows another daily one.
     """
     daily: list[bool] = []
     for index, (start, _) in enumerate(rows):
         if not _is_midnight(start):
             daily.append(False)
         elif index + 1 < len(rows):
-            daily.append(rows[index + 1][0] == _next_midnight(start))
+            following = rows[index + 1][0]
+            daily.append(following >= _next_midnight(start) and _is_midnight(following))
         else:
-            daily.append(
-                index > 0 and daily[-1] and _next_midnight(rows[index - 1][0]) == start
-            )
+            daily.append(index > 0 and daily[-1])
     return daily
 
 
